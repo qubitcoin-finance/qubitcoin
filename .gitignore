@@ -1,0 +1,85 @@
+CLAUDE.md
+.vercel
+
+# Dependencies
+**/node_modules/
+
+# pnpm
+.pnpm-store/
+.pnpm-debug.log
+
+# npm (legacy - project now uses pnpm)
+package-lock.json
+npm-debug.log*
+
+# Next.js build directories
+.next/
+.next-dev
+.next-test/
+.next-build-test/
+frontend/.next/
+out/
+
+# Turbo
+.turbo/
+
+# Cache
+.cache/
+
+# Build info
+tsconfig.tsbuildinfo
+
+*storybook.log
+storybook-static
+
+# Test output
+test-results/
+coverage/
+coverage-integration/
+
+# Environment
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+apps/netrunner/.env
+apps/netrunner/config.secret.yaml
+
+# Misc
+.DS_Store
+*.pem
+*.log
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build artifacts
+dist/
+artifacts/
+cache/
+html/
+
+# Test reports
+playwright-report/
+
+# Backups
+**/backups/
+
+# Avatar images (uploaded to IPFS, not needed in repo)
+public/avatars/
+LOCAL.md
+apps/netrunner/instance-state.json
+apps/netrunner/logs/
+apps/netrunner/debug/
+apps/netrunner/.browser-data/
+scripts/logs/
+logs/
+.next-prod
+apps/netrunner/instance-state.json

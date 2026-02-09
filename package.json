@@ -1,0 +1,42 @@
+{
+  "name": "qcoin",
+  "version": "1.0.0",
+  "description": "Post-Quantum Cryptography proof of concept using NIST FIPS 203/204/205",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node --loader ts-node/esm src/index.ts",
+    "kem": "node --loader ts-node/esm src/ml-kem-demo.ts",
+    "sign": "node --loader ts-node/esm src/ml-dsa-demo.ts",
+    "hash-sign": "node --loader ts-node/esm src/slh-dsa-demo.ts",
+    "hybrid": "node --loader ts-node/esm src/hybrid-demo.ts",
+    "bench": "node --loader ts-node/esm src/benchmark.ts",
+    "blockchain": "node --loader ts-node/esm src/simulation.ts",
+    "claim": "node --loader ts-node/esm src/claim-simulation.ts",
+    "convert-snapshot": "node --loader ts-node/esm src/tools/convert-snapshot.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "website": "cd website && pnpm run dev",
+    "website:build": "cd website && pnpm run build",
+    "ship": "cd website && pnpm install && pnpm build && rsync -avz --delete dist/ qubitcoin@goro:~/www/"
+  },
+  "keywords": [
+    "post-quantum",
+    "cryptography",
+    "ml-kem",
+    "ml-dsa",
+    "slh-dsa",
+    "kyber",
+    "dilithium"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@noble/post-quantum": "^0.5.4",
+    "@types/node": "^25.2.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
+}

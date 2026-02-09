@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QubitCoin (QTC) — Post-Quantum Digital Currency</title>
+  <meta name="description" content="QubitCoin is a post-quantum Bitcoin fork using ML-DSA-65 (Dilithium) signatures. Quantum-safe digital currency for the future." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="icon" href="/favicon.ico" sizes="48x48" />
+  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/logo-192.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body class="font-sans antialiased">
+
+  <!-- Nav -->
+  <nav class="fixed top-0 w-full z-50 bg-bg/80 backdrop-blur-xl border-b border-border">
+    <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+      <a href="#" class="flex items-center gap-2 group">
+        <img src="/logo.svg" alt="QubitCoin" class="w-8 h-8 rounded-lg" />
+        <span class="font-semibold text-text-primary tracking-tight">QubitCoin</span>
+      </a>
+      <div class="hidden md:flex items-center gap-8 text-sm">
+        <a href="#about" class="text-text-muted hover:text-qubit-400 transition-colors">About</a>
+        <a href="#technology" class="text-text-muted hover:text-qubit-400 transition-colors">Technology</a>
+        <a href="#how-it-works" class="text-text-muted hover:text-qubit-400 transition-colors">How It Works</a>
+        <a href="#team" class="text-text-muted hover:text-qubit-400 transition-colors">Team</a>
+        <a href="https://github.com/qubitcoin-finance/qubitcoin" target="_blank" rel="noopener"
+           class="px-4 py-2 rounded-lg bg-qubit-600/20 border border-qubit-600/40 text-qubit-300 hover:bg-qubit-600/30 transition-all text-sm font-medium">
+          GitHub
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="relative min-h-screen flex items-center justify-center overflow-hidden grid-bg">
+<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+      <div class="quantum-orb"></div>
+    </div>
+    <div class="relative z-10 text-center px-6 max-w-4xl mx-auto">
+      <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-qubit-700/50 bg-qubit-950/50 text-qubit-300 text-xs font-mono mb-8 tracking-wider">
+        <span class="w-1.5 h-1.5 rounded-full bg-entropy-cyan"></span>
+        POST-QUANTUM CRYPTOGRAPHY
+      </div>
+      <h1 class="text-5xl md:text-7xl font-bold tracking-tight mb-6 glow-text">
+        Qubit<span class="gradient-text">Coin</span>
+      </h1>
+      <p class="text-xl md:text-2xl text-text-secondary font-light max-w-2xl mx-auto mb-4">
+        Bitcoin, secured for the quantum era.
+      </p>
+      <p class="text-text-muted max-w-xl mx-auto mb-10 leading-relaxed">
+        A post-quantum fork of Bitcoin using <span class="text-qubit-400 font-mono text-sm">ML-DSA-65</span> (Dilithium)
+        lattice-based signatures. Migrate your BTC to quantum-safe UTXOs — no trust required.
+      </p>
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <a href="#technology"
+           class="px-8 py-3 rounded-xl bg-qubit-600 hover:bg-qubit-500 text-white font-medium transition-all shadow-lg shadow-qubit-600/25 hover:shadow-qubit-500/40">
+          Explore the Tech
+        </a>
+        <a href="#how-it-works"
+           class="px-8 py-3 rounded-xl border border-border hover:border-qubit-600/50 text-text-secondary hover:text-text-primary transition-all">
+          How It Works
+        </a>
+      </div>
+    </div>
+    <div class="absolute bottom-10 left-1/2 -translate-x-1/2">
+      <svg class="w-5 h-5 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+      </svg>
+    </div>
+  </section>
+
+  <!-- About -->
+  <section id="about" class="py-32 px-6">
+    <div class="max-w-6xl mx-auto">
+      <div class="reveal text-center mb-20">
+        <p class="text-qubit-400 font-mono text-sm tracking-widest mb-3">ABOUT</p>
+        <h2 class="text-3xl md:text-5xl font-bold mb-6">Why QubitCoin?</h2>
+        <p class="text-text-secondary max-w-2xl mx-auto text-lg leading-relaxed">
+          Quantum computers threaten the elliptic curve cryptography securing every Bitcoin transaction.
+          QubitCoin is a Bitcoin fork that replaces ECDSA with NIST-standardized
+          post-quantum signatures — today.
+        </p>
+      </div>
+      <div class="grid md:grid-cols-3 gap-6">
+        <div class="reveal feature-card rounded-2xl bg-surface p-8 glow-border">
+          <div class="w-12 h-12 rounded-xl bg-qubit-600/20 flex items-center justify-center mb-5">
+            <svg class="w-6 h-6 text-qubit-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold mb-3 text-text-primary">Quantum Resistant</h3>
+          <p class="text-text-muted text-sm leading-relaxed">
+            ML-DSA-65 (FIPS 204) lattice-based signatures resist both classical and quantum attacks.
+            Your coins stay safe even when large-scale quantum computers arrive.
+          </p>
+        </div>
+        <div class="reveal feature-card rounded-2xl bg-surface p-8 glow-border" style="transition-delay: 0.1s">
+          <div class="w-12 h-12 rounded-xl bg-entropy-blue/20 flex items-center justify-center mb-5">
+            <svg class="w-6 h-6 text-entropy-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold mb-3 text-text-primary">Seamless Migration</h3>
+          <p class="text-text-muted text-sm leading-relaxed">
+            BTC holders prove ownership with a one-time ECDSA signature to claim their full aggregated address balance
+            as quantum-safe QTC. No trust, no intermediaries.
+          </p>
+        </div>
+        <div class="reveal feature-card rounded-2xl bg-surface p-8 glow-border" style="transition-delay: 0.2s">
+          <div class="w-12 h-12 rounded-xl bg-entropy-cyan/20 flex items-center justify-center mb-5">
+            <svg class="w-6 h-6 text-entropy-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold mb-3 text-text-primary">Bitcoin DNA</h3>
+          <p class="text-text-muted text-sm leading-relaxed">
+            Same UTXO model. Same SHA-256 proof-of-work. Same decentralized ethos.
+            QubitCoin preserves what makes Bitcoin great — and future-proofs it.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Technology -->
+  <section id="technology" class="py-32 px-6 relative">
+    <div class="absolute inset-0 bg-gradient-to-b from-transparent via-qubit-950/20 to-transparent pointer-events-none"></div>
+    <div class="max-w-6xl mx-auto relative">
+      <div class="reveal text-center mb-20">
+        <p class="text-entropy-cyan font-mono text-sm tracking-widest mb-3">TECHNOLOGY</p>
+        <h2 class="text-3xl md:text-5xl font-bold mb-6">Under the Hood</h2>
+        <p class="text-text-secondary max-w-2xl mx-auto text-lg">
+          Built on NIST-standardized post-quantum cryptography with Bitcoin's proven architecture.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-8">
+        <!-- ML-DSA-65 -->
+        <div class="reveal rounded-2xl bg-surface p-8 glow-border">
+          <div class="flex items-center gap-3 mb-6">
+            <span class="px-3 py-1 rounded-md bg-qubit-600/20 text-qubit-400 font-mono text-xs">FIPS 204</span>
+            <h3 class="text-xl font-semibold">ML-DSA-65 (Dilithium)</h3>
+          </div>
+          <p class="text-text-muted text-sm leading-relaxed mb-6">
+            Module-Lattice Digital Signature Algorithm at security level 3.
+            Based on the hardness of the Module Learning With Errors problem — no known quantum algorithm can
+            efficiently solve it.
+          </p>
+          <div class="space-y-3 font-mono text-xs">
+            <div class="flex justify-between items-center py-2 border-b border-border">
+              <span class="text-text-muted">Public key</span>
+              <span class="text-qubit-300">1,952 bytes</span>
+            </div>
+            <div class="flex justify-between items-center py-2 border-b border-border">
+              <span class="text-text-muted">Signature</span>
+              <span class="text-qubit-300">3,293 bytes</span>
+            </div>
+            <div class="flex justify-between items-center py-2 border-b border-border">
+              <span class="text-text-muted">Security level</span>
+              <span class="text-entropy-cyan">NIST Level 3</span>
+            </div>
+            <div class="flex justify-between items-center py-2">
+              <span class="text-text-muted">Quantum safe</span>
+              <span class="text-green-400">Yes</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Real UTXO Snapshot -->
+        <div class="reveal rounded-2xl bg-surface p-8 glow-border" style="transition-delay: 0.1s">
+          <div class="flex items-center gap-3 mb-6">
+            <span class="px-3 py-1 rounded-md bg-entropy-blue/20 text-entropy-blue font-mono text-xs">SNAPSHOT</span>
+            <h3 class="text-xl font-semibold">Real Bitcoin UTXO Set</h3>
+          </div>
+          <p class="text-text-muted text-sm leading-relaxed mb-6">
+            QubitCoin forks from a real Bitcoin Core <span class="text-entropy-cyan font-mono">dumptxoutset</span> — the complete
+            ledger state at a specific block height. Every P2PKH and P2WPKH balance is aggregated per address
+            and committed in the genesis block.
+          </p>
+          <div class="space-y-3 font-mono text-xs">
+            <div class="flex justify-between items-center py-2 border-b border-border">
+              <span class="text-text-muted">Source</span>
+              <span class="text-qubit-300">Bitcoin Core v28+</span>
+            </div>
+            <div class="flex justify-between items-center py-2 border-b border-border">
+              <span class="text-text-muted">Raw UTXOs</span>
+              <span class="text-qubit-300">~160M entries</span>
+            </div>
+            <div class="flex justify-between items-center py-2 border-b border-border">
+              <span class="text-text-muted">Aggregated addresses</span>
+              <span class="text-entropy-cyan">~50M balances</span>
+            </div>
+            <div class="flex justify-between items-center py-2">
+              <span class="text-text-muted">Claimable types</span>
+              <span class="text-green-400">P2PKH + P2WPKH</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Architecture row -->
+      <div class="reveal grid md:grid-cols-4 gap-4 mt-8">
+        <div class="rounded-xl bg-surface p-5 glow-border">
+          <div class="w-8 h-8 rounded-lg bg-qubit-600/30 flex items-center justify-center mb-3">
+            <span class="text-qubit-400 font-mono text-xs font-bold">Tx</span>
+          </div>
+          <p class="font-medium text-text-primary text-sm mb-1">UTXO Model</p>
+          <p class="text-text-muted text-xs">Bitcoin-style unspent outputs with ML-DSA-65 signatures.</p>
+        </div>
+        <div class="rounded-xl bg-surface p-5 glow-border">
+          <div class="w-8 h-8 rounded-lg bg-entropy-blue/30 flex items-center justify-center mb-3">
+            <span class="text-entropy-blue font-mono text-xs font-bold">PoW</span>
+          </div>
+          <p class="font-medium text-text-primary text-sm mb-1">SHA-256 Mining</p>
+          <p class="text-text-muted text-xs">Quantum computers offer at most 2x speedup via Grover's.</p>
+        </div>
+        <div class="rounded-xl bg-surface p-5 glow-border">
+          <div class="w-8 h-8 rounded-lg bg-entropy-cyan/30 flex items-center justify-center mb-3">
+            <span class="text-entropy-cyan font-mono text-xs font-bold">Cl</span>
+          </div>
+          <p class="font-medium text-text-primary text-sm mb-1">ECDSA Claims</p>
+          <p class="text-text-muted text-xs">One-time secp256k1 proofs to claim your address balance.</p>
+        </div>
+        <div class="rounded-xl bg-surface p-5 glow-border">
+          <div class="w-8 h-8 rounded-lg bg-qubit-pulse/30 flex items-center justify-center mb-3">
+            <span class="text-qubit-pulse font-mono text-xs font-bold">Sn</span>
+          </div>
+          <p class="font-medium text-text-primary text-sm mb-1">BTC Snapshot</p>
+          <p class="text-text-muted text-xs">Real Bitcoin UTXO dump, aggregated per address with merkle commitment.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How It Works -->
+  <section id="how-it-works" class="py-32 px-6">
+    <div class="max-w-4xl mx-auto">
+      <div class="reveal text-center mb-20">
+        <p class="text-qubit-glow font-mono text-sm tracking-widest mb-3">PROCESS</p>
+        <h2 class="text-3xl md:text-5xl font-bold mb-6">How It Works</h2>
+        <p class="text-text-secondary max-w-xl mx-auto text-lg">
+          Migrate from Bitcoin to QubitCoin in three steps.
+        </p>
+      </div>
+
+      <div class="relative">
+        <!-- Vertical line -->
+        <div class="absolute left-6 md:left-1/2 top-0 bottom-0 w-px bg-gradient-to-b from-qubit-600 via-entropy-blue to-entropy-cyan"></div>
+
+        <!-- Step 1 -->
+        <div class="reveal relative flex items-start gap-8 mb-16">
+          <div class="hidden md:block md:w-1/2 md:text-right md:pr-12">
+            <h3 class="text-lg font-semibold mb-2">Snapshot Bitcoin</h3>
+            <p class="text-text-muted text-sm leading-relaxed">
+              A Bitcoin full node dumps the complete UTXO set via <span class="text-entropy-cyan font-mono text-xs">dumptxoutset</span>.
+              ~160M UTXOs are parsed, filtered to P2PKH + P2WPKH, and aggregated into ~50M address balances.
+              The genesis block commits to a merkle root of this snapshot.
+            </p>
+          </div>
+          <div class="relative z-10 w-12 h-12 rounded-full bg-qubit-600 border-4 border-bg flex items-center justify-center shrink-0 glow-box">
+            <span class="text-white font-bold text-sm">1</span>
+          </div>
+          <div class="md:w-1/2 md:pl-4">
+            <div class="md:hidden">
+              <h3 class="text-lg font-semibold mb-2">Snapshot Bitcoin</h3>
+              <p class="text-text-muted text-sm leading-relaxed">
+                A Bitcoin full node dumps the complete UTXO set via <span class="text-entropy-cyan font-mono text-xs">dumptxoutset</span>.
+                ~160M UTXOs are parsed, filtered to P2PKH + P2WPKH, and aggregated into ~50M address balances.
+              </p>
+            </div>
+            <div class="hidden md:block rounded-xl bg-surface p-4 font-mono text-xs text-text-muted glow-border">
+              <span class="text-entropy-blue">bitcoin-cli</span> dumptxoutset utxos.dat<br/>
+              <span class="text-qubit-400">parse</span> → filter P2PKH|P2WPKH → aggregate<br/>
+              <span class="text-qubit-400">genesis</span>.merkleRoot = merkle(balances)
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="reveal relative flex items-start gap-8 mb-16">
+          <div class="hidden md:block md:w-1/2 md:text-right md:pr-12">
+            <div class="rounded-xl bg-surface p-4 font-mono text-xs text-text-muted glow-border ml-auto max-w-xs">
+              <span class="text-entropy-blue">ecdsa</span>.sign(claimMsg, btcPrivKey)<br/>
+              → verify HASH160(pubKey) == address<br/>
+              → <span class="text-entropy-cyan">proof</span> + qtcPubKey
+            </div>
+          </div>
+          <div class="relative z-10 w-12 h-12 rounded-full bg-entropy-blue border-4 border-bg flex items-center justify-center shrink-0 glow-box">
+            <span class="text-white font-bold text-sm">2</span>
+          </div>
+          <div class="md:w-1/2 md:pl-4">
+            <h3 class="text-lg font-semibold mb-2">Claim Your Balance</h3>
+            <p class="text-text-muted text-sm leading-relaxed">
+              Sign a claim message with your Bitcoin private key. The network verifies your HASH160 matches
+              a snapshot address and binds your full aggregated balance to a new ML-DSA-65 public key. One claim per address.
+            </p>
+          </div>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="reveal relative flex items-start gap-8">
+          <div class="hidden md:block md:w-1/2 md:text-right md:pr-12">
+            <h3 class="text-lg font-semibold mb-2">Transact Quantum-Safe</h3>
+            <p class="text-text-muted text-sm leading-relaxed">
+              Once claimed, your QTC coins live in quantum-resistant UTXOs. All future transactions use
+              ML-DSA-65 signatures — safe from both classical and quantum adversaries.
+            </p>
+          </div>
+          <div class="relative z-10 w-12 h-12 rounded-full bg-entropy-cyan border-4 border-bg flex items-center justify-center shrink-0 glow-box">
+            <span class="text-white font-bold text-sm">3</span>
+          </div>
+          <div class="md:w-1/2 md:pl-4">
+            <div class="md:hidden">
+              <h3 class="text-lg font-semibold mb-2">Transact Quantum-Safe</h3>
+              <p class="text-text-muted text-sm leading-relaxed">
+                Once claimed, your QTC coins live in quantum-resistant UTXOs. All future transactions use
+                ML-DSA-65 signatures — safe from both classical and quantum adversaries.
+              </p>
+            </div>
+            <div class="hidden md:block rounded-xl bg-surface p-4 font-mono text-xs text-text-muted glow-border">
+              <span class="text-qubit-400">mldsa65</span>.sign(txHash, qtcPrivKey)<br/>
+              → quantum-safe <span class="text-green-400">&#10003;</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Team -->
+  <section id="team" class="py-32 px-6 relative">
+    <div class="absolute inset-0 bg-gradient-to-b from-transparent via-qubit-950/10 to-transparent pointer-events-none"></div>
+    <div class="max-w-4xl mx-auto relative">
+      <div class="reveal text-center mb-16">
+        <p class="text-entropy-cyan font-mono text-sm tracking-widest mb-3">TEAM</p>
+        <h2 class="text-3xl md:text-5xl font-bold mb-6">Who We Are</h2>
+        <p class="text-text-secondary max-w-xl mx-auto text-lg leading-relaxed">
+          A small team of cryptography enthusiasts and software engineers building the post-quantum future of digital money.
+        </p>
+      </div>
+      <div class="reveal rounded-2xl bg-surface p-10 glow-border text-center">
+        <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-qubit-600 to-entropy-blue mb-6">
+          <span class="text-3xl font-bold text-white font-mono">3h</span>
+        </div>
+        <h3 class="text-xl font-semibold mb-2">3h4x</h3>
+        <p class="text-qubit-400 font-mono text-sm mb-4">Creator & Lead Developer</p>
+        <p class="text-text-muted max-w-md mx-auto text-sm leading-relaxed">
+          Passionate about cryptography, blockchain technology, and building systems that stand the test of time — including the quantum era.
+        </p>
+        <div class="flex items-center justify-center gap-4 mt-6">
+          <a href="https://github.com/3h4x" target="_blank" rel="noopener"
+             class="text-text-muted hover:text-qubit-400 transition-colors">
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="py-32 px-6">
+    <div class="reveal max-w-3xl mx-auto text-center">
+      <h2 class="text-3xl md:text-4xl font-bold mb-6 glow-text">Ready to explore?</h2>
+      <p class="text-text-secondary mb-10 text-lg">
+        QubitCoin is open-source. Dive into the code, run the simulations, and see post-quantum cryptography in action.
+      </p>
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <a href="https://github.com/qubitcoin-finance/qubitcoin" target="_blank" rel="noopener"
+           class="px-8 py-3.5 rounded-xl bg-qubit-600 hover:bg-qubit-500 text-white font-medium transition-all shadow-lg shadow-qubit-600/25 hover:shadow-qubit-500/40 flex items-center gap-2">
+          <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+          View on GitHub
+        </a>
+        <a href="#about"
+           class="px-8 py-3.5 rounded-xl border border-border hover:border-qubit-600/50 text-text-secondary hover:text-text-primary transition-all">
+          Learn More
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="border-t border-border py-10 px-6">
+    <div class="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-2">
+        <img src="/logo.svg" alt="QubitCoin" class="w-6 h-6 rounded-md" />
+        <span class="text-text-muted text-sm">QubitCoin (QTC) — Post-Quantum Digital Currency</span>
+      </div>
+      <p class="text-text-muted/50 text-xs font-mono">
+        Built with ML-DSA-65 &middot; Open Source
+      </p>
+    </div>
+  </footer>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
