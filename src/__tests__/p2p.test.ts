@@ -6,6 +6,10 @@ import { Node } from '../node.js'
 import { P2PServer } from '../p2p/server.js'
 import { FileBlockStorage } from '../storage.js'
 import { generateWallet } from '../crypto.js'
+
+const walletA = generateWallet()
+const walletB = generateWallet()
+
 import {
   encodeMessage,
   decodeMessages,
@@ -17,7 +21,7 @@ import {
 function waitFor(
   fn: () => boolean,
   timeout = 10_000,
-  interval = 100,
+  interval = 20,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const start = Date.now()
@@ -91,6 +95,10 @@ describe('P2P server integration', () => {
     node1 = new Node('alice', undefined, storage1)
     node2 = new Node('bob', undefined, storage2)
 
+    // Use easy difficulty for fast test mining
+    node1.chain.difficulty = TEST_TARGET
+    node2.chain.difficulty = TEST_TARGET
+
     p2p1 = new P2PServer(node1, 0, tmpDir1) // port 0 = random
     p2p2 = new P2PServer(node2, 0, tmpDir2)
 
@@ -119,7 +127,7 @@ describe('P2P server integration', () => {
   })
 
   it('should sync blocks via IBD', async () => {
-    const wallet = generateWallet()
+    const wallet = walletA
 
     // Mine blocks on node1
     node1.chain.difficulty = TEST_TARGET
@@ -139,7 +147,7 @@ describe('P2P server integration', () => {
   })
 
   it('should propagate new blocks between connected peers', async () => {
-    const wallet = generateWallet()
+    const wallet = walletA
 
     // Connect first
     const addr = (p2p1 as any).server.address()
@@ -158,7 +166,7 @@ describe('P2P server integration', () => {
   })
 
   it('should relay transactions between peers', async () => {
-    const wallet = generateWallet()
+    const wallet = walletA
 
     // Mine a block on node1 to create a coinbase UTXO
     node1.chain.difficulty = TEST_TARGET
@@ -174,7 +182,7 @@ describe('P2P server integration', () => {
 
     // Create a transaction on node1
     const { createTransaction } = await import('../transaction.js')
-    const wallet2 = generateWallet()
+    const wallet2 = walletB
     const utxos = node1.chain.findUTXOs(wallet.address, 1)
     const tx = createTransaction(wallet, utxos, [{ address: wallet2.address, amount: 1 }], 0.125)
 
@@ -186,7 +194,7 @@ describe('P2P server integration', () => {
   })
 
   it('waitForSync resolves after IBD completes', async () => {
-    const wallet = generateWallet()
+    const wallet = walletA
 
     // Mine blocks on node1 first
     node1.chain.difficulty = TEST_TARGET
@@ -250,6 +258,100 @@ describe('P2P server integration', () => {
     expect(seeds).toHaveLength(1)
     expect(seeds[0].host).toBe('127.0.0.1')
     expect(seeds[0].port).toBe(port)
+  })
+})
+
+describe('P2P fork resolution', () => {
+  let tmpDir1: string
+  let tmpDir2: string
+  let node1: Node
+  let node2: Node
+  let p2p1: P2PServer
+  let p2p2: P2PServer
+
+  beforeEach(async () => {
+    tmpDir1 = fs.mkdtempSync(path.join(os.tmpdir(), 'qtc-fork-1-'))
+    tmpDir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'qtc-fork-2-'))
+
+    const storage1 = new FileBlockStorage(tmpDir1)
+    const storage2 = new FileBlockStorage(tmpDir2)
+
+    // Don't override difficulty — use STARTING_DIFFICULTY so resetToHeight works correctly
+    node1 = new Node('alice', undefined, storage1)
+    node2 = new Node('bob', undefined, storage2)
+
+    p2p1 = new P2PServer(node1, 0, tmpDir1)
+    p2p2 = new P2PServer(node2, 0, tmpDir2)
+
+    await p2p1.start()
+    await p2p2.start()
+  })
+
+  afterEach(async () => {
+    await p2p1.stop()
+    await p2p2.stop()
+    fs.rmSync(tmpDir1, { recursive: true, force: true })
+    fs.rmSync(tmpDir2, { recursive: true, force: true })
+  })
+
+  it('should resolve fork by switching to longer chain', { timeout: 60_000 }, async () => {
+    const wallet1 = walletA
+    const wallet2 = walletB
+
+    // Both nodes mine independently — creating divergent chains
+    // Node1 mines 1 block (shorter fork)
+    node1.mine(wallet1.address, false)
+    // Node2 mines 3 blocks (longer fork)
+    for (let i = 0; i < 3; i++) {
+      node2.mine(wallet2.address, false)
+    }
+
+    expect(node1.chain.getHeight()).toBe(1)
+    expect(node2.chain.getHeight()).toBe(3)
+
+    // Chains are divergent (different blocks at same heights)
+    expect(node1.chain.blocks[1].hash).not.toBe(node2.chain.blocks[1].hash)
+
+    // Connect node1 to node2 — node1 should detect fork and reorg to node2's chain
+    const addr = (p2p2 as any).server.address()
+    const port = typeof addr === 'object' ? addr.port : 0
+    p2p1.connectOutbound('127.0.0.1', port)
+
+    // Wait for node1 to sync to node2's height
+    await waitFor(() => node1.chain.getHeight() >= 3, 30_000)
+
+    expect(node1.chain.getHeight()).toBe(3)
+    // Should now have the same chain tip
+    expect(node1.chain.getChainTip().hash).toBe(node2.chain.getChainTip().hash)
+  })
+
+  it('should not reorg to shorter chain', { timeout: 60_000 }, async () => {
+    const wallet1 = walletA
+    const wallet2 = walletB
+
+    // Node1 mines 3 blocks (longer)
+    for (let i = 0; i < 3; i++) {
+      node1.mine(wallet1.address, false)
+    }
+    // Node2 mines 1 block (shorter)
+    node2.mine(wallet2.address, false)
+
+    const originalTip = node1.chain.getChainTip().hash
+
+    // Connect node1 to node2 — node1 should NOT reorg since it has the longer chain
+    const addr = (p2p2 as any).server.address()
+    const port = typeof addr === 'object' ? addr.port : 0
+    p2p1.connectOutbound('127.0.0.1', port)
+
+    // Wait for handshake
+    await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
+
+    // Give some time for potential (unwanted) reorg
+    await new Promise((r) => setTimeout(r, 2000))
+
+    // Node1 should keep its longer chain
+    expect(node1.chain.getHeight()).toBe(3)
+    expect(node1.chain.getChainTip().hash).toBe(originalTip)
   })
 })
 

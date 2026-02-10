@@ -19,6 +19,7 @@ export interface BlockStorageMetadata {
 
 export interface BlockStorage {
   appendBlock(block: Block): void
+  rewriteBlocks(blocks: Block[]): void
   loadBlocks(): Block[]
   loadMetadata(): BlockStorageMetadata | null
   saveMetadata(meta: BlockStorageMetadata): void
@@ -96,6 +97,11 @@ export class FileBlockStorage implements BlockStorage {
   appendBlock(block: Block): void {
     const serialized = JSON.stringify(sanitizeForStorage(block))
     fs.appendFileSync(this.blocksPath, serialized + '\n')
+  }
+
+  rewriteBlocks(blocks: Block[]): void {
+    const lines = blocks.map((b) => JSON.stringify(sanitizeForStorage(b)))
+    fs.writeFileSync(this.blocksPath, lines.join('\n') + (lines.length > 0 ? '\n' : ''))
   }
 
   loadBlocks(): Block[] {

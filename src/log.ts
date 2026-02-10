@@ -15,6 +15,6 @@ const transport = process.stdout.isTTY
   : undefined
 
 export const log = pino(
-  { name: 'qtcd' },
+  { name: 'qtcd', level: process.env.LOG_LEVEL || 'info' },
   transport,
 )

@@ -12,6 +12,10 @@ import { generateWallet } from '../crypto.js'
 import { createMockSnapshot } from '../snapshot.js'
 import { createClaimTransaction } from '../claim.js'
 
+const walletA = generateWallet()
+const walletB = generateWallet()
+const walletC = generateWallet()
+
 function makeUtxoSet(wallet: ReturnType<typeof generateWallet>, amount = 100): Map<string, UTXO> {
   const utxoSet = new Map<string, UTXO>()
   const txId = 'a'.repeat(64)
@@ -27,7 +31,7 @@ function makeUtxoSet(wallet: ReturnType<typeof generateWallet>, amount = 100): M
 describe('Mempool', () => {
   it('accepts valid transaction', () => {
     const mempool = new Mempool()
-    const wallet = generateWallet()
+    const wallet = walletA
     const utxoSet = makeUtxoSet(wallet)
 
     const tx = createTransaction(
@@ -44,7 +48,7 @@ describe('Mempool', () => {
 
   it('rejects duplicate transaction', () => {
     const mempool = new Mempool()
-    const wallet = generateWallet()
+    const wallet = walletA
     const utxoSet = makeUtxoSet(wallet)
 
     const tx = createTransaction(
@@ -62,7 +66,7 @@ describe('Mempool', () => {
 
   it('rejects double-spend in mempool', () => {
     const mempool = new Mempool()
-    const wallet = generateWallet()
+    const wallet = walletA
     const utxoSet = makeUtxoSet(wallet)
 
     const tx1 = createTransaction(
@@ -86,7 +90,7 @@ describe('Mempool', () => {
 
   it('getTransactionsForBlock respects maxCount', () => {
     const mempool = new Mempool()
-    const wallet = generateWallet()
+    const wallet = walletA
 
     // Add 3 transactions with different UTXOs
     for (let i = 0; i < 3; i++) {
@@ -114,7 +118,7 @@ describe('Mempool', () => {
 
   it('removeTransactions cleans up claimed UTXOs', () => {
     const mempool = new Mempool()
-    const wallet = generateWallet()
+    const wallet = walletA
     const utxoSet = makeUtxoSet(wallet)
 
     const tx = createTransaction(
@@ -145,7 +149,7 @@ describe('Mempool claims', () => {
   it('accepts valid claim', () => {
     const mempool = new Mempool()
     const { snapshot, holders } = createMockSnapshot()
-    const qtcWallet = generateWallet()
+    const qtcWallet = walletB
 
     const claimTx = createClaimTransaction(
       holders[0].secretKey,
@@ -162,7 +166,7 @@ describe('Mempool claims', () => {
   it('rejects double-claim in mempool', async () => {
     const mempool = new Mempool()
     const { snapshot, holders } = createMockSnapshot()
-    const qtcWallet = generateWallet()
+    const qtcWallet = walletB
 
     const claimTx1 = createClaimTransaction(
       holders[0].secretKey,
@@ -176,7 +180,7 @@ describe('Mempool claims', () => {
     // Wait 1ms so timestamp differs → different tx id
     await new Promise((r) => setTimeout(r, 1))
 
-    const qtcWallet2 = generateWallet()
+    const qtcWallet2 = walletC
     const claimTx2 = createClaimTransaction(
       holders[0].secretKey,
       holders[0].publicKey,
@@ -192,7 +196,7 @@ describe('Mempool claims', () => {
   it('rejects claim already on-chain', () => {
     const mempool = new Mempool()
     const { snapshot, holders } = createMockSnapshot()
-    const qtcWallet = generateWallet()
+    const qtcWallet = walletB
 
     const claimedSet = new Set<string>()
     claimedSet.add(snapshot.entries[0].btcAddress)
@@ -213,7 +217,7 @@ describe('Mempool claims', () => {
   it('removeTransactions cleans up pending claims', () => {
     const mempool = new Mempool()
     const { snapshot, holders } = createMockSnapshot()
-    const qtcWallet = generateWallet()
+    const qtcWallet = walletB
 
     const claimTx = createClaimTransaction(
       holders[0].secretKey,

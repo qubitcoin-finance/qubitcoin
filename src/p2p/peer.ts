@@ -95,6 +95,8 @@ export class Peer {
   addMisbehavior(score: number): void {
     this.misbehaviorScore += score
     if (this.misbehaviorScore >= MISBEHAVIOR_THRESHOLD) {
+      // Send reject before disconnecting so peer knows why
+      this.send({ type: 'reject', payload: { reason: `misbehavior score ${this.misbehaviorScore}` } })
       this.disconnect(`misbehavior score ${this.misbehaviorScore}`)
     }
   }

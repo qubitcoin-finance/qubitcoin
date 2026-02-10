@@ -17,6 +17,8 @@ export type MessageType =
   | 'tx'
   | 'inv'
   | 'getdata'
+  | 'getheaders'
+  | 'headers'
   | 'ping'
   | 'pong'
 
@@ -47,6 +49,14 @@ export interface InvPayload {
 export interface GetDataPayload {
   type: 'block' | 'tx'
   hash: string
+}
+
+export interface GetHeadersPayload {
+  locatorHashes: string[]
+}
+
+export interface HeadersPayload {
+  headers: Array<{ hash: string; height: number; previousHash: string }>
 }
 
 export interface RejectPayload {

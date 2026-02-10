@@ -15,6 +15,9 @@ import {
   bytesToHex,
 } from '../crypto.js'
 
+const walletA = generateWallet()
+const walletB = generateWallet()
+
 describe('doubleSha256', () => {
   it('returns 32 bytes', () => {
     const result = doubleSha256(new Uint8Array([1, 2, 3]))
@@ -44,46 +47,38 @@ describe('doubleSha256', () => {
 
 describe('generateWallet', () => {
   it('creates wallet with correct key sizes', () => {
-    const wallet = generateWallet()
-    expect(wallet.publicKey.length).toBe(1952)
-    expect(wallet.secretKey.length).toBe(4032)
-    expect(wallet.address.length).toBe(64)
+    expect(walletA.publicKey.length).toBe(1952)
+    expect(walletA.secretKey.length).toBe(4032)
+    expect(walletA.address.length).toBe(64)
   })
 
   it('generates unique addresses', () => {
-    const w1 = generateWallet()
-    const w2 = generateWallet()
-    expect(w1.address).not.toBe(w2.address)
+    expect(walletA.address).not.toBe(walletB.address)
   })
 
   it('address matches deriveAddress(publicKey)', () => {
-    const wallet = generateWallet()
-    expect(wallet.address).toBe(deriveAddress(wallet.publicKey))
+    expect(walletA.address).toBe(deriveAddress(walletA.publicKey))
   })
 })
 
 describe('signData / verifySignature', () => {
   it('round-trip sign and verify', () => {
-    const wallet = generateWallet()
     const data = new Uint8Array([1, 2, 3, 4, 5])
-    const sig = signData(data, wallet.secretKey)
-    expect(verifySignature(sig, data, wallet.publicKey)).toBe(true)
+    const sig = signData(data, walletA.secretKey)
+    expect(verifySignature(sig, data, walletA.publicKey)).toBe(true)
   })
 
   it('detects tampered data', () => {
-    const wallet = generateWallet()
     const data = new Uint8Array([1, 2, 3])
-    const sig = signData(data, wallet.secretKey)
+    const sig = signData(data, walletA.secretKey)
     const tampered = new Uint8Array([1, 2, 4])
-    expect(verifySignature(sig, tampered, wallet.publicKey)).toBe(false)
+    expect(verifySignature(sig, tampered, walletA.publicKey)).toBe(false)
   })
 
   it('rejects wrong public key', () => {
-    const w1 = generateWallet()
-    const w2 = generateWallet()
     const data = new Uint8Array([1, 2, 3])
-    const sig = signData(data, w1.secretKey)
-    expect(verifySignature(sig, data, w2.publicKey)).toBe(false)
+    const sig = signData(data, walletA.secretKey)
+    expect(verifySignature(sig, data, walletB.publicKey)).toBe(false)
   })
 })
 

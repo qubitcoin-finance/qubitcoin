@@ -62,7 +62,7 @@ Options:
     p2pPort: parseInt(opts['p2p-port'] ?? '6001', 10),
     snapshotPath: opts['snapshot'] ?? null,
     dataDir: opts['datadir'] ?? 'data/node',
-    seeds: opts['seeds'] ? opts['seeds'].split(',') : ['qubitcoin.finance:6001'],
+    seeds: opts['seeds'] !== undefined ? (opts['seeds'] ? opts['seeds'].split(',') : []) : ['qubitcoin.finance:6001'],
     mine: flags.has('mine'),
     simulate: flags.has('simulate'),
   }
@@ -143,7 +143,12 @@ async function main() {
     // Wait for IBD before mining so we don't mine on a stale chain
     if (config.seeds.length > 0) {
       log.info({ component: 'p2p' }, 'Waiting for sync with network')
-      await p2p.waitForSync(15_000)
+      try {
+        await p2p.waitForSync(15_000)
+      } catch {
+        log.fatal({ component: 'p2p', seeds: config.seeds }, 'Could not sync with seed nodes — refusing to mine on a fork')
+        process.exit(1)
+      }
       log.info({ component: 'p2p', height: node.chain.getHeight() }, 'Sync complete')
     }
 

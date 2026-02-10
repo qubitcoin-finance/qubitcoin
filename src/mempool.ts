@@ -104,6 +104,13 @@ export class Mempool {
     return this.transactions.get(txId)
   }
 
+  /** Clear all pending transactions and tracking state */
+  clear(): void {
+    this.transactions.clear()
+    this.claimedUTXOs.clear()
+    this.pendingBtcClaims.clear()
+  }
+
   /** Number of pending transactions */
   size(): number {
     return this.transactions.size

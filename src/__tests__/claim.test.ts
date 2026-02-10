@@ -17,6 +17,9 @@ import {
   type BlockHeader,
 } from '../block.js'
 
+const qtcWalletA = generateWallet()
+const qtcWalletB = generateWallet()
+
 // Easy target for tests: ~16 attempts to find valid hash
 const TEST_TARGET = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
 
@@ -49,7 +52,7 @@ function mineOnChain(chain: Blockchain, minerAddress: string, extraTxs: any[] = 
 describe('createClaimTransaction', () => {
   it('creates correct structure', () => {
     const { snapshot, holders } = createMockSnapshot()
-    const qtcWallet = generateWallet()
+    const qtcWallet = qtcWalletA
 
     const tx = createClaimTransaction(
       holders[0].secretKey,
@@ -73,7 +76,7 @@ describe('createClaimTransaction', () => {
 
   it('ECDSA signature is valid', () => {
     const { snapshot, holders } = createMockSnapshot()
-    const qtcWallet = generateWallet()
+    const qtcWallet = qtcWalletA
 
     const tx = createClaimTransaction(
       holders[0].secretKey,
@@ -91,7 +94,7 @@ describe('createClaimTransaction', () => {
 describe('verifyClaimProof', () => {
   it('accepts valid proof', () => {
     const { snapshot, holders } = createMockSnapshot()
-    const qtcWallet = generateWallet()
+    const qtcWallet = qtcWalletA
 
     const tx = createClaimTransaction(
       holders[0].secretKey,
@@ -106,7 +109,7 @@ describe('verifyClaimProof', () => {
 
   it('rejects wrong ECDSA key', () => {
     const { snapshot, holders } = createMockSnapshot()
-    const qtcWallet = generateWallet()
+    const qtcWallet = qtcWalletA
     const wrongKey = generateBtcKeypair()
 
     // Sign with wrong key
@@ -125,7 +128,7 @@ describe('verifyClaimProof', () => {
 
   it('rejects wrong amount', () => {
     const { snapshot, holders } = createMockSnapshot()
-    const qtcWallet = generateWallet()
+    const qtcWallet = qtcWalletA
 
     const tx = createClaimTransaction(
       holders[0].secretKey,
@@ -145,7 +148,7 @@ describe('verifyClaimProof', () => {
 
   it('rejects missing entry', () => {
     const { snapshot, holders } = createMockSnapshot()
-    const qtcWallet = generateWallet()
+    const qtcWallet = qtcWalletA
 
     const tx = createClaimTransaction(
       holders[0].secretKey,
@@ -196,8 +199,8 @@ describe('end-to-end: claim → mine → spend', () => {
   it('claim, mine, then spend with ML-DSA-65', () => {
     const { snapshot, holders } = createMockSnapshot()
     const chain = new Blockchain(snapshot)
-    const qtcWallet = generateWallet()
-    const recipient = generateWallet()
+    const qtcWallet = qtcWalletA
+    const recipient = qtcWalletB
 
     // Step 1: Create claim and mine it
     const claimTx = createClaimTransaction(

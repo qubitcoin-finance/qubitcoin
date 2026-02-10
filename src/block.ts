@@ -144,8 +144,13 @@ export function hashMeetsTarget(hash: string, target: string): boolean {
   return BigInt('0x' + hash) < BigInt('0x' + target)
 }
 
-/** Create the genesis block */
+/** Cached genesis block (deterministic — same inputs always produce same result) */
+let _cachedGenesis: Block | null = null
+
+/** Create the genesis block (cached — mined once, cloned on subsequent calls) */
 export function createGenesisBlock(): Block {
+  if (_cachedGenesis) return structuredClone(_cachedGenesis)
+
   const burnAddress = '0'.repeat(64)
   const timestamp = Date.parse('2025-01-01T00:00:00Z')
 
@@ -197,20 +202,24 @@ export function createGenesisBlock(): Block {
     hash = computeBlockHash(header)
   }
 
-  return {
-    header,
-    hash,
-    transactions: [coinbaseTx],
-    height: 0,
-  }
+  _cachedGenesis = { header, hash, transactions: [coinbaseTx], height: 0 }
+  return structuredClone(_cachedGenesis)
 }
+
+/** Cached fork genesis blocks (keyed by snapshot merkle root) */
+const _cachedForkGenesis = new Map<string, Block>()
 
 /**
  * Create a fork genesis block that commits to a Bitcoin UTXO snapshot.
  * The genesis is tiny: just a coinbase embedding the snapshot commitment.
  * No coins are minted - all value comes from BTC claims.
+ * Cached per snapshot (deterministic — same snapshot always produces same result).
  */
 export function createForkGenesisBlock(snapshot: BtcSnapshot): Block {
+  const cacheKey = snapshot.merkleRoot
+  const cached = _cachedForkGenesis.get(cacheKey)
+  if (cached) return structuredClone(cached)
+
   const burnAddress = '0'.repeat(64)
   const timestamp = Date.parse('2025-01-01T00:00:00Z')
   const encoder = new TextEncoder()
@@ -267,12 +276,9 @@ export function createForkGenesisBlock(snapshot: BtcSnapshot): Block {
     hash = computeBlockHash(header)
   }
 
-  return {
-    header,
-    hash,
-    transactions: [coinbaseTx],
-    height: 0,
-  }
+  const result = { header, hash, transactions: [coinbaseTx], height: 0 }
+  _cachedForkGenesis.set(cacheKey, result)
+  return structuredClone(result)
 }
 
 /** Validate a block against the previous block and UTXO set */

@@ -122,6 +122,14 @@ export class Node {
     }
   }
 
+  /** Reset node to a target height: rollback chain, clear mempool, abort mining */
+  resetToHeight(height: number): void {
+    log.warn({ component: 'node', from: this.chain.getHeight(), to: height }, 'Resetting to height')
+    this.chain.resetToHeight(height)
+    this.mempool.clear()
+    this.miningAbort?.abort()
+  }
+
   stopMining(): void {
     this.miningAbort?.abort()
     this.miningAbort = null

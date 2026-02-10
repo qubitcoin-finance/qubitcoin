@@ -33,6 +33,12 @@ export interface ParsedCoin {
   amount: bigint          // satoshis (decompressed)
   scriptType: ScriptType
   addressHash?: string    // hex of the 20-byte or 32-byte hash (if extractable)
+  isGroupEnd: boolean     // true when this is the last coin in a txid group
+}
+
+export interface ResumeState {
+  bytesRead: number       // byte offset in the file to resume from
+  coinsRead: bigint       // number of coins already processed
 }
 
 // --- Constants ---
@@ -54,8 +60,9 @@ class BufferedReader {
 
   bytesRead = 0
 
-  constructor(path: string) {
-    this.stream = createReadStream(path, { highWaterMark: READ_CHUNK })
+  constructor(path: string, start = 0) {
+    this.bytesRead = start
+    this.stream = createReadStream(path, { start, highWaterMark: READ_CHUNK })
     this.stream.on('data', (chunk: Buffer) => {
       this.chunks.push(chunk)
       this.totalLen += chunk.length
@@ -311,37 +318,26 @@ export async function parseHeader(path: string): Promise<SnapshotHeader> {
 /**
  * Async generator that streams all coins from a dumptxoutset v2 file.
  * Yields one ParsedCoin per UTXO entry.
+ *
+ * When `resumeFrom` is provided, skips the header and seeks directly to the
+ * byte offset, continuing from `coinsRead`. The caller must ensure the offset
+ * falls on a txid-group boundary (i.e. after the last coin of a group).
  */
 export async function* parseDumptxoutset(
   path: string,
   onProgress?: (bytesRead: number, coinsRead: bigint) => void,
+  resumeFrom?: ResumeState,
 ): AsyncGenerator<ParsedCoin> {
-  const fileStat = await stat(path)
-  const reader = new BufferedReader(path)
+  // Always read header to get coinCount
+  const header = await parseHeader(path)
+  const coinCount = header.coinCount
+
+  const startOffset = resumeFrom ? resumeFrom.bytesRead : HEADER_SIZE
+  const reader = new BufferedReader(path, startOffset)
 
   try {
-    // Parse header
-    const magic = await reader.readBytes(5)
-    for (let i = 0; i < 5; i++) {
-      if (magic[i] !== MAGIC[i]) {
-        throw new Error(`Invalid magic bytes`)
-      }
-    }
-
-    const versionBuf = await reader.readBytes(2)
-    const version = versionBuf.readUInt16LE(0)
-    if (version !== 2) throw new Error(`Unsupported version: ${version}`)
-
-    await reader.readBytes(4) // network magic
-    const blockHashBuf = await reader.readBytes(32)
-    const blockHash = blockHashBuf.toString('hex')
-    const coinCountBuf = await reader.readBytes(8)
-    const coinCount = coinCountBuf.readBigUInt64LE(0)
-    reader.advance()
-
-    let coinsRead = 0n
+    let coinsRead = resumeFrom ? resumeFrom.coinsRead : 0n
     let remainingInGroup = 0
-
     let currentTxid = ''
 
     while (coinsRead < coinCount) {
@@ -366,6 +362,8 @@ export async function* parseDumptxoutset(
       remainingInGroup--
       coinsRead++
 
+      const isGroupEnd = remainingInGroup === 0
+
       reader.advance()
 
       yield {
@@ -376,6 +374,7 @@ export async function* parseDumptxoutset(
         amount,
         scriptType: script.scriptType,
         addressHash: script.addressHash,
+        isGroupEnd,
       }
 
       // Progress callback every 100k coins

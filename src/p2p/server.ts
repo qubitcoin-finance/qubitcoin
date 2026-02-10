@@ -18,7 +18,10 @@ import {
   type TxPayload,
   type InvPayload,
   type GetDataPayload,
+  type GetHeadersPayload,
+  type HeadersPayload,
   PROTOCOL_VERSION,
+  encodeMessage,
 } from './protocol.js'
 import type { Node } from '../node.js'
 import { sanitizeForStorage } from '../storage.js'
@@ -32,6 +35,9 @@ const MAX_OUTBOUND = 25
 const IBD_BATCH_SIZE = 50
 const SEEN_CACHE_MAX = 10_000
 const BAN_DURATION_MS = 24 * 60 * 60 * 1000 // 24h
+const MAX_REORG_DEPTH = 100
+const MAX_HEADERS_RESPONSE = 500
+const SEED_RECONNECT_DELAY_MS = 5_000
 
 /** Known Uint8Array fields that need deserialization from P2P messages */
 const TX_INPUT_BINARY_FIELDS = ['publicKey', 'signature'] as const
@@ -86,6 +92,7 @@ export class P2PServer {
   private syncResolvers: Array<() => void> = []
   private seeds: Array<{ host: string; port: number }> = []
   private reconnectTimer: ReturnType<typeof setInterval> | null = null
+  private forkResolutionInProgress = false
 
   constructor(node: Node, port: number, dataDir?: string) {
     this.node = node
@@ -134,12 +141,12 @@ export class P2PServer {
       this.connectOutbound(host, port)
     }
 
-    // Reconnect to seeds every 30s if we have no outbound peers
+    // Reconnect to disconnected seeds every 30s
     if (!this.reconnectTimer && this.seeds.length > 0) {
       this.reconnectTimer = setInterval(() => {
-        if (this.outboundCount === 0) {
-          log.warn({ component: 'p2p' }, 'No outbound peers — reconnecting to seeds')
-          for (const seed of this.seeds) {
+        for (const seed of this.seeds) {
+          if (!this.isConnectedToSeed(seed.host, seed.port)) {
+            log.info({ component: 'p2p', seed: `${seed.host}:${seed.port}` }, 'Reconnecting to seed')
             this.connectOutbound(seed.host, seed.port)
           }
         }
@@ -201,7 +208,9 @@ export class P2PServer {
   private handleInbound(socket: net.Socket): void {
     const addr = socket.remoteAddress ?? ''
     if (this.isBanned(addr)) {
-      socket.destroy()
+      log.info({ component: 'p2p', ip: addr }, 'Rejected banned peer')
+      const frame = encodeMessage({ type: 'reject', payload: { reason: 'banned' } as RejectPayload })
+      socket.end(frame)
       return
     }
     if (this.inboundCount >= MAX_INBOUND) {
@@ -234,9 +243,29 @@ export class P2PServer {
       this.ban(peer.address)
     }
 
+    // Clear fork resolution flag if this peer was involved
+    if (this.forkResolutionInProgress) {
+      this.forkResolutionInProgress = false
+    }
+
     this.peers.delete(peer.id)
     if (peer.inbound) this.inboundCount--
     else this.outboundCount--
+
+    // Schedule quick reconnect if it was a seed
+    if (!peer.inbound) {
+      for (const seed of this.seeds) {
+        if (peer.address.includes(seed.host)) {
+          setTimeout(() => {
+            if (!this.isConnectedToSeed(seed.host, seed.port)) {
+              log.info({ component: 'p2p', seed: `${seed.host}:${seed.port}` }, 'Quick reconnect to seed')
+              this.connectOutbound(seed.host, seed.port)
+            }
+          }, SEED_RECONNECT_DELAY_MS)
+          break
+        }
+      }
+    }
   }
 
   private handleMessage(peer: Peer, msg: Message): void {
@@ -266,6 +295,12 @@ export class P2PServer {
         case 'getdata':
           this.handleGetData(peer, msg.payload as GetDataPayload)
           break
+        case 'getheaders':
+          this.handleGetHeaders(peer, msg.payload as GetHeadersPayload)
+          break
+        case 'headers':
+          this.handleHeaders(peer, msg.payload as HeadersPayload)
+          break
         case 'ping':
           peer.send({ type: 'pong' })
           break
@@ -275,7 +310,8 @@ export class P2PServer {
         default:
           peer.addMisbehavior(10)
       }
-    } catch {
+    } catch (err) {
+      log.warn({ component: 'p2p', peer: peer.id, msgType: msg.type, error: err instanceof Error ? err.message : String(err) }, 'Error handling message')
       peer.addMisbehavior(10)
     }
   }
@@ -373,6 +409,7 @@ export class P2PServer {
     }
 
     let added = 0
+    let forkDetected = false
     for (const raw of payload.blocks) {
       const block = deserializeBlock(raw as Record<string, unknown>)
       if (this.seenBlocks.has(block.hash)) continue
@@ -381,9 +418,25 @@ export class P2PServer {
       if (result.success) {
         this.addSeen(this.seenBlocks, block.hash)
         added++
+      } else if (result.error?.includes('Previous hash') && !this.forkResolutionInProgress) {
+        // Fork detected — peer has a different chain at this height
+        log.warn({ component: 'p2p', peer: peer.id, height: block.height, error: result.error }, 'Fork detected — initiating resolution')
+        forkDetected = true
+        break
       } else {
+        log.warn({ component: 'p2p', peer: peer.id, height: block.height, hash: block.hash?.slice(0, 16), error: result.error }, 'Rejected block from peer')
+        peer.send({ type: 'reject', payload: { reason: `block ${block.height} rejected: ${result.error}` } as RejectPayload })
         peer.addMisbehavior(5)
       }
+    }
+
+    if (forkDetected) {
+      this.initiateForkResolution(peer)
+      return
+    }
+
+    if (added > 0) {
+      log.info({ component: 'p2p', peer: peer.id, added, height: this.node.chain.getHeight(), peerHeight: peer.remoteHeight }, 'Syncing blocks')
     }
 
     // Request more if we got a full batch and peer is still ahead
@@ -421,6 +474,7 @@ export class P2PServer {
         payload: { type: 'tx', hash: tx.id } as InvPayload,
       })
     } else {
+      log.warn({ component: 'p2p', peer: peer.id, txid: tx.id?.slice(0, 16), error: result.error }, 'Rejected tx from peer')
       peer.addMisbehavior(2)
     }
   }
@@ -475,6 +529,162 @@ export class P2PServer {
         })
       }
     }
+  }
+
+  /** Build block locator: tip, tip-1, tip-2, tip-4, tip-8, ..., genesis */
+  private buildBlockLocator(): string[] {
+    const chain = this.node.chain
+    const height = chain.getHeight()
+    const locator: string[] = []
+    let step = 1
+    let h = height
+
+    while (h > 0) {
+      locator.push(chain.blocks[h].hash)
+      if (locator.length >= 2) step *= 2
+      h -= step
+    }
+
+    // Always include genesis
+    locator.push(chain.blocks[0].hash)
+    return locator
+  }
+
+  /** Initiate fork resolution by sending getheaders with a block locator */
+  private initiateForkResolution(peer: Peer): void {
+    if (this.forkResolutionInProgress) return
+    this.forkResolutionInProgress = true
+
+    const locator = this.buildBlockLocator()
+    log.info({ component: 'p2p', peer: peer.id, locatorLen: locator.length }, 'Sending getheaders for fork resolution')
+    peer.send({
+      type: 'getheaders',
+      payload: { locatorHashes: locator } as GetHeadersPayload,
+    })
+  }
+
+  /** Handle getheaders: find common ancestor from locator, respond with headers */
+  private handleGetHeaders(peer: Peer, payload: GetHeadersPayload): void {
+    if (!peer.handshakeComplete) {
+      peer.addMisbehavior(10)
+      return
+    }
+    if (!payload || !Array.isArray(payload.locatorHashes)) {
+      peer.addMisbehavior(10)
+      return
+    }
+
+    const chain = this.node.chain
+
+    // Find the first locator hash that matches a block in our chain
+    let forkPoint = 0 // default to genesis
+    for (const hash of payload.locatorHashes) {
+      const block = chain.blocks.find((b) => b.hash === hash)
+      if (block) {
+        forkPoint = block.height
+        break
+      }
+    }
+
+    // Send headers from forkPoint+1 to our tip (capped)
+    const from = forkPoint + 1
+    const to = Math.min(from + MAX_HEADERS_RESPONSE, chain.blocks.length)
+    const headers = chain.blocks.slice(from, to).map((b) => ({
+      hash: b.hash,
+      height: b.height,
+      previousHash: b.header.previousHash,
+    }))
+
+    peer.send({
+      type: 'headers',
+      payload: { headers } as HeadersPayload,
+    })
+  }
+
+  /** Handle headers response: determine if peer chain is longer, reorg if so */
+  private handleHeaders(peer: Peer, payload: HeadersPayload): void {
+    if (!peer.handshakeComplete) {
+      peer.addMisbehavior(10)
+      return
+    }
+    if (!payload || !Array.isArray(payload.headers)) {
+      peer.addMisbehavior(10)
+      this.forkResolutionInProgress = false
+      return
+    }
+
+    if (payload.headers.length === 0) {
+      log.info({ component: 'p2p', peer: peer.id }, 'No headers from peer — no reorg needed')
+      this.forkResolutionInProgress = false
+      return
+    }
+
+    const chain = this.node.chain
+    const firstHeader = payload.headers[0]
+    const lastHeader = payload.headers[payload.headers.length - 1]
+
+    // Find the fork point: the block whose hash matches firstHeader.previousHash
+    let forkPoint = -1
+    for (let i = chain.blocks.length - 1; i >= 0; i--) {
+      if (chain.blocks[i].hash === firstHeader.previousHash) {
+        forkPoint = i
+        break
+      }
+    }
+
+    if (forkPoint === -1) {
+      log.warn({ component: 'p2p', peer: peer.id }, 'Cannot find fork point from headers — no common ancestor')
+      peer.addMisbehavior(10)
+      this.forkResolutionInProgress = false
+      return
+    }
+
+    // Check reorg depth
+    const reorgDepth = chain.getHeight() - forkPoint
+    if (reorgDepth > MAX_REORG_DEPTH) {
+      log.warn({ component: 'p2p', peer: peer.id, depth: reorgDepth, max: MAX_REORG_DEPTH }, 'Reorg too deep — refusing')
+      this.forkResolutionInProgress = false
+      return
+    }
+
+    // Peer chain must be strictly longer to trigger reorg
+    const peerHeight = forkPoint + payload.headers.length
+    // Also account for peer potentially having more headers beyond what was sent
+    const effectivePeerHeight = Math.max(peerHeight, peer.remoteHeight)
+    if (effectivePeerHeight <= chain.getHeight()) {
+      log.info({ component: 'p2p', peer: peer.id, ourHeight: chain.getHeight(), peerHeight: effectivePeerHeight }, 'Peer chain not longer — no reorg')
+      this.forkResolutionInProgress = false
+      return
+    }
+
+    // Perform reorg
+    log.warn({ component: 'p2p', peer: peer.id, forkPoint, ourHeight: chain.getHeight(), peerHeight: effectivePeerHeight }, 'Reorging to longer chain')
+    this.node.resetToHeight(forkPoint)
+
+    // Clear seen blocks cache since we've rewound
+    this.seenBlocks.clear()
+    // Re-add blocks we still have
+    for (const b of chain.blocks) {
+      this.addSeen(this.seenBlocks, b.hash)
+    }
+
+    this.forkResolutionInProgress = false
+
+    // Request blocks from the fork point
+    peer.send({
+      type: 'getblocks',
+      payload: { fromHeight: forkPoint + 1 } as GetBlocksPayload,
+    })
+  }
+
+  /** Check if we have an active connection to a specific seed */
+  private isConnectedToSeed(host: string, port: number): boolean {
+    for (const peer of this.peers.values()) {
+      if (!peer.inbound && peer.address.includes(host)) {
+        return true
+      }
+    }
+    return false
   }
 
   private broadcastBlock(block: Block): void {

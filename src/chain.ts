@@ -20,8 +20,16 @@ import {
 } from './block.js'
 import { type BlockStorage } from './storage.js'
 
+export interface BlockUndo {
+  spentUtxos: Array<{ key: string; utxo: UTXO }>  // UTXOs consumed by inputs — restore on disconnect
+  createdUtxoKeys: string[]                         // UTXOs created by outputs — remove on disconnect
+  claimedAddresses: string[]                        // BTC addresses claimed — unclaim on disconnect
+  previousDifficulty: string                        // difficulty before this block — restore on disconnect
+}
+
 export class Blockchain {
   blocks: Block[] = []
+  undoData: BlockUndo[] = []
   utxoSet: Map<string, UTXO> = new Map()
   difficulty: string = STARTING_DIFFICULTY
   btcSnapshot: BtcSnapshot | null = null
@@ -43,7 +51,7 @@ export class Blockchain {
         // Replay persisted blocks (genesis is first)
         this.blocks.push(persisted[0]) // genesis
         for (let i = 1; i < persisted.length; i++) {
-          this.applyBlock(persisted[i])
+          this.undoData.push(this.applyBlock(persisted[i]))
           this.blocks.push(persisted[i])
           if (this.blocks.length % DIFFICULTY_ADJUSTMENT_INTERVAL === 0) {
             this.difficulty = this.adjustDifficulty()
@@ -115,8 +123,8 @@ export class Blockchain {
       }
     }
 
-    // Apply UTXO changes
-    this.applyBlock(block)
+    // Apply UTXO changes and record undo data
+    this.undoData.push(this.applyBlock(block))
 
     // Append to chain
     this.blocks.push(block)
@@ -344,6 +352,64 @@ export class Blockchain {
     return { valid: true }
   }
 
+  /** Get block hash at a given height */
+  getBlockHash(height: number): string | undefined {
+    if (height < 0 || height >= this.blocks.length) return undefined
+    return this.blocks[height].hash
+  }
+
+  /**
+   * Reset chain to a target height.
+   * Uses undo data to disconnect blocks in O(1) each when available,
+   * falling back to full replay from genesis if undo data is missing.
+   * Rewrites storage to match the truncated chain.
+   */
+  resetToHeight(targetHeight: number): void {
+    if (targetHeight < 0 || targetHeight > this.getHeight()) {
+      throw new Error(`Invalid target height ${targetHeight} (current: ${this.getHeight()})`)
+    }
+
+    // undoData[i] corresponds to blocks[i+1] (block at height i+1)
+    // Check if we have undo data for all blocks we need to disconnect
+    const currentHeight = this.getHeight()
+    const hasUndoData = this.undoData.length === currentHeight
+
+    if (hasUndoData && targetHeight > 0) {
+      // Fast path: disconnect blocks backwards using undo data — O(blocks_removed)
+      for (let h = currentHeight; h > targetHeight; h--) {
+        this.disconnectBlock(this.undoData[h - 1])
+        this.undoData.pop()
+        this.blocks.pop()
+      }
+    } else {
+      // Slow path: full replay from genesis
+      this.blocks.length = targetHeight + 1
+      this.undoData.length = 0
+      this.utxoSet.clear()
+      this.claimedBtcAddresses.clear()
+      this.difficulty = STARTING_DIFFICULTY
+
+      for (let i = 1; i <= targetHeight; i++) {
+        this.undoData.push(this.applyBlock(this.blocks[i]))
+        if ((i + 1) % DIFFICULTY_ADJUSTMENT_INTERVAL === 0) {
+          this.difficulty = this.adjustDifficulty()
+        }
+      }
+    }
+
+    // Update storage
+    if (this.storage) {
+      this.storage.rewriteBlocks(this.blocks)
+      this.storage.saveMetadata({
+        height: targetHeight,
+        difficulty: this.difficulty,
+        genesisHash: this.blocks[0].hash,
+      })
+    }
+
+    this.replayHeight = targetHeight
+  }
+
   /** Check if a BTC address has been claimed */
   isClaimed(btcAddress: string): boolean {
     return this.claimedBtcAddresses.has(btcAddress)
@@ -379,22 +445,36 @@ export class Blockchain {
     }
   }
 
-  /** Apply UTXO set changes for a validated block (private) */
-  private applyBlock(block: Block): void {
+  /** Apply UTXO set changes for a validated block and return undo data (private) */
+  private applyBlock(block: Block): BlockUndo {
+    const undo: BlockUndo = {
+      spentUtxos: [],
+      createdUtxoKeys: [],
+      claimedAddresses: [],
+      previousDifficulty: this.difficulty,
+    }
+
     for (const tx of block.transactions) {
       // Handle claim transactions: mark BTC UTXO as claimed, create PQ UTXO
       if (isClaimTransaction(tx)) {
         const claim = tx.claimData!
         this.claimedBtcAddresses.add(claim.btcAddress)
+        undo.claimedAddresses.push(claim.btcAddress)
         // Create new PQ UTXO from claim output
         for (let i = 0; i < tx.outputs.length; i++) {
           const output = tx.outputs[i]
-          this.utxoSet.set(utxoKey(tx.id, i), {
+          const key = utxoKey(tx.id, i)
+          const overwritten = this.utxoSet.get(key)
+          if (overwritten) {
+            undo.spentUtxos.push({ key, utxo: overwritten })
+          }
+          this.utxoSet.set(key, {
             txId: tx.id,
             outputIndex: i,
             address: output.address,
             amount: output.amount,
           })
+          undo.createdUtxoKeys.push(key)
         }
         continue
       }
@@ -402,20 +482,52 @@ export class Blockchain {
       // Remove spent UTXOs (skip coinbase inputs)
       if (!isCoinbase(tx)) {
         for (const input of tx.inputs) {
-          this.utxoSet.delete(utxoKey(input.txId, input.outputIndex))
+          const key = utxoKey(input.txId, input.outputIndex)
+          const existing = this.utxoSet.get(key)
+          if (existing) {
+            undo.spentUtxos.push({ key, utxo: existing })
+          }
+          this.utxoSet.delete(key)
         }
       }
 
       // Add new UTXOs from outputs
       for (let i = 0; i < tx.outputs.length; i++) {
         const output = tx.outputs[i]
-        this.utxoSet.set(utxoKey(tx.id, i), {
+        const key = utxoKey(tx.id, i)
+        // Save overwritten UTXO if key already exists (e.g. duplicate coinbase txid)
+        const overwritten = this.utxoSet.get(key)
+        if (overwritten) {
+          undo.spentUtxos.push({ key, utxo: overwritten })
+        }
+        this.utxoSet.set(key, {
           txId: tx.id,
           outputIndex: i,
           address: output.address,
           amount: output.amount,
         })
+        undo.createdUtxoKeys.push(key)
       }
     }
+
+    return undo
+  }
+
+  /** Disconnect a block using its undo data — O(1) per block */
+  private disconnectBlock(undo: BlockUndo): void {
+    // Remove created UTXOs
+    for (const key of undo.createdUtxoKeys) {
+      this.utxoSet.delete(key)
+    }
+    // Restore spent UTXOs
+    for (const { key, utxo } of undo.spentUtxos) {
+      this.utxoSet.set(key, utxo)
+    }
+    // Unclaim BTC addresses
+    for (const addr of undo.claimedAddresses) {
+      this.claimedBtcAddresses.delete(addr)
+    }
+    // Restore difficulty
+    this.difficulty = undo.previousDifficulty
   }
 }

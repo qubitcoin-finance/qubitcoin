@@ -16,6 +16,9 @@ import {
 } from '../transaction.js'
 import { generateWallet, deriveAddress } from '../crypto.js'
 
+const walletA = generateWallet()
+const walletB = generateWallet()
+
 describe('blockSubsidy', () => {
   it('returns 3.125 at height 0', () => {
     expect(blockSubsidy(0)).toBe(3.125)
@@ -58,7 +61,7 @@ describe('createCoinbaseTransaction', () => {
 
 describe('createTransaction', () => {
   it('creates a properly signed transaction', () => {
-    const wallet = generateWallet()
+    const wallet = walletA
     const utxos: UTXO[] = [
       { txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: 100 },
     ]
@@ -77,7 +80,7 @@ describe('createTransaction', () => {
   })
 
   it('throws on insufficient funds', () => {
-    const wallet = generateWallet()
+    const wallet = walletA
     const utxos: UTXO[] = [
       { txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: 10 },
     ]
@@ -87,7 +90,7 @@ describe('createTransaction', () => {
   })
 
   it('omits change output when exact amount', () => {
-    const wallet = generateWallet()
+    const wallet = walletA
     const utxos: UTXO[] = [
       { txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: 51 },
     ]
@@ -103,7 +106,7 @@ describe('createTransaction', () => {
 
 describe('validateTransaction', () => {
   it('validates a valid transaction', () => {
-    const wallet = generateWallet()
+    const wallet = walletA
     const utxoId = 'a'.repeat(64)
     const utxoSet = new Map<string, UTXO>()
     utxoSet.set(utxoKey(utxoId, 0), {
@@ -125,7 +128,7 @@ describe('validateTransaction', () => {
   })
 
   it('rejects missing UTXO', () => {
-    const wallet = generateWallet()
+    const wallet = walletA
     const tx = createTransaction(
       wallet,
       [{ txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: 100 }],
@@ -139,8 +142,8 @@ describe('validateTransaction', () => {
   })
 
   it('rejects wrong signature (wrong key)', () => {
-    const wallet1 = generateWallet()
-    const wallet2 = generateWallet()
+    const wallet1 = walletA
+    const wallet2 = walletB
     const utxoId = 'a'.repeat(64)
 
     // UTXO belongs to wallet2

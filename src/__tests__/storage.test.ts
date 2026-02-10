@@ -17,6 +17,7 @@ import {
   type BlockHeader,
 } from '../block.js'
 
+const walletA = generateWallet()
 const TEST_TARGET = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
 
 function mineOnChain(chain: Blockchain, minerAddress: string): Block {
@@ -60,7 +61,7 @@ describe('FileBlockStorage', () => {
     const storage = new FileBlockStorage(tmpDir)
     const chain = new Blockchain()
 
-    const wallet = generateWallet()
+    const wallet = walletA
     const block = mineOnChain(chain, wallet.address)
     chain.addBlock(block)
 
@@ -78,7 +79,7 @@ describe('FileBlockStorage', () => {
   it('should handle Uint8Array serialization correctly', () => {
     const storage = new FileBlockStorage(tmpDir)
     const chain = new Blockchain()
-    const wallet = generateWallet()
+    const wallet = walletA
     const block = mineOnChain(chain, wallet.address)
 
     // Verify that Uint8Array fields survive round-trip
@@ -117,7 +118,7 @@ describe('FileBlockStorage', () => {
   it('should append multiple blocks', () => {
     const storage = new FileBlockStorage(tmpDir)
     const chain = new Blockchain()
-    const wallet = generateWallet()
+    const wallet = walletA
 
     const block1 = mineOnChain(chain, wallet.address)
     chain.addBlock(block1)
@@ -133,8 +134,48 @@ describe('FileBlockStorage', () => {
     expect(loaded[1].hash).toBe(block2.hash)
   })
 
+  it('should rewrite blocks correctly', () => {
+    const storage = new FileBlockStorage(tmpDir)
+    const chain = new Blockchain()
+    const wallet = walletA
+
+    // Mine and append 3 blocks
+    const blocks = []
+    for (let i = 0; i < 3; i++) {
+      const block = mineOnChain(chain, wallet.address)
+      chain.addBlock(block)
+      storage.appendBlock(block)
+      blocks.push(block)
+    }
+
+    let loaded = storage.loadBlocks()
+    expect(loaded).toHaveLength(3)
+
+    // Rewrite with only the first 2 blocks
+    storage.rewriteBlocks(blocks.slice(0, 2))
+
+    loaded = storage.loadBlocks()
+    expect(loaded).toHaveLength(2)
+    expect(loaded[0].hash).toBe(blocks[0].hash)
+    expect(loaded[1].hash).toBe(blocks[1].hash)
+  })
+
+  it('should handle rewrite with empty array', () => {
+    const storage = new FileBlockStorage(tmpDir)
+    const chain = new Blockchain()
+    const wallet = walletA
+
+    const block = mineOnChain(chain, wallet.address)
+    chain.addBlock(block)
+    storage.appendBlock(block)
+
+    storage.rewriteBlocks([])
+    const loaded = storage.loadBlocks()
+    expect(loaded).toHaveLength(0)
+  })
+
   it('should persist and restore chain state via Blockchain constructor', () => {
-    const wallet = generateWallet()
+    const wallet = walletA
 
     // Create chain with storage, mine some blocks
     const storage1 = new FileBlockStorage(tmpDir)

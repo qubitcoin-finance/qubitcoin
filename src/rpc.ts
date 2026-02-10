@@ -5,6 +5,7 @@ import { bytesToHex, hexToBytes } from './crypto.js';
 import cors from 'cors';
 import type { P2PServer } from './p2p/server.js';
 import type { Transaction, TransactionInput, ClaimData } from './transaction.js';
+import { DIFFICULTY_ADJUSTMENT_INTERVAL, STARTING_DIFFICULTY } from './block.js';
 import { log } from './log.js';
 
 /** Recursively convert Uint8Array fields to hex strings for JSON serialization */
@@ -149,6 +150,32 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer) 
   // Endpoint to get claim stats
   app.get('/api/v1/claims/stats', (req, res) => {
     res.json(sanitize(node.chain.getClaimStats()));
+  });
+
+  // Difficulty history — one entry per adjustment interval
+  app.get('/api/v1/difficulty', (req, res) => {
+    const blocks = node.chain.blocks;
+    const history: Array<{ height: number; target: string; timestamp: number }> = [];
+
+    // Genesis
+    history.push({ height: 0, target: STARTING_DIFFICULTY, timestamp: blocks[0].header.timestamp });
+
+    // Each adjustment point
+    for (let i = DIFFICULTY_ADJUSTMENT_INTERVAL; i < blocks.length; i += DIFFICULTY_ADJUSTMENT_INTERVAL) {
+      history.push({
+        height: i,
+        target: blocks[i].header.target,
+        timestamp: blocks[i].header.timestamp,
+      });
+    }
+
+    // Current tip if not on an adjustment boundary
+    const tip = blocks[blocks.length - 1];
+    if (blocks.length % DIFFICULTY_ADJUSTMENT_INTERVAL !== 1) {
+      history.push({ height: tip.height, target: tip.header.target, timestamp: tip.header.timestamp });
+    }
+
+    res.json(history);
   });
 
   // Endpoint to get connected peers
