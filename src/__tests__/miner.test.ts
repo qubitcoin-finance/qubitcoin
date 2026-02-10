@@ -39,12 +39,13 @@ function mineOnChain(chain: Blockchain, minerAddress: string): Block {
   const txs = [coinbase]
   const merkleRoot = computeMerkleRoot(txs.map((t) => t.id))
 
+  const target = chain.getDifficulty()
   const header: BlockHeader = {
     version: 1,
     previousHash: tip.hash,
     merkleRoot,
     timestamp: Date.now(),
-    target: TEST_TARGET,
+    target,
     nonce: 0,
   }
 

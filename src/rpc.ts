@@ -5,6 +5,7 @@ import { bytesToHex, hexToBytes } from './crypto.js';
 import cors from 'cors';
 import type { P2PServer } from './p2p/server.js';
 import type { Transaction, TransactionInput, ClaimData } from './transaction.js';
+import { log } from './log.js';
 
 /** Recursively convert Uint8Array fields to hex strings for JSON serialization */
 export function sanitize(obj: unknown): unknown {
@@ -160,7 +161,7 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer) 
   });
 
   app.listen(port, '127.0.0.1', () => {
-    console.log(`RPC server listening on http://127.0.0.1:${port}`);
+    log.info({ component: 'rpc', port, url: `http://127.0.0.1:${port}` }, 'RPC server listening');
   });
 
   return app;

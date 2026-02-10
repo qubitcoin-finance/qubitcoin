@@ -11,6 +11,7 @@ export const PROTOCOL_VERSION = 1
 export type MessageType =
   | 'version'
   | 'verack'
+  | 'reject'
   | 'getblocks'
   | 'blocks'
   | 'tx'
@@ -46,6 +47,10 @@ export interface InvPayload {
 export interface GetDataPayload {
   type: 'block' | 'tx'
   hash: string
+}
+
+export interface RejectPayload {
+  reason: string
 }
 
 export interface Message {

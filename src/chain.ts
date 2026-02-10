@@ -51,11 +51,9 @@ export class Blockchain {
         }
         this.replayHeight = this.getHeight()
 
-        // Restore metadata (difficulty)
-        const meta = storage.loadMetadata()
-        if (meta) {
-          this.difficulty = meta.difficulty
-        }
+        // Metadata loaded for height/genesis info only.
+        // Difficulty is always recomputed from block timestamps
+        // so all nodes converge to the same value deterministically.
         return
       }
     }
@@ -82,6 +80,14 @@ export class Blockchain {
   /** Add a validated block to the chain */
   addBlock(block: Block): { success: boolean; error?: string } {
     const previousBlock = this.getChainTip()
+
+    // Validate block target matches expected difficulty
+    if (block.header.target !== this.difficulty) {
+      return {
+        success: false,
+        error: `Block target mismatch: expected ${this.difficulty.slice(0, 16)}…, got ${block.header.target.slice(0, 16)}…`,
+      }
+    }
 
     // Validate block structure
     const result = validateBlock(block, previousBlock, this.utxoSet)
@@ -189,7 +195,8 @@ export class Blockchain {
     const intervalStart = this.blocks[chainLen - DIFFICULTY_ADJUSTMENT_INTERVAL]
 
     const actualTime = latestBlock.header.timestamp - intervalStart.header.timestamp
-    const expectedTime = DIFFICULTY_ADJUSTMENT_INTERVAL * TARGET_BLOCK_TIME_MS
+    // N blocks span N-1 inter-block gaps; expected time is for those gaps
+    const expectedTime = (DIFFICULTY_ADJUSTMENT_INTERVAL - 1) * TARGET_BLOCK_TIME_MS
 
     // Clamp ratio to [0.25, 4.0]
     let ratio = actualTime / expectedTime

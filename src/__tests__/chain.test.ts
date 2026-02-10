@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { Blockchain } from '../chain.js'
 import { createCoinbaseTransaction, createTransaction, utxoKey } from '../transaction.js'
 import { generateWallet } from '../crypto.js'
-import { computeMerkleRoot, computeBlockHash, hashMeetsTarget, type Block, type BlockHeader } from '../block.js'
+import { computeMerkleRoot, computeBlockHash, hashMeetsTarget, type Block, type BlockHeader, DIFFICULTY_ADJUSTMENT_INTERVAL, TARGET_BLOCK_TIME_MS, STARTING_DIFFICULTY } from '../block.js'
 import { createMockSnapshot } from '../snapshot.js'
 import { createClaimTransaction } from '../claim.js'
 
@@ -16,13 +16,14 @@ function mineOnChain(chain: Blockchain, minerAddress: string, extraTxs: any[] = 
   const coinbase = createCoinbaseTransaction(minerAddress, height, 0)
   const txs = [coinbase, ...extraTxs]
   const merkleRoot = computeMerkleRoot(txs.map((t) => t.id))
+  const target = chain.getDifficulty()
 
   const header: BlockHeader = {
     version: 1,
     previousHash: tip.hash,
     merkleRoot,
     timestamp: Date.now(),
-    target: TEST_TARGET,
+    target,
     nonce: 0,
   }
 
@@ -100,6 +101,196 @@ describe('Blockchain', () => {
     // Restore
     chain.blocks[1].hash = computeBlockHash(chain.blocks[1].header)
     expect(chain.validateChain().valid).toBe(true)
+  })
+})
+
+describe('Difficulty adjustment', () => {
+  /**
+   * Mine a block with a controlled timestamp.
+   * Does NOT touch chain.difficulty — uses whatever the chain has.
+   * Set chain.difficulty = TEST_TARGET once at test start for fast PoW.
+   */
+  function mineWithTimestamp(chain: Blockchain, minerAddress: string, timestamp: number): Block {
+    const tip = chain.getChainTip()
+    const height = chain.getHeight() + 1
+    const coinbase = createCoinbaseTransaction(minerAddress, height, 0)
+    const txs = [coinbase]
+    const merkleRoot = computeMerkleRoot(txs.map((t) => t.id))
+    const target = chain.getDifficulty()
+
+    const header: BlockHeader = {
+      version: 1,
+      previousHash: tip.hash,
+      merkleRoot,
+      timestamp,
+      target,
+      nonce: 0,
+    }
+
+    let hash = computeBlockHash(header)
+    while (!hashMeetsTarget(hash, header.target)) {
+      header.nonce++
+      hash = computeBlockHash(header)
+    }
+
+    return { header, hash, transactions: txs, height }
+  }
+
+  it('adjusts difficulty correctly for fast blocks', () => {
+    const chain = new Blockchain()
+    chain.difficulty = TEST_TARGET // easy start for fast PoW in tests
+    const wallet = generateWallet()
+    const genesisTs = chain.blocks[0].header.timestamp
+
+    // First interval: normal speed, far from genesis to avoid genesis timestamp issues
+    const baseTs = genesisTs + 100_000_000
+    for (let i = 1; i <= DIFFICULTY_ADJUSTMENT_INTERVAL; i++) {
+      const block = mineWithTimestamp(chain, wallet.address, baseTs + i * TARGET_BLOCK_TIME_MS)
+      chain.addBlock(block)
+    }
+
+    const diffAfterFirst = chain.getDifficulty()
+
+    // Second interval: blocks at HALF the target time (too fast → should get harder)
+    const secondBaseTs = chain.getChainTip().header.timestamp
+    for (let i = 1; i <= DIFFICULTY_ADJUSTMENT_INTERVAL; i++) {
+      const block = mineWithTimestamp(chain, wallet.address, secondBaseTs + i * (TARGET_BLOCK_TIME_MS / 2))
+      chain.addBlock(block)
+    }
+
+    const currentTarget = BigInt('0x' + chain.getDifficulty())
+    const prevTarget = BigInt('0x' + diffAfterFirst)
+    expect(currentTarget).toBeLessThan(prevTarget)
+
+    // With half target time: ratio = 0.5 → target halves
+    const expectedTarget = prevTarget * 5000n / 10000n
+    expect(currentTarget).toBe(expectedTarget)
+  })
+
+  it('adjusts difficulty correctly for slow blocks', () => {
+    const chain = new Blockchain()
+    chain.difficulty = TEST_TARGET
+    const wallet = generateWallet()
+    const genesisTs = chain.blocks[0].header.timestamp
+
+    // First interval at normal speed
+    const baseTs = genesisTs + 100_000_000
+    for (let i = 1; i <= DIFFICULTY_ADJUSTMENT_INTERVAL; i++) {
+      const block = mineWithTimestamp(chain, wallet.address, baseTs + i * TARGET_BLOCK_TIME_MS)
+      chain.addBlock(block)
+    }
+
+    // Second interval: fast blocks → difficulty increases (makes room to ease later)
+    let intervalBase = chain.getChainTip().header.timestamp
+    for (let i = 1; i <= DIFFICULTY_ADJUSTMENT_INTERVAL; i++) {
+      const block = mineWithTimestamp(chain, wallet.address, intervalBase + i * (TARGET_BLOCK_TIME_MS / 2))
+      chain.addBlock(block)
+    }
+
+    const diffBeforeSlow = chain.getDifficulty()
+
+    // Third interval: blocks at DOUBLE the target time (too slow → should get easier)
+    intervalBase = chain.getChainTip().header.timestamp
+    for (let i = 1; i <= DIFFICULTY_ADJUSTMENT_INTERVAL; i++) {
+      const block = mineWithTimestamp(chain, wallet.address, intervalBase + i * (TARGET_BLOCK_TIME_MS * 2))
+      chain.addBlock(block)
+    }
+
+    const currentTarget = BigInt('0x' + chain.getDifficulty())
+    const prevTarget = BigInt('0x' + diffBeforeSlow)
+    expect(currentTarget).toBeGreaterThan(prevTarget)
+
+    // With double target time: ratio = 2.0 → target doubles
+    const expectedTarget = prevTarget * 20000n / 10000n
+    expect(currentTarget).toBe(expectedTarget)
+  })
+
+  it('clamps adjustment to 4x in either direction', () => {
+    const chain = new Blockchain()
+    chain.difficulty = TEST_TARGET
+    const wallet = generateWallet()
+    const genesisTs = chain.blocks[0].header.timestamp
+
+    // First interval at normal speed
+    const baseTs = genesisTs + 100_000_000
+    for (let i = 1; i <= DIFFICULTY_ADJUSTMENT_INTERVAL; i++) {
+      const block = mineWithTimestamp(chain, wallet.address, baseTs + i * TARGET_BLOCK_TIME_MS)
+      chain.addBlock(block)
+    }
+
+    const diffAfterFirst = chain.getDifficulty()
+
+    // Second interval: blocks 10x faster (should clamp to 4x harder)
+    const secondBaseTs = chain.getChainTip().header.timestamp
+    for (let i = 1; i <= DIFFICULTY_ADJUSTMENT_INTERVAL; i++) {
+      const block = mineWithTimestamp(chain, wallet.address, secondBaseTs + i * (TARGET_BLOCK_TIME_MS / 10))
+      chain.addBlock(block)
+    }
+
+    const currentTarget = BigInt('0x' + chain.getDifficulty())
+    const prevTarget = BigInt('0x' + diffAfterFirst)
+
+    // Clamped to 0.25 → target / 4
+    const expectedTarget = prevTarget * 2500n / 10000n
+    expect(currentTarget).toBe(expectedTarget)
+  })
+
+  it('no drift when blocks are exactly at target time', () => {
+    const chain = new Blockchain()
+    chain.difficulty = TEST_TARGET
+    const wallet = generateWallet()
+    const genesisTs = chain.blocks[0].header.timestamp
+
+    // First interval at normal speed
+    const baseTs = genesisTs + 100_000_000
+    for (let i = 1; i <= DIFFICULTY_ADJUSTMENT_INTERVAL; i++) {
+      const block = mineWithTimestamp(chain, wallet.address, baseTs + i * TARGET_BLOCK_TIME_MS)
+      chain.addBlock(block)
+    }
+
+    const diffAfterFirst = chain.getDifficulty()
+
+    // Several more intervals at exactly target time — difficulty must not drift
+    for (let interval = 0; interval < 5; interval++) {
+      const intervalBase = chain.getChainTip().header.timestamp
+      for (let i = 1; i <= DIFFICULTY_ADJUSTMENT_INTERVAL; i++) {
+        const block = mineWithTimestamp(chain, wallet.address, intervalBase + i * TARGET_BLOCK_TIME_MS)
+        chain.addBlock(block)
+      }
+    }
+
+    // Difficulty should NOT change when blocks are exactly at target time
+    expect(chain.getDifficulty()).toBe(diffAfterFirst)
+  })
+
+  it('replay produces same difficulty as addBlock path', () => {
+    const chain = new Blockchain()
+    chain.difficulty = TEST_TARGET
+    const wallet = generateWallet()
+    const genesisTs = chain.blocks[0].header.timestamp
+
+    // Mine blocks with varied timestamps across 3 intervals
+    const baseTs = genesisTs + 100_000_000
+    for (let i = 1; i <= DIFFICULTY_ADJUSTMENT_INTERVAL * 3; i++) {
+      const jitter = i % 2 === 0 ? 0.5 : 1.5
+      const block = mineWithTimestamp(chain, wallet.address, baseTs + i * TARGET_BLOCK_TIME_MS * jitter)
+      chain.addBlock(block)
+    }
+
+    const liveDifficulty = chain.getDifficulty()
+
+    // Simulate replay path (same as constructor does from storage)
+    const replayChain = new Blockchain()
+    for (let i = 1; i < chain.blocks.length; i++) {
+      replayChain.applyBlock(chain.blocks[i])
+      replayChain.blocks.push(chain.blocks[i])
+      if (replayChain.blocks.length % DIFFICULTY_ADJUSTMENT_INTERVAL === 0) {
+        replayChain.difficulty = (replayChain as any).adjustDifficulty()
+      }
+    }
+
+    // Both paths must produce identical difficulty
+    expect(replayChain.getDifficulty()).toBe(liveDifficulty)
   })
 })
 

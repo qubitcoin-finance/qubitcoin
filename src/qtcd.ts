@@ -22,6 +22,7 @@ import { INITIAL_TARGET } from './block.js'
 import { FileBlockStorage } from './storage.js'
 import { P2PServer } from './p2p/server.js'
 import type { BtcSnapshot } from './snapshot.js'
+import { log } from './log.js'
 
 // Parse CLI args
 function parseArgs() {
@@ -31,7 +32,23 @@ function parseArgs() {
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]
-    if (arg === '--simulate') {
+    if (arg === '--') continue
+    if (arg === '--help' || arg === '-h') {
+      console.log(`qtcd — QubitCoin daemon
+
+Usage: pnpm run qtcd [-- options]
+
+Options:
+  --port <n>              RPC port (default 3001)
+  --p2p-port <n>          P2P port (default 6001)
+  --snapshot <path>       Path to BTC snapshot NDJSON file
+  --datadir <path>        Data directory (default data/node)
+  --seeds <host:port,...> Comma-separated seed peers (default qubitcoin.finance:6001)
+  --mine                  Enable mining
+  --simulate              Dev mode: pinned easy difficulty, fake txs
+  -h, --help              Show this help`)
+      process.exit(0)
+    } else if (arg === '--simulate') {
       flags.add('simulate')
     } else if (arg === '--mine') {
       flags.add('mine')
@@ -54,21 +71,23 @@ function parseArgs() {
 async function main() {
   const config = parseArgs()
 
-  console.log('QubitCoin Node')
-  console.log(`  RPC port:  ${config.port}`)
-  console.log(`  P2P port:  ${config.p2pPort}`)
-  console.log(`  Data dir:  ${config.dataDir}`)
-  console.log(`  Seeds:     ${config.seeds.length > 0 ? config.seeds.join(', ') : '(none)'}`)
-  console.log(`  Mine:      ${config.mine}`)
-  console.log(`  Simulate:  ${config.simulate}`)
+  log.info({
+    msg: 'QubitCoin daemon starting',
+    rpcPort: config.port,
+    p2pPort: config.p2pPort,
+    dataDir: config.dataDir,
+    seeds: config.seeds,
+    mining: config.mine,
+    simulate: config.simulate,
+  })
 
   // Load snapshot if provided
   let snapshot: BtcSnapshot | undefined
   if (config.snapshotPath) {
-    console.log(`Loading snapshot from ${config.snapshotPath}...`)
+    log.info({ component: 'snapshot', path: config.snapshotPath }, 'Loading snapshot')
     const { loadSnapshot } = await import('./snapshot-loader.js')
     snapshot = loadSnapshot(config.snapshotPath)
-    console.log(`  Loaded ${snapshot.entries.length} addresses`)
+    log.info({ component: 'snapshot', addresses: snapshot.entries.length }, 'Snapshot loaded')
   }
 
   // Create storage
@@ -77,12 +96,12 @@ async function main() {
   // Check if we have persisted blocks
   const existingMeta = storage.loadMetadata()
   if (existingMeta) {
-    console.log(`Restoring from disk: height=${existingMeta.height}, genesis=${existingMeta.genesisHash.slice(0, 16)}...`)
+    log.info({ component: 'storage', height: existingMeta.height, genesis: existingMeta.genesisHash.slice(0, 16) }, 'Restoring from disk')
   }
 
   // Create node
   const node = new Node('node', snapshot, storage)
-  console.log(`Chain initialized: height=${node.chain.getHeight()}, utxos=${node.chain.utxoSet.size}`)
+  log.info({ component: 'chain', height: node.chain.getHeight(), utxos: node.chain.utxoSet.size }, 'Chain initialized')
 
   // Start P2P
   const p2p = new P2PServer(node, config.p2pPort, config.dataDir)
@@ -108,7 +127,7 @@ async function main() {
         secretKey: new Uint8Array(Buffer.from(raw.secretKey, 'hex')),
         address: raw.address,
       }
-      console.log(`Loaded miner wallet from ${walletPath}`)
+      log.info({ component: 'miner', walletPath }, 'Wallet loaded')
     } else {
       minerWallet = generateWallet()
       mkdirSync(config.dataDir, { recursive: true })
@@ -117,15 +136,15 @@ async function main() {
         secretKey: Buffer.from(minerWallet.secretKey).toString('hex'),
         address: minerWallet.address,
       }, null, 2))
-      console.log(`Generated new miner wallet → ${walletPath}`)
+      log.info({ component: 'miner', walletPath }, 'New wallet generated')
     }
-    console.log(`Miner address: ${minerWallet.address}`)
+    log.info({ component: 'miner', address: minerWallet.address }, 'Miner address')
 
     // Wait for IBD before mining so we don't mine on a stale chain
     if (config.seeds.length > 0) {
-      console.log('Waiting for sync with network...')
+      log.info({ component: 'p2p' }, 'Waiting for sync with network')
       await p2p.waitForSync(15_000)
-      console.log(`Synced to height ${node.chain.getHeight()}, starting miner`)
+      log.info({ component: 'p2p', height: node.chain.getHeight() }, 'Sync complete')
     }
 
     node.startMining(minerWallet.address)
@@ -146,7 +165,7 @@ async function main() {
 
     // Mine initial blocks if chain is fresh (only genesis)
     if (node.chain.getHeight() === 0) {
-      console.log('Mining initial blocks...')
+      log.info({ component: 'simulate' }, 'Mining initial blocks')
       for (let i = 0; i < 3; i++) {
         simMine(minerWallet.address)
       }
@@ -159,7 +178,7 @@ async function main() {
         if (utxos.length === 0) return
         const tx = createTransaction(wallet1, utxos, [{ address: wallet2.address, amount: 5 }], 1)
         node.receiveTransaction(tx)
-        console.log(`Simulated tx ${tx.id.slice(0, 16)}...`)
+        log.info({ component: 'simulate', txid: tx.id.slice(0, 16) }, 'Simulated tx')
       } catch {
         simMine(wallet1.address)
       }
@@ -178,13 +197,13 @@ async function main() {
     // Kick off one transaction right away
     setTimeout(simulateTransaction, 2000)
 
-    console.log('Simulation mode active (mining every 10s, txs every 15s)')
+    log.info({ component: 'simulate' }, 'Simulation mode active (mining every 10s, txs every 15s)')
   }
 
-  console.log(`Explorer backend running on http://127.0.0.1:${config.port}`)
+  log.info({ rpcUrl: `http://127.0.0.1:${config.port}` }, 'Node ready')
 }
 
 main().catch((err) => {
-  console.error('Fatal:', err)
+  log.fatal({ err }, 'Fatal error')
   process.exit(1)
 })

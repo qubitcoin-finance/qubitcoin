@@ -12,6 +12,7 @@ import { Peer } from './peer.js'
 import {
   type Message,
   type VersionPayload,
+  type RejectPayload,
   type GetBlocksPayload,
   type BlocksPayload,
   type TxPayload,
@@ -24,6 +25,7 @@ import { sanitizeForStorage } from '../storage.js'
 import { hexToBytes, bytesToHex } from '../crypto.js'
 import type { Block } from '../block.js'
 import type { Transaction, TransactionInput, ClaimData } from '../transaction.js'
+import { log } from '../log.js'
 
 const MAX_INBOUND = 25
 const MAX_OUTBOUND = 25
@@ -103,7 +105,7 @@ export class P2PServer {
   start(): Promise<void> {
     return new Promise((resolve) => {
       this.server.listen(this.port, () => {
-        console.log(`P2P server listening on port ${this.port}`)
+        log.info({ component: 'p2p', port: this.port }, 'P2P server listening')
         resolve()
       })
     })
@@ -136,7 +138,7 @@ export class P2PServer {
     if (!this.reconnectTimer && this.seeds.length > 0) {
       this.reconnectTimer = setInterval(() => {
         if (this.outboundCount === 0) {
-          console.log('P2P: No outbound peers — reconnecting to seeds...')
+          log.warn({ component: 'p2p' }, 'No outbound peers — reconnecting to seeds')
           for (const seed of this.seeds) {
             this.connectOutbound(seed.host, seed.port)
           }
@@ -225,7 +227,7 @@ export class P2PServer {
   }
 
   private handleDisconnect(peer: Peer, reason: string): void {
-    console.log(`P2P: ${peer.id} disconnected: ${reason}`)
+    log.info({ component: 'p2p', peer: peer.id, reason }, 'Peer disconnected')
 
     // Ban if misbehavior was the cause
     if (peer.getMisbehaviorScore() >= 100) {
@@ -245,6 +247,9 @@ export class P2PServer {
           break
         case 'verack':
           this.handleVerack(peer)
+          break
+        case 'reject':
+          this.handleReject(peer, msg.payload as RejectPayload)
           break
         case 'getblocks':
           this.handleGetBlocks(peer, msg.payload as GetBlocksPayload)
@@ -294,6 +299,12 @@ export class P2PServer {
     // Genesis check: reject peers on wrong network
     const ourGenesis = this.node.chain.blocks[0].hash
     if (payload.genesisHash !== ourGenesis) {
+      peer.send({
+        type: 'reject',
+        payload: {
+          reason: `genesis hash mismatch: expected ${ourGenesis.slice(0, 16)}…, got ${payload.genesisHash.slice(0, 16)}…`,
+        } as RejectPayload,
+      })
       peer.disconnect('genesis hash mismatch')
       return
     }
@@ -309,9 +320,14 @@ export class P2PServer {
     peer.send({ type: 'verack' })
   }
 
+  private handleReject(peer: Peer, payload: RejectPayload): void {
+    const reason = payload?.reason ?? 'unknown'
+    log.warn({ component: 'p2p', peer: peer.id, reason }, 'Peer rejected us')
+  }
+
   private handleVerack(peer: Peer): void {
     peer.completeHandshake()
-    console.log(`P2P: Handshake complete with ${peer.id} (height=${peer.remoteHeight})`)
+    log.info({ component: 'p2p', peer: peer.id, remoteHeight: peer.remoteHeight }, 'Handshake complete')
 
     // IBD: if peer is ahead, request blocks
     const ourHeight = this.node.chain.getHeight()
@@ -378,7 +394,7 @@ export class P2PServer {
       })
     } else if (added > 0) {
       // Got a partial batch — IBD complete
-      console.log(`P2P: Sync complete at height ${this.node.chain.getHeight()}`)
+      log.info({ component: 'p2p', height: this.node.chain.getHeight() }, 'Sync complete')
       this.notifySynced()
     }
   }
@@ -514,7 +530,7 @@ export class P2PServer {
   }
 
   private ban(ip: string): void {
-    console.log(`P2P: Banning ${ip} for 24h`)
+    log.warn({ component: 'p2p', ip }, 'Banning peer for 24h')
     this.banList.set(ip, Date.now() + BAN_DURATION_MS)
     this.saveBanList()
   }

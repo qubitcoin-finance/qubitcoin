@@ -14,6 +14,7 @@ import { blockSubsidy } from './transaction.js'
 import { DIFFICULTY_ADJUSTMENT_INTERVAL } from './block.js'
 import type { BtcSnapshot } from './snapshot.js'
 import type { BlockStorage } from './storage.js'
+import { log } from './log.js'
 
 export class Node {
   readonly name: string
@@ -41,7 +42,7 @@ export class Node {
       this.chain.claimedBtcAddresses
     )
     if (result.success) {
-      console.log(`  [${this.name}] Accepted tx ${tx.id.slice(0, 16)}...`)
+      log.info({ component: 'mempool', txid: tx.id.slice(0, 16) }, 'Accepted tx')
       this.onNewTransaction?.(tx)
     }
     return result
@@ -50,9 +51,7 @@ export class Node {
   /** Mine a new block with pending transactions */
   mine(minerAddress: string, verbose = true): Block {
     if (verbose) {
-      console.log(
-        `  [${this.name}] Mining block #${this.chain.getHeight() + 1} (${this.mempool.size()} pending txs)...`
-      )
+      log.info({ component: 'miner', block: this.chain.getHeight() + 1, pendingTxs: this.mempool.size() }, 'Mining block')
     }
 
     const candidate = assembleCandidateBlock(
@@ -98,7 +97,7 @@ export class Node {
    * when a peer's block arrives (receiveBlock aborts the current round).
    */
   async startMining(minerAddress: string): Promise<void> {
-    console.log(`  [${this.name}] Mining started → ${minerAddress}`)
+    log.info({ component: 'miner', address: minerAddress }, 'Mining started')
 
     while (true) {
       this.miningAbort = new AbortController()

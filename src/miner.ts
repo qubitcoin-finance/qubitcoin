@@ -21,6 +21,7 @@ import {
   createCoinbaseTransaction,
   calculateFee,
 } from './transaction.js'
+import { log } from './log.js'
 
 /** Assemble a candidate block from chain state and mempool */
 export function assembleCandidateBlock(
@@ -95,7 +96,7 @@ export function mineBlock(block: Block, verbose = true): Block {
     // Log progress
     if (verbose && nonce % 500_000 === 0) {
       const elapsed = ((performance.now() - startTime) / 1000).toFixed(1)
-      console.log(`  Mining... nonce=${nonce}, ${elapsed}s elapsed`)
+      log.debug({ component: 'miner', nonce, elapsed: `${elapsed}s` }, 'Mining in progress')
     }
 
     // Nonce overflow: bump timestamp
@@ -109,9 +110,7 @@ export function mineBlock(block: Block, verbose = true): Block {
   const elapsed = ((performance.now() - startTime) / 1000).toFixed(2)
 
   if (verbose) {
-    console.log(
-      `  Mined block #${block.height} | nonce=${nonce} | ${elapsed}s | hash=${hash.slice(0, 20)}...`
-    )
+    log.info({ component: 'miner', block: block.height, nonce, elapsed: `${elapsed}s`, hash: hash.slice(0, 20) }, 'Block mined')
   }
 
   return block
@@ -147,9 +146,7 @@ export function mineBlockAsync(
         if (hashMeetsTarget(hash, target)) {
           block.hash = hash
           const elapsed = ((performance.now() - startTime) / 1000).toFixed(2)
-          console.log(
-            `  Mined block #${block.height} | nonce=${nonce} | ${elapsed}s | hash=${hash.slice(0, 20)}...`
-          )
+          log.info({ component: 'miner', block: block.height, nonce, elapsed: `${elapsed}s`, hash: hash.slice(0, 20) }, 'Block mined')
           resolve(block)
           return
         }
@@ -165,7 +162,7 @@ export function mineBlockAsync(
       // Log progress every ~500k nonces
       if (nonce % 500_000 < batchSize) {
         const elapsed = ((performance.now() - startTime) / 1000).toFixed(1)
-        console.log(`  Mining... nonce=${nonce}, ${elapsed}s elapsed`)
+        log.debug({ component: 'miner', nonce, elapsed: `${elapsed}s` }, 'Mining in progress')
       }
 
       // Yield to event loop
