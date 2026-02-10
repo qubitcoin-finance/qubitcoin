@@ -43,18 +43,59 @@ export interface Block {
 }
 
 /**
- * Initial difficulty target.
- * ~5 hex digits of leading zeros → easy enough for quick PoC mining.
- * Tune if blocks take too long or are instant.
+ * Genesis target — easy, used only for mining the genesis block itself.
+ * Tests also use this so they stay fast.
  */
 export const INITIAL_TARGET =
+  '00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+
+/**
+ * Starting difficulty for the live chain.
+ * Currently set easy for testing (~5s blocks). Production target: 0000000fff...
+ */
+export const STARTING_DIFFICULTY =
   '00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
 
 /** Difficulty adjustment interval (blocks) */
 export const DIFFICULTY_ADJUSTMENT_INTERVAL = 10
 
-/** Target block time in ms */
+/** Target block time in ms (30 seconds) */
 export const TARGET_BLOCK_TIME_MS = 30_000
+
+/** Maximum block size in bytes (1 MB, same as Bitcoin) */
+export const MAX_BLOCK_SIZE = 1_000_000
+
+/** Block header size: version(4) + prevHash(32) + merkleRoot(32) + timestamp(8) + target(32) + nonce(4) = 112 */
+const BLOCK_HEADER_SIZE = 112
+
+/** Estimate serialized transaction size in bytes */
+export function transactionSize(tx: Transaction): number {
+  let size = 32 + 8 // txId(32) + timestamp(8)
+  for (const inp of tx.inputs) {
+    size += 32 + 4 // txId(32) + outputIndex(4)
+    size += (inp.publicKey instanceof Uint8Array ? inp.publicKey.length : 0)
+    size += (inp.signature instanceof Uint8Array ? inp.signature.length : 0)
+  }
+  for (const out of tx.outputs) {
+    size += 32 + 8 // address(32) + amount(8)
+  }
+  if (tx.claimData) {
+    size += 20 // btcAddress
+    size += (tx.claimData.ecdsaPublicKey instanceof Uint8Array ? tx.claimData.ecdsaPublicKey.length : 33)
+    size += (tx.claimData.ecdsaSignature instanceof Uint8Array ? tx.claimData.ecdsaSignature.length : 72)
+    size += 32 // qcoinAddress
+  }
+  return size
+}
+
+/** Estimate serialized block size in bytes */
+export function blockSize(block: Block): number {
+  let size = BLOCK_HEADER_SIZE
+  for (const tx of block.transactions) {
+    size += transactionSize(tx)
+  }
+  return size
+}
 
 /**
  * Compute merkle root from transaction IDs.
@@ -119,7 +160,7 @@ export function createGenesisBlock(): Block {
         signature: new Uint8Array(0),
       },
     ],
-    outputs: [{ address: burnAddress, amount: 50 }],
+    outputs: [{ address: burnAddress, amount: 0 }],
     timestamp,
   }
 
@@ -131,7 +172,7 @@ export function createGenesisBlock(): Block {
       uint32LE(0xffffffff),
       uint32LE(1), // 1 output
       new TextEncoder().encode(burnAddress),
-      uint64LE(50),
+      uint64LE(0),
       uint64LE(timestamp)
     )
   )
@@ -267,6 +308,12 @@ export function validateBlock(
   const expectedMerkle = computeMerkleRoot(txIds)
   if (block.header.merkleRoot !== expectedMerkle) {
     return { valid: false, error: `Merkle root mismatch: expected ${expectedMerkle}` }
+  }
+
+  // Verify block size
+  const size = blockSize(block)
+  if (size > MAX_BLOCK_SIZE) {
+    return { valid: false, error: `Block size ${size} exceeds max ${MAX_BLOCK_SIZE}` }
   }
 
   // First transaction must be coinbase

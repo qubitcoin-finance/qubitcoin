@@ -31,18 +31,41 @@ export function deriveBtcAddress(compressedPubKey: Uint8Array): string {
 
 /** Compute a commitment hash over all snapshot entries */
 export function computeSnapshotMerkleRoot(entries: BtcAddressBalance[]): string {
+  if (entries.length === 0) return '0'.repeat(64)
+
   const encoder = new TextEncoder()
+  let totalLen = 0
   const parts: Uint8Array[] = []
 
   for (const entry of entries) {
-    parts.push(encoder.encode(entry.btcAddress))
-    parts.push(encoder.encode(':'))
-    parts.push(encoder.encode(entry.amount.toString()))
-    parts.push(encoder.encode(';'))
+    const chunk = encoder.encode(`${entry.btcAddress}:${entry.amount};`)
+    parts.push(chunk)
+    totalLen += chunk.length
   }
 
-  if (parts.length === 0) return '0'.repeat(64)
-  return doubleSha256Hex(concatBytes(...parts))
+  const buf = new Uint8Array(totalLen)
+  let offset = 0
+  for (const chunk of parts) {
+    buf.set(chunk, offset)
+    offset += chunk.length
+  }
+
+  return doubleSha256Hex(buf)
+}
+
+/** WeakMap-cached index for O(1) address lookups */
+const snapshotIndexCache = new WeakMap<BtcAddressBalance[], Map<string, BtcAddressBalance>>()
+
+export function getSnapshotIndex(snapshot: BtcSnapshot): Map<string, BtcAddressBalance> {
+  let index = snapshotIndexCache.get(snapshot.entries)
+  if (index) return index
+
+  index = new Map<string, BtcAddressBalance>()
+  for (const entry of snapshot.entries) {
+    index.set(entry.btcAddress, entry)
+  }
+  snapshotIndexCache.set(snapshot.entries, index)
+  return index
 }
 
 /**

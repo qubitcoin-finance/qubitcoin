@@ -17,24 +17,24 @@ import {
 import { generateWallet, deriveAddress } from '../crypto.js'
 
 describe('blockSubsidy', () => {
-  it('returns 50 at height 0', () => {
-    expect(blockSubsidy(0)).toBe(50)
+  it('returns 3.125 at height 0', () => {
+    expect(blockSubsidy(0)).toBe(3.125)
   })
 
-  it('returns 50 before first halving', () => {
-    expect(blockSubsidy(HALVING_INTERVAL - 1)).toBe(50)
+  it('returns 3.125 before first halving', () => {
+    expect(blockSubsidy(HALVING_INTERVAL - 1)).toBe(3.125)
   })
 
   it('halves at 210,000', () => {
-    expect(blockSubsidy(HALVING_INTERVAL)).toBe(25)
+    expect(blockSubsidy(HALVING_INTERVAL)).toBe(1.5625)
   })
 
   it('halves again at 420,000', () => {
-    expect(blockSubsidy(HALVING_INTERVAL * 2)).toBe(12)
+    expect(blockSubsidy(HALVING_INTERVAL * 2)).toBe(0.78125)
   })
 
-  it('reaches 0 after 30 halvings', () => {
-    expect(blockSubsidy(HALVING_INTERVAL * 30)).toBe(0)
+  it('reaches 0 after 26 halvings', () => {
+    expect(blockSubsidy(HALVING_INTERVAL * 26)).toBe(0)
   })
 })
 
@@ -44,7 +44,7 @@ describe('createCoinbaseTransaction', () => {
     const tx = createCoinbaseTransaction(addr, 0, 5)
     expect(isCoinbase(tx)).toBe(true)
     expect(tx.outputs.length).toBe(1)
-    expect(tx.outputs[0].amount).toBe(55) // 50 subsidy + 5 fees
+    expect(tx.outputs[0].amount).toBe(8.125) // 3.125 subsidy + 5 fees
     expect(tx.outputs[0].address).toBe(addr)
     expect(tx.id.length).toBe(64)
   })

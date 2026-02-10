@@ -16,24 +16,65 @@ import {
   hashMeetsTarget,
   DIFFICULTY_ADJUSTMENT_INTERVAL,
   TARGET_BLOCK_TIME_MS,
-  INITIAL_TARGET,
+  STARTING_DIFFICULTY,
 } from './block.js'
+import { type BlockStorage } from './storage.js'
 
 export class Blockchain {
   blocks: Block[] = []
   utxoSet: Map<string, UTXO> = new Map()
-  difficulty: string = INITIAL_TARGET
+  difficulty: string = STARTING_DIFFICULTY
   btcSnapshot: BtcSnapshot | null = null
   claimedBtcAddresses: Set<string> = new Set() // btcAddress hex string
+  private storage: BlockStorage | null = null
+  private replayHeight = -1 // height of last block loaded from storage
 
-  constructor(snapshot?: BtcSnapshot) {
+  constructor(snapshot?: BtcSnapshot, storage?: BlockStorage) {
+    this.storage = storage ?? null
+
     if (snapshot) {
       this.btcSnapshot = snapshot
+    }
+
+    // Try to restore from storage first
+    if (storage) {
+      const persisted = storage.loadBlocks()
+      if (persisted.length > 0) {
+        // Replay persisted blocks (genesis is first)
+        this.blocks.push(persisted[0]) // genesis
+        for (let i = 1; i < persisted.length; i++) {
+          this.applyBlock(persisted[i])
+          this.blocks.push(persisted[i])
+          if (this.blocks.length % DIFFICULTY_ADJUSTMENT_INTERVAL === 0) {
+            this.difficulty = this.adjustDifficulty()
+          }
+        }
+        this.replayHeight = this.getHeight()
+
+        // Restore metadata (difficulty)
+        const meta = storage.loadMetadata()
+        if (meta) {
+          this.difficulty = meta.difficulty
+        }
+        return
+      }
+    }
+
+    // No persisted data — create genesis
+    if (snapshot) {
       const genesis = createForkGenesisBlock(snapshot)
       this.blocks.push(genesis)
+      if (storage) {
+        storage.appendBlock(genesis)
+        storage.saveMetadata({ height: 0, difficulty: this.difficulty, genesisHash: genesis.hash })
+      }
     } else {
       const genesis = createGenesisBlock()
       this.blocks.push(genesis)
+      if (storage) {
+        storage.appendBlock(genesis)
+        storage.saveMetadata({ height: 0, difficulty: this.difficulty, genesisHash: genesis.hash })
+      }
     }
     // Genesis coinbase goes to burn address - don't add to UTXO set
   }
@@ -77,6 +118,16 @@ export class Blockchain {
     // Check difficulty adjustment
     if (this.blocks.length % DIFFICULTY_ADJUSTMENT_INTERVAL === 0) {
       this.difficulty = this.adjustDifficulty()
+    }
+
+    // Persist new block (skip replayed blocks)
+    if (this.storage && this.getHeight() > this.replayHeight) {
+      this.storage.appendBlock(block)
+      this.storage.saveMetadata({
+        height: this.getHeight(),
+        difficulty: this.difficulty,
+        genesisHash: this.blocks[0].hash,
+      })
     }
 
     return { success: true }
@@ -150,7 +201,7 @@ export class Blockchain {
       (currentTarget * BigInt(Math.round(ratio * 10000))) / 10000n
 
     // Clamp to max
-    const maxTarget = BigInt('0x' + INITIAL_TARGET)
+    const maxTarget = BigInt('0x' + STARTING_DIFFICULTY)
     if (newTarget > maxTarget) newTarget = maxTarget
 
     // Ensure target is at least 1

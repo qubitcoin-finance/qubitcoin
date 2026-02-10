@@ -19,7 +19,7 @@ import {
   CLAIM_TXID,
   computeTxId,
 } from './transaction.js'
-import { type BtcSnapshot, type BtcAddressBalance } from './snapshot.js'
+import { type BtcSnapshot, type BtcAddressBalance, getSnapshotIndex } from './snapshot.js'
 
 /**
  * Serialize the claim message that gets ECDSA-signed.
@@ -105,10 +105,9 @@ export function verifyClaimProof(
     return { valid: false, error: 'Transaction has no claim data' }
   }
 
-  // Find the BTC address in the snapshot
-  const entry = snapshot.entries.find(
-    (e) => e.btcAddress === claim.btcAddress
-  )
+  // Find the BTC address in the snapshot (O(1) via cached index)
+  const index = getSnapshotIndex(snapshot)
+  const entry = index.get(claim.btcAddress)
   if (!entry) {
     return {
       valid: false,

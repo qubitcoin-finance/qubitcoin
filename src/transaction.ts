@@ -54,13 +54,18 @@ export interface UTXO {
 export const COINBASE_TXID = '0'.repeat(64)
 export const CLAIM_TXID = 'c'.repeat(64) // sentinel for BTC claim transactions
 export const HALVING_INTERVAL = 210_000
-const INITIAL_SUBSIDY = 50
 
-/** Block mining reward (halves every 210,000 blocks) */
+/**
+ * Block mining reward.
+ * Starts at 3.125 QTC (matching BTC's current post-4th-halving subsidy)
+ * and halves every 210,000 blocks from there.
+ */
+const INITIAL_SUBSIDY = 3.125
+
 export function blockSubsidy(height: number): number {
   const halvings = Math.floor(height / HALVING_INTERVAL)
-  if (halvings >= 30) return 0
-  return Math.floor(INITIAL_SUBSIDY / Math.pow(2, halvings))
+  if (halvings >= 26) return 0
+  return INITIAL_SUBSIDY / Math.pow(2, halvings)
 }
 
 /** UTXO map key */

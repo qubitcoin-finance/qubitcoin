@@ -72,7 +72,7 @@ describe('Blockchain', () => {
     const wallet = generateWallet()
     const block = mineOnChain(chain, wallet.address)
     chain.addBlock(block)
-    expect(chain.getBalance(wallet.address)).toBe(50)
+    expect(chain.getBalance(wallet.address)).toBe(3.125)
   })
 
   it('findUTXOs returns mined outputs', () => {
@@ -82,7 +82,7 @@ describe('Blockchain', () => {
     chain.addBlock(block)
     const utxos = chain.findUTXOs(wallet.address)
     expect(utxos.length).toBe(1)
-    expect(utxos[0].amount).toBe(50)
+    expect(utxos[0].amount).toBe(3.125)
   })
 
   it('validates chain detects tampering', () => {

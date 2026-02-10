@@ -13,12 +13,17 @@
     "bench": "node --loader ts-node/esm src/benchmark.ts",
     "blockchain": "node --loader ts-node/esm src/simulation.ts",
     "claim": "node --loader ts-node/esm src/claim-simulation.ts",
+    "qtcd": "node --loader ts-node/esm src/qtcd.ts --mine",
+    "node:alice": "node --loader ts-node/esm src/qtcd.ts --port 3001 --p2p-port 6001 --datadir data/alice --mine",
+    "node:bob": "node --loader ts-node/esm src/qtcd.ts --port 3002 --p2p-port 6002 --datadir data/bob --seeds 127.0.0.1:6001",
+    "node:charlie": "node --loader ts-node/esm src/qtcd.ts --port 3003 --p2p-port 6003 --datadir data/charlie --seeds 127.0.0.1:6001,127.0.0.1:6002",
     "convert-snapshot": "node --loader ts-node/esm src/tools/convert-snapshot.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "website": "cd website && pnpm run dev",
     "website:build": "cd website && pnpm run build",
-    "ship": "cd website && pnpm install && pnpm build && rsync -avz --delete dist/ qubitcoin@goro:~/www/"
+    "dev:tx": "node --loader ts-node/esm src/dev-tx.ts",
+    "deploy": "./scripts/deploy-goro.sh"
   },
   "keywords": [
     "post-quantum",
@@ -31,8 +36,14 @@
   ],
   "license": "MIT",
   "dependencies": {
+    "@noble/curves": "^2.0.1",
+    "@noble/hashes": "^2.0.1",
     "@noble/post-quantum": "^0.5.4",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
     "@types/node": "^25.2.2",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   },

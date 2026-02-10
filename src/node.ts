@@ -6,19 +6,30 @@
  */
 import { Blockchain } from './chain.js'
 import { Mempool } from './mempool.js'
-import { assembleCandidateBlock, mineBlock } from './miner.js'
+import { assembleCandidateBlock, mineBlock, mineBlockAsync } from './miner.js'
 import type { Transaction } from './transaction.js'
 import type { Block } from './block.js'
+import { TARGET_BLOCK_TIME_MS } from './block.js'
+import { blockSubsidy } from './transaction.js'
+import { DIFFICULTY_ADJUSTMENT_INTERVAL } from './block.js'
 import type { BtcSnapshot } from './snapshot.js'
+import type { BlockStorage } from './storage.js'
 
 export class Node {
   readonly name: string
   readonly chain: Blockchain
   readonly mempool: Mempool
 
-  constructor(name: string, snapshot?: BtcSnapshot) {
+  /** Callbacks set by P2P layer for broadcasting */
+  onNewBlock: ((block: Block) => void) | null = null
+  onNewTransaction: ((tx: Transaction) => void) | null = null
+
+  /** Active mining abort controller (null when not mining) */
+  private miningAbort: AbortController | null = null
+
+  constructor(name: string, snapshot?: BtcSnapshot, storage?: BlockStorage) {
     this.name = name
-    this.chain = new Blockchain(snapshot)
+    this.chain = new Blockchain(snapshot, storage)
     this.mempool = new Mempool()
   }
 
@@ -31,6 +42,7 @@ export class Node {
     )
     if (result.success) {
       console.log(`  [${this.name}] Accepted tx ${tx.id.slice(0, 16)}...`)
+      this.onNewTransaction?.(tx)
     }
     return result
   }
@@ -60,6 +72,9 @@ export class Node {
     const minedTxIds = block.transactions.map((tx) => tx.id)
     this.mempool.removeTransactions(minedTxIds)
 
+    // Broadcast to peers
+    this.onNewBlock?.(block)
+
     return block
   }
 
@@ -70,18 +85,88 @@ export class Node {
       // Remove any mempool transactions that were included
       const minedTxIds = block.transactions.map((tx) => tx.id)
       this.mempool.removeTransactions(minedTxIds)
+
+      // Abort in-progress mining so it restarts with the new tip
+      this.miningAbort?.abort()
     }
     return result
   }
 
+  /**
+   * Start continuous async mining. Yields to the event loop between
+   * nonce batches so RPC/P2P stay responsive. Automatically restarts
+   * when a peer's block arrives (receiveBlock aborts the current round).
+   */
+  async startMining(minerAddress: string): Promise<void> {
+    console.log(`  [${this.name}] Mining started → ${minerAddress}`)
+
+    while (true) {
+      this.miningAbort = new AbortController()
+
+      const candidate = assembleCandidateBlock(
+        this.chain,
+        this.mempool,
+        minerAddress
+      )
+
+      const block = await mineBlockAsync(candidate, this.miningAbort.signal)
+
+      if (block) {
+        const result = this.chain.addBlock(block)
+        if (result.success) {
+          const minedTxIds = block.transactions.map((tx) => tx.id)
+          this.mempool.removeTransactions(minedTxIds)
+          this.onNewBlock?.(block)
+        }
+      }
+      // else: aborted by receiveBlock → loop restarts with new tip
+    }
+  }
+
+  stopMining(): void {
+    this.miningAbort?.abort()
+    this.miningAbort = null
+  }
+
   /** Get node state summary */
   getState() {
+    const height = this.chain.getHeight()
+    const blocks = this.chain.blocks
+
+    // Avg block time from last N blocks
+    const window = Math.min(DIFFICULTY_ADJUSTMENT_INTERVAL, height)
+    let avgBlockTime = 0
+    if (window > 0) {
+      const elapsed = blocks[blocks.length - 1].header.timestamp - blocks[blocks.length - 1 - window].header.timestamp
+      avgBlockTime = Math.round(elapsed / window)
+    }
+
+    // Total transactions
+    let totalTxs = 0
+    for (const b of blocks) totalTxs += b.transactions.length
+
+    // Estimated hashrate: hashes = 2^256 / target, rate = hashes / avgBlockTimeSec
+    let hashrate = 0
+    if (avgBlockTime > 0) {
+      const target = BigInt('0x' + this.chain.getDifficulty())
+      if (target > 0n) {
+        const hashes = (2n ** 256n) / target
+        hashrate = Number(hashes / BigInt(Math.max(1, Math.round(avgBlockTime / 1000))))
+      }
+    }
+
     return {
       name: this.name,
-      height: this.chain.getHeight(),
+      height,
       mempoolSize: this.mempool.size(),
       utxoCount: this.chain.utxoSet.size,
       difficulty: this.chain.getDifficulty().slice(0, 16) + '...',
+      lastBlockTime: this.chain.getChainTip().header.timestamp,
+      targetBlockTime: TARGET_BLOCK_TIME_MS,
+      avgBlockTime,
+      blockReward: blockSubsidy(height + 1),
+      totalTxs,
+      hashrate,
     }
   }
 }

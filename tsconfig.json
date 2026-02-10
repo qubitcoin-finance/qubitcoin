@@ -12,5 +12,9 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true
   },
+  "ts-node": {
+    "transpileOnly": true,
+    "esm": true
+  },
   "include": ["src/**/*"]
 }

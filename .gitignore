@@ -1,5 +1,12 @@
 CLAUDE.md
+.claude/
 .vercel
+
+# QubitCoin node data
+data/
+
+# Deploy scripts (contain server-specific config)
+scripts/
 
 # Dependencies
 **/node_modules/
