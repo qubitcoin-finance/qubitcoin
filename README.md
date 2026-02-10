@@ -1,6 +1,5 @@
 QubitCoin integration/staging tree
 ===================================
-https://qubitcoin.finance
 
 For a live block explorer and network status, see https://qubitcoin.finance.
 

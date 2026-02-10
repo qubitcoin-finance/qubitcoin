@@ -184,4 +184,95 @@ describe('P2P server integration', () => {
     await waitFor(() => node2.mempool.size() > 0, 10_000)
     expect(node2.mempool.getTransaction(tx.id)).toBeDefined()
   })
+
+  it('waitForSync resolves after IBD completes', async () => {
+    const wallet = generateWallet()
+
+    // Mine blocks on node1 first
+    node1.chain.difficulty = TEST_TARGET
+    for (let i = 0; i < 3; i++) {
+      node1.mine(wallet.address, false)
+    }
+    expect(node1.chain.getHeight()).toBe(3)
+
+    // Start waiting for sync BEFORE connecting (the promise should resolve once IBD finishes)
+    const syncPromise = p2p2.waitForSync()
+
+    // Now connect node2 to node1
+    const addr = (p2p1 as any).server.address()
+    const port = typeof addr === 'object' ? addr.port : 0
+    p2p2.connectOutbound('127.0.0.1', port)
+
+    // waitForSync should resolve once IBD completes
+    await syncPromise
+
+    // Verify node2 has all the blocks
+    expect(node2.chain.getHeight()).toBe(3)
+    expect(node2.chain.blocks[3].hash).toBe(node1.chain.blocks[3].hash)
+  })
+
+  it('waitForSync resolves immediately when peer is not ahead', async () => {
+    // Both nodes are at the same height (0 — genesis only)
+    // Register waitForSync BEFORE connecting so the resolver is in place
+    // when handleVerack fires notifySynced()
+    const syncPromise = p2p2.waitForSync(10_000)
+
+    const addr = (p2p1 as any).server.address()
+    const port = typeof addr === 'object' ? addr.port : 0
+    const start = Date.now()
+    p2p2.connectOutbound('127.0.0.1', port)
+
+    // Should resolve quickly since peer is not ahead (no IBD needed)
+    await syncPromise
+    const elapsed = Date.now() - start
+
+    // Should resolve well under the 10s timeout (handshake only, no block download)
+    expect(elapsed).toBeLessThan(5000)
+    expect(node2.chain.getHeight()).toBe(node1.chain.getHeight())
+  })
+
+  it('connectToSeeds establishes outbound connection', async () => {
+    // Get the port node1 is listening on
+    const addr = (p2p1 as any).server.address()
+    const port = typeof addr === 'object' ? addr.port : 0
+
+    // Use connectToSeeds instead of manual connectOutbound
+    p2p2.connectToSeeds([`127.0.0.1:${port}`])
+
+    // Verify outbound connection is established
+    await waitFor(() => p2p2.getPeers().length > 0 && p2p1.getPeers().length > 0)
+
+    expect(p2p2.getPeers().length).toBeGreaterThanOrEqual(1)
+    expect(p2p1.getPeers().length).toBeGreaterThanOrEqual(1)
+
+    // Verify seeds are stored (accessible via the private field)
+    const seeds = (p2p2 as any).seeds
+    expect(seeds).toHaveLength(1)
+    expect(seeds[0].host).toBe('127.0.0.1')
+    expect(seeds[0].port).toBe(port)
+  })
+})
+
+describe('P2P waitForSync', () => {
+  let tmpDir: string
+  let node: Node
+  let p2p: P2PServer
+
+  beforeEach(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qtc-p2p-sync-'))
+    const storage = new FileBlockStorage(tmpDir)
+    node = new Node('lonely', undefined, storage)
+    p2p = new P2PServer(node, 0, tmpDir) // port 0 = random
+    await p2p.start()
+  })
+
+  afterEach(async () => {
+    await p2p.stop()
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('waitForSync rejects on timeout with no peers', async () => {
+    // Node has no peers connected — waitForSync should reject after timeout
+    await expect(p2p.waitForSync(1_000)).rejects.toThrow(/sync/)
+  })
 })
