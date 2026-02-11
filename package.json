@@ -24,6 +24,8 @@
     "website:build": "cd website && pnpm run build",
     "dev:tx": "node --loader ts-node/esm src/dev-tx.ts",
     "deploy": "./scripts/deploy-goro.sh",
+    "deploy:ui": "./scripts/deploy-ui.sh",
+    "deploy:backend": "./scripts/deploy-backend.sh",
     "generate-snapshot": "./scripts/generate-snapshot.sh"
   },
   "keywords": [

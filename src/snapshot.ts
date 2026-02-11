@@ -4,6 +4,7 @@
  * Represents aggregated balances per BTC address at a specific block height.
  * BTC holders prove ownership of their address to claim qcoin equivalents.
  */
+import { sha256 } from '@noble/hashes/sha2.js'
 import {
   hash160,
   generateBtcKeypair,
@@ -29,38 +30,57 @@ export function deriveBtcAddress(compressedPubKey: Uint8Array): string {
   return bytesToHex(hash160(compressedPubKey))
 }
 
-/** Compute a commitment hash over all snapshot entries */
+/** Compute a commitment hash over all snapshot entries (streaming — constant memory) */
 export function computeSnapshotMerkleRoot(entries: BtcAddressBalance[]): string {
   if (entries.length === 0) return '0'.repeat(64)
 
   const encoder = new TextEncoder()
-  let totalLen = 0
-  const parts: Uint8Array[] = []
-
+  const inner = sha256.create()
   for (const entry of entries) {
-    const chunk = encoder.encode(`${entry.btcAddress}:${entry.amount};`)
-    parts.push(chunk)
-    totalLen += chunk.length
+    inner.update(encoder.encode(`${entry.btcAddress}:${entry.amount};`))
+  }
+  return bytesToHex(sha256(inner.digest()))
+}
+
+/**
+ * Sharded address index — O(1) lookups, no V8 Map size limit.
+ * Splits entries across 256 Maps keyed by first 2 hex chars of address.
+ */
+export class ShardedIndex {
+  private shards: Map<string, BtcAddressBalance>[] = new Array(256)
+
+  constructor() {
+    for (let i = 0; i < 256; i++) {
+      this.shards[i] = new Map()
+    }
   }
 
-  const buf = new Uint8Array(totalLen)
-  let offset = 0
-  for (const chunk of parts) {
-    buf.set(chunk, offset)
-    offset += chunk.length
+  private shard(key: string): Map<string, BtcAddressBalance> {
+    const idx = parseInt(key.slice(0, 2), 16)
+    return this.shards[idx] ?? this.shards[0]
   }
 
-  return doubleSha256Hex(buf)
+  set(key: string, value: BtcAddressBalance): void {
+    this.shard(key).set(key, value)
+  }
+
+  get(key: string): BtcAddressBalance | undefined {
+    return this.shard(key).get(key)
+  }
+
+  has(key: string): boolean {
+    return this.shard(key).has(key)
+  }
 }
 
 /** WeakMap-cached index for O(1) address lookups */
-const snapshotIndexCache = new WeakMap<BtcAddressBalance[], Map<string, BtcAddressBalance>>()
+const snapshotIndexCache = new WeakMap<BtcAddressBalance[], ShardedIndex>()
 
-export function getSnapshotIndex(snapshot: BtcSnapshot): Map<string, BtcAddressBalance> {
+export function getSnapshotIndex(snapshot: BtcSnapshot): ShardedIndex {
   let index = snapshotIndexCache.get(snapshot.entries)
   if (index) return index
 
-  index = new Map<string, BtcAddressBalance>()
+  index = new ShardedIndex()
   for (const entry of snapshot.entries) {
     index.set(entry.btcAddress, entry)
   }

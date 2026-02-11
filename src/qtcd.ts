@@ -86,7 +86,7 @@ async function main() {
   if (config.snapshotPath) {
     log.info({ component: 'snapshot', path: config.snapshotPath }, 'Loading snapshot')
     const { loadSnapshot } = await import('./snapshot-loader.js')
-    snapshot = loadSnapshot(config.snapshotPath)
+    snapshot = await loadSnapshot(config.snapshotPath)
     log.info({ component: 'snapshot', addresses: snapshot.entries.length }, 'Snapshot loaded')
   }
 

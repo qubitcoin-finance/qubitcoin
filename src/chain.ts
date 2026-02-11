@@ -85,6 +85,17 @@ export class Blockchain {
     // Genesis coinbase goes to burn address - don't add to UTXO set
   }
 
+  /** Replace genesis block with one received from a peer (fresh node only) */
+  replaceGenesis(genesis: Block): boolean {
+    if (this.getHeight() !== 0) return false
+    this.blocks[0] = genesis
+    if (this.storage) {
+      this.storage.rewriteBlocks(this.blocks)
+      this.storage.saveMetadata({ height: 0, difficulty: this.difficulty, genesisHash: genesis.hash })
+    }
+    return true
+  }
+
   /** Add a validated block to the chain */
   addBlock(block: Block): { success: boolean; error?: string } {
     const previousBlock = this.getChainTip()
@@ -429,14 +440,15 @@ export class Blockchain {
   }
 
   /** Get claim statistics */
-  getClaimStats(): { totalEntries: number; claimed: number; unclaimed: number; claimedAmount: number; unclaimedAmount: number } {
+  getClaimStats(): { btcBlockHeight: number; totalEntries: number; claimed: number; unclaimed: number; claimedAmount: number; unclaimedAmount: number } {
     if (!this.btcSnapshot) {
-      return { totalEntries: 0, claimed: 0, unclaimed: 0, claimedAmount: 0, unclaimedAmount: 0 }
+      return { btcBlockHeight: 0, totalEntries: 0, claimed: 0, unclaimed: 0, claimedAmount: 0, unclaimedAmount: 0 }
     }
     const entries = this.btcSnapshot.entries
     const claimed = entries.filter((e) => this.claimedBtcAddresses.has(e.btcAddress))
     const unclaimed = entries.filter((e) => !this.claimedBtcAddresses.has(e.btcAddress))
     return {
+      btcBlockHeight: this.btcSnapshot.btcBlockHeight,
       totalEntries: entries.length,
       claimed: claimed.length,
       unclaimed: unclaimed.length,

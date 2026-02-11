@@ -52,13 +52,14 @@ export class Peer {
     inbound: boolean,
     onMessage: PeerEventHandler,
     onDisconnect: PeerDisconnectHandler,
+    label?: string,
   ) {
     this.socket = socket
     this.inbound = inbound
     this.onMessage = onMessage
     this.onDisconnect = onDisconnect
     this.address = socket.remoteAddress ?? 'unknown'
-    this.id = `${this.address}:${socket.remotePort}`
+    this.id = label ?? `${this.address}:${socket.remotePort}`
 
     socket.on('data', (data: Buffer) => this.handleData(data))
     socket.on('error', (err) => this.disconnect(`socket error: ${err.message}`))

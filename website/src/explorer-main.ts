@@ -65,6 +65,7 @@ interface Block {
 }
 
 interface ClaimStats {
+  btcBlockHeight: number;
   totalEntries: number;
   claimed: number;
   unclaimed: number;
@@ -125,11 +126,14 @@ function timeAgo(ms: number): string {
 }
 
 function formatHashrate(h: number): string {
-  if (h >= 1e12) return (h / 1e12).toFixed(1) + ' TH/s';
-  if (h >= 1e9) return (h / 1e9).toFixed(1) + ' GH/s';
-  if (h >= 1e6) return (h / 1e6).toFixed(1) + ' MH/s';
-  if (h >= 1e3) return (h / 1e3).toFixed(1) + ' KH/s';
-  return h + ' H/s';
+  const units: [number, string][] = [
+    [1e18, 'EH/s'], [1e15, 'PH/s'], [1e12, 'TH/s'],
+    [1e9, 'GH/s'], [1e6, 'MH/s'], [1e3, 'KH/s'],
+  ];
+  for (const [threshold, label] of units) {
+    if (h >= threshold) return (h / threshold).toFixed(3) + ' ' + label;
+  }
+  return h.toFixed(0) + ' H/s';
 }
 
 function formatDuration(ms: number): string {
@@ -355,9 +359,7 @@ async function renderDashboard(): Promise<void> {
   // Claim stats row (only if fork mode)
   if (claimStats && claimStats.totalEntries > 0) {
     html += `<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-      ${card('Snapshot Addresses', claimStats.totalEntries)}
-      ${card('Claimed', claimStats.claimed)}
-      ${card('Unclaimed', claimStats.unclaimed)}
+      ${card('BTC Fork Block', claimStats.btcBlockHeight.toLocaleString())}
       ${card('Claimed BTC', claimStats.claimedAmount)}
     </div>`;
   }

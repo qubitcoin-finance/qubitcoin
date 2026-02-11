@@ -1,34 +1,61 @@
 /**
  * Load a real BTC snapshot from an NDJSON file.
  *
- * Each line: {"a":"<hex hash160>","b":<satoshis>}
- * Returns a BtcSnapshot suitable for the Blockchain constructor.
+ * Streams the file line-by-line (constant memory overhead for I/O).
+ * First line is the header with metadata (merkleRoot, blockHash, count).
+ * Remaining lines: {"a":"<hex hash160>","b":<satoshis>}
  */
 import fs from 'node:fs'
-import { type BtcSnapshot, type BtcAddressBalance, computeSnapshotMerkleRoot } from './snapshot.js'
-import { doubleSha256Hex } from './crypto.js'
+import readline from 'node:readline'
+import { type BtcSnapshot, type BtcAddressBalance } from './snapshot.js'
 
-export function loadSnapshot(filePath: string): BtcSnapshot {
-  const content = fs.readFileSync(filePath, 'utf-8').trimEnd()
-  const lines = content.split('\n')
-
+export async function loadSnapshot(filePath: string): Promise<BtcSnapshot> {
   const entries: BtcAddressBalance[] = []
-  for (const line of lines) {
+  let merkleRoot = ''
+  let btcBlockHash = ''
+  let btcBlockHeight = 0
+  let isFirstLine = true
+
+  const rl = readline.createInterface({
+    input: fs.createReadStream(filePath),
+    crlfDelay: Infinity,
+  })
+
+  for await (const line of rl) {
     if (!line) continue
+
+    if (isFirstLine) {
+      isFirstLine = false
+      // Try to parse as header (has 'merkleRoot' field)
+      const raw = JSON.parse(line)
+      if (raw.merkleRoot) {
+        merkleRoot = raw.merkleRoot
+        btcBlockHash = raw.hash || ''
+        btcBlockHeight = raw.height || 0
+        continue
+      }
+      // No header — treat as a regular entry
+    }
+
     const raw = JSON.parse(line) as { a: string; b: number }
     entries.push({ btcAddress: raw.a, amount: raw.b })
   }
 
-  // The snapshot doesn't carry its own block height/hash, so use placeholders.
-  // A real deployment would embed these in the NDJSON header line.
-  const merkleRoot = computeSnapshotMerkleRoot(entries)
+  if (!merkleRoot) {
+    // Legacy format without header — compute merkle root
+    const { computeSnapshotMerkleRoot } = await import('./snapshot.js')
+    merkleRoot = computeSnapshotMerkleRoot(entries)
+  }
 
-  const snapshot: BtcSnapshot = {
-    btcBlockHeight: 0,     // overridden by caller if known
-    btcBlockHash: doubleSha256Hex(new TextEncoder().encode('btc-snapshot')),
+  if (!btcBlockHash) {
+    const { doubleSha256Hex } = await import('./crypto.js')
+    btcBlockHash = doubleSha256Hex(new TextEncoder().encode('btc-snapshot'))
+  }
+
+  return {
+    btcBlockHeight,
+    btcBlockHash,
     entries,
     merkleRoot,
   }
-
-  return snapshot
 }

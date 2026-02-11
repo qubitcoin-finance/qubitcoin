@@ -59,8 +59,8 @@ export const STARTING_DIFFICULTY =
 /** Difficulty adjustment interval (blocks) */
 export const DIFFICULTY_ADJUSTMENT_INTERVAL = 10
 
-/** Target block time in ms (30 seconds) */
-export const TARGET_BLOCK_TIME_MS = 30_000
+/** Target block time in ms (30 minutes) */
+export const TARGET_BLOCK_TIME_MS = 30 * 60_000
 
 /** Maximum block size in bytes (1 MB, same as Bitcoin) */
 export const MAX_BLOCK_SIZE = 1_000_000

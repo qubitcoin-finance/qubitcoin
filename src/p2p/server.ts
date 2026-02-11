@@ -182,8 +182,9 @@ export class P2PServer {
     if (this.outboundCount >= MAX_OUTBOUND) return
     if (this.isBanned(host)) return
 
+    const label = `${host}:${port}`
     const socket = net.createConnection({ host, port }, () => {
-      const peer = this.createPeer(socket, false)
+      const peer = this.createPeer(socket, false, label)
       if (!peer) {
         socket.destroy()
         return
@@ -220,12 +221,13 @@ export class P2PServer {
     this.createPeer(socket, true)
   }
 
-  private createPeer(socket: net.Socket, inbound: boolean): Peer | null {
+  private createPeer(socket: net.Socket, inbound: boolean, label?: string): Peer | null {
     const peer = new Peer(
       socket,
       inbound,
       (p, msg) => this.handleMessage(p, msg),
       (p, reason) => this.handleDisconnect(p, reason),
+      label,
     )
 
     this.peers.set(peer.id, peer)
@@ -333,8 +335,11 @@ export class P2PServer {
     }
 
     // Genesis check: reject peers on wrong network
+    // Exception: fresh peers (height 0) are allowed — they'll adopt our genesis during IBD
     const ourGenesis = this.node.chain.blocks[0].hash
-    if (payload.genesisHash !== ourGenesis) {
+    const weAreFresh = this.node.chain.getHeight() === 0 && !this.node.chain.btcSnapshot
+    const peerIsFresh = payload.height === 0
+    if (payload.genesisHash !== ourGenesis && !weAreFresh && !peerIsFresh) {
       peer.send({
         type: 'reject',
         payload: {
@@ -367,10 +372,11 @@ export class P2PServer {
 
     // IBD: if peer is ahead, request blocks
     const ourHeight = this.node.chain.getHeight()
-    if (peer.remoteHeight > ourHeight) {
+    const needsGenesis = ourHeight === 0 && peer.remoteGenesisHash !== this.node.chain.blocks[0].hash
+    if (peer.remoteHeight > ourHeight || needsGenesis) {
       peer.send({
         type: 'getblocks',
-        payload: { fromHeight: ourHeight + 1 } as GetBlocksPayload,
+        payload: { fromHeight: needsGenesis ? 0 : ourHeight + 1 } as GetBlocksPayload,
       })
     } else {
       // Already caught up with this peer
@@ -388,7 +394,7 @@ export class P2PServer {
       return
     }
 
-    const from = Math.max(1, payload.fromHeight) // never send genesis
+    const from = Math.max(0, payload.fromHeight) // include genesis if requested
     const to = Math.min(from + IBD_BATCH_SIZE, this.node.chain.blocks.length)
     const blocks = this.node.chain.blocks.slice(from, to)
 
@@ -413,6 +419,16 @@ export class P2PServer {
     for (const raw of payload.blocks) {
       const block = deserializeBlock(raw as Record<string, unknown>)
       if (this.seenBlocks.has(block.hash)) continue
+
+      // Genesis adoption: fresh node receives peer's genesis block
+      if (block.height === 0 && block.hash !== this.node.chain.blocks[0].hash) {
+        if (this.node.chain.replaceGenesis(block)) {
+          log.info({ component: 'p2p', peer: peer.id, genesis: block.hash.slice(0, 16) }, 'Adopted peer genesis')
+          this.addSeen(this.seenBlocks, block.hash)
+          added++
+          continue
+        }
+      }
 
       const result = this.node.receiveBlock(block)
       if (result.success) {

@@ -16,7 +16,7 @@ describe('loadSnapshot', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true })
   })
 
-  it('should parse NDJSON snapshot file', () => {
+  it('should parse NDJSON snapshot file (legacy format, no header)', async () => {
     const filePath = path.join(tmpDir, 'test.jsonl')
     const lines = [
       '{"a":"aabbccdd0011223344556677889900aabbccddee","b":100000000}',
@@ -25,7 +25,7 @@ describe('loadSnapshot', () => {
     ]
     fs.writeFileSync(filePath, lines.join('\n') + '\n')
 
-    const snapshot = loadSnapshot(filePath)
+    const snapshot = await loadSnapshot(filePath)
 
     expect(snapshot.entries).toHaveLength(3)
     expect(snapshot.entries[0].btcAddress).toBe('aabbccdd0011223344556677889900aabbccddee')
@@ -37,29 +37,46 @@ describe('loadSnapshot', () => {
     expect(snapshot.merkleRoot.length).toBe(64)
   })
 
-  it('should handle empty lines gracefully', () => {
+  it('should parse snapshot with header line', async () => {
+    const filePath = path.join(tmpDir, 'with-header.jsonl')
+    const merkle = 'ff'.repeat(32)
+    const lines = [
+      JSON.stringify({ height: 0, hash: 'abcd1234', count: 2, merkleRoot: merkle, p2pkhCoins: 1, p2wpkhCoins: 1, totalClaimableSats: '300' }),
+      '{"a":"aabbccdd0011223344556677889900aabbccddee","b":100}',
+      '{"a":"11223344556677889900aabbccddeeff00112233","b":200}',
+    ]
+    fs.writeFileSync(filePath, lines.join('\n') + '\n')
+
+    const snapshot = await loadSnapshot(filePath)
+
+    expect(snapshot.entries).toHaveLength(2)
+    expect(snapshot.merkleRoot).toBe(merkle)
+    expect(snapshot.btcBlockHash).toBe('abcd1234')
+  })
+
+  it('should handle empty lines gracefully', async () => {
     const filePath = path.join(tmpDir, 'sparse.jsonl')
     fs.writeFileSync(
       filePath,
       '{"a":"aabbccdd0011223344556677889900aabbccddee","b":100}\n\n{"a":"11223344556677889900aabbccddeeff00112233","b":200}\n'
     )
 
-    const snapshot = loadSnapshot(filePath)
+    const snapshot = await loadSnapshot(filePath)
     expect(snapshot.entries).toHaveLength(2)
   })
 
-  it('should handle single entry', () => {
+  it('should handle single entry', async () => {
     const filePath = path.join(tmpDir, 'single.jsonl')
     fs.writeFileSync(filePath, '{"a":"aabbccdd0011223344556677889900aabbccddee","b":42}\n')
 
-    const snapshot = loadSnapshot(filePath)
+    const snapshot = await loadSnapshot(filePath)
     expect(snapshot.entries).toHaveLength(1)
     expect(snapshot.entries[0].amount).toBe(42)
   })
 })
 
 describe('getSnapshotIndex', () => {
-  it('should provide O(1) lookups by btcAddress', () => {
+  it('should provide O(1) lookups by btcAddress', async () => {
     const filePath = path.join(
       fs.mkdtempSync(path.join(os.tmpdir(), 'qtc-idx-')),
       'test.jsonl'
@@ -69,22 +86,21 @@ describe('getSnapshotIndex', () => {
       '{"a":"11223344556677889900aabbccddeeff00112233","b":200}',
     ]
     fs.writeFileSync(filePath, lines.join('\n') + '\n')
-    const snapshot = loadSnapshot(filePath)
+    const snapshot = await loadSnapshot(filePath)
 
     const index = getSnapshotIndex(snapshot)
-    expect(index.size).toBe(2)
     expect(index.get('aabbccdd0011223344556677889900aabbccddee')?.amount).toBe(100)
     expect(index.get('11223344556677889900aabbccddeeff00112233')?.amount).toBe(200)
     expect(index.get('nonexistent')).toBeUndefined()
   })
 
-  it('should return the same cached map on repeated calls', () => {
+  it('should return the same cached index on repeated calls', async () => {
     const filePath = path.join(
       fs.mkdtempSync(path.join(os.tmpdir(), 'qtc-idx2-')),
       'test.jsonl'
     )
     fs.writeFileSync(filePath, '{"a":"aabbccdd0011223344556677889900aabbccddee","b":1}\n')
-    const snapshot = loadSnapshot(filePath)
+    const snapshot = await loadSnapshot(filePath)
 
     const idx1 = getSnapshotIndex(snapshot)
     const idx2 = getSnapshotIndex(snapshot)
