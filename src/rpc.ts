@@ -4,7 +4,8 @@ import { Node } from './node.js';
 import { bytesToHex, hexToBytes } from './crypto.js';
 import cors from 'cors';
 import type { P2PServer } from './p2p/server.js';
-import type { Transaction, TransactionInput, ClaimData } from './transaction.js';
+import { type Transaction, type TransactionInput, type ClaimData, isClaimTransaction, COINBASE_TXID } from './transaction.js';
+import { deriveAddress } from './crypto.js';
 import { DIFFICULTY_ADJUSTMENT_INTERVAL, STARTING_DIFFICULTY } from './block.js';
 import { log } from './log.js';
 
@@ -123,9 +124,27 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer) 
     }
   });
 
-  // Endpoint to get all transactions in the mempool
+  // Endpoint to get mempool transactions (lightweight: no signatures/publicKeys, includes sender)
   app.get('/api/v1/mempool/txs', (req, res) => {
-    res.json(sanitize(Array.from(node.mempool.getTransactionsForBlock(Infinity))));
+    const limit = Math.min(parseInt(req.query.limit as string, 10) || Infinity, 1000);
+    const txs = node.mempool.getTransactionsForBlock(limit);
+    const summaries = txs.map(tx => {
+      const isCoinbase = tx.inputs.length === 1 && tx.inputs[0].txId === COINBASE_TXID;
+      const isClaim = isClaimTransaction(tx);
+      let sender: string | null = null;
+      if (!isCoinbase && !isClaim && tx.inputs[0]?.publicKey) {
+        sender = deriveAddress(tx.inputs[0].publicKey);
+      }
+      return {
+        id: tx.id,
+        timestamp: tx.timestamp,
+        sender,
+        inputs: tx.inputs.map(i => ({ txId: i.txId, outputIndex: i.outputIndex })),
+        outputs: tx.outputs,
+        claimData: tx.claimData ? sanitize(tx.claimData) : undefined,
+      };
+    });
+    res.json(summaries);
   });
 
   // Endpoint to get mempool stats

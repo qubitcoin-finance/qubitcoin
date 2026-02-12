@@ -78,8 +78,8 @@ async function main() {
       const recipient = recipients[recipientIdx % recipients.length]
       recipientIdx++
 
-      const amount = Math.round((Math.random() * 0.099 + 0.001) * 1000) / 1000
-      const fee = 0.001
+      const amount = Math.round((Math.random() * 0.00009 + 0.00001) * 100000) / 100000
+      const fee = 0.00001
       const needed = amount + fee
 
       let accumulated = 0

@@ -19,6 +19,7 @@ import {
   STARTING_DIFFICULTY,
 } from './block.js'
 import { type BlockStorage } from './storage.js'
+import { getSnapshotIndex, type ShardedIndex } from './snapshot.js'
 
 export interface BlockUndo {
   spentUtxos: Array<{ key: string; utxo: UTXO }>  // UTXOs consumed by inputs — restore on disconnect
@@ -36,12 +37,20 @@ export class Blockchain {
   claimedBtcAddresses: Set<string> = new Set() // btcAddress hex string
   private storage: BlockStorage | null = null
   private replayHeight = -1 // height of last block loaded from storage
+  private snapshotIndex: ShardedIndex | null = null
+  private snapshotTotalEntries = 0
+  private snapshotTotalAmount = 0
+  private claimedCount = 0
+  private claimedAmount = 0
 
   constructor(snapshot?: BtcSnapshot, storage?: BlockStorage) {
     this.storage = storage ?? null
 
     if (snapshot) {
       this.btcSnapshot = snapshot
+      this.snapshotTotalEntries = snapshot.entries.length
+      this.snapshotTotalAmount = snapshot.entries.reduce((s, e) => s + e.amount, 0)
+      this.snapshotIndex = getSnapshotIndex(snapshot)
     }
 
     // Try to restore from storage first
@@ -398,6 +407,8 @@ export class Blockchain {
       this.undoData.length = 0
       this.utxoSet.clear()
       this.claimedBtcAddresses.clear()
+      this.claimedCount = 0
+      this.claimedAmount = 0
       this.difficulty = STARTING_DIFFICULTY
 
       for (let i = 1; i <= targetHeight; i++) {
@@ -439,21 +450,18 @@ export class Blockchain {
     return this.getClaimableEntries().reduce((sum, e) => sum + e.amount, 0)
   }
 
-  /** Get claim statistics */
+  /** Get claim statistics (O(1) — uses incrementally tracked counters) */
   getClaimStats(): { btcBlockHeight: number; totalEntries: number; claimed: number; unclaimed: number; claimedAmount: number; unclaimedAmount: number } {
     if (!this.btcSnapshot) {
       return { btcBlockHeight: 0, totalEntries: 0, claimed: 0, unclaimed: 0, claimedAmount: 0, unclaimedAmount: 0 }
     }
-    const entries = this.btcSnapshot.entries
-    const claimed = entries.filter((e) => this.claimedBtcAddresses.has(e.btcAddress))
-    const unclaimed = entries.filter((e) => !this.claimedBtcAddresses.has(e.btcAddress))
     return {
       btcBlockHeight: this.btcSnapshot.btcBlockHeight,
-      totalEntries: entries.length,
-      claimed: claimed.length,
-      unclaimed: unclaimed.length,
-      claimedAmount: claimed.reduce((s, e) => s + e.amount, 0),
-      unclaimedAmount: unclaimed.reduce((s, e) => s + e.amount, 0),
+      totalEntries: this.snapshotTotalEntries,
+      claimed: this.claimedCount,
+      unclaimed: this.snapshotTotalEntries - this.claimedCount,
+      claimedAmount: this.claimedAmount,
+      unclaimedAmount: this.snapshotTotalAmount - this.claimedAmount,
     }
   }
 
@@ -472,6 +480,13 @@ export class Blockchain {
         const claim = tx.claimData!
         this.claimedBtcAddresses.add(claim.btcAddress)
         undo.claimedAddresses.push(claim.btcAddress)
+        if (this.snapshotIndex) {
+          const entry = this.snapshotIndex.get(claim.btcAddress)
+          if (entry) {
+            this.claimedCount++
+            this.claimedAmount += entry.amount
+          }
+        }
         // Create new PQ UTXO from claim output
         for (let i = 0; i < tx.outputs.length; i++) {
           const output = tx.outputs[i]
@@ -538,6 +553,13 @@ export class Blockchain {
     // Unclaim BTC addresses
     for (const addr of undo.claimedAddresses) {
       this.claimedBtcAddresses.delete(addr)
+      if (this.snapshotIndex) {
+        const entry = this.snapshotIndex.get(addr)
+        if (entry) {
+          this.claimedCount--
+          this.claimedAmount -= entry.amount
+        }
+      }
     }
     // Restore difficulty
     this.difficulty = undo.previousDifficulty

@@ -10,13 +10,16 @@
  *   --datadir <path>  Data directory (default data/node)
  *   --seeds <host:port,...>  Comma-separated seed peers
  *   --mine            Enable mining (generates a wallet and mines continuously)
+ *   --full            Auto-download snapshot if missing, then start as full node
  *   --simulate        Enable periodic mining and transaction simulation (dev only)
  */
 import { Node } from './node.js'
 import { startRpcServer } from './rpc.js'
 import { generateWallet, deriveAddress } from './crypto.js'
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync, createWriteStream } from 'node:fs'
 import { join } from 'node:path'
+import { get as httpsGet } from 'node:https'
+import { get as httpGet } from 'node:http'
 import { createTransaction } from './transaction.js'
 import { INITIAL_TARGET } from './block.js'
 import { FileBlockStorage } from './storage.js'
@@ -43,8 +46,9 @@ Options:
   --p2p-port <n>          P2P port (default 6001)
   --snapshot <path>       Path to BTC snapshot NDJSON file
   --datadir <path>        Data directory (default data/node)
-  --seeds <host:port,...> Comma-separated seed peers (default qubitcoin.finance:6001)
+  --seeds <host:port,...> Comma-separated seed peers (default: qubitcoin.finance:6001 with --full)
   --mine                  Enable mining
+  --full                  Auto-download snapshot if missing, then start as full node
   --simulate              Dev mode: pinned easy difficulty, fake txs
   -h, --help              Show this help`)
       process.exit(0)
@@ -52,6 +56,8 @@ Options:
       flags.add('simulate')
     } else if (arg === '--mine') {
       flags.add('mine')
+    } else if (arg === '--full') {
+      flags.add('full')
     } else if (arg.startsWith('--') && i + 1 < args.length) {
       opts[arg.slice(2)] = args[++i]
     }
@@ -62,10 +68,58 @@ Options:
     p2pPort: parseInt(opts['p2p-port'] ?? '6001', 10),
     snapshotPath: opts['snapshot'] ?? null,
     dataDir: opts['datadir'] ?? 'data/node',
-    seeds: opts['seeds'] !== undefined ? (opts['seeds'] ? opts['seeds'].split(',') : []) : ['qubitcoin.finance:6001'],
+    seeds: opts['seeds'] !== undefined ? (opts['seeds'] ? opts['seeds'].split(',') : []) : [],
     mine: flags.has('mine'),
+    full: flags.has('full'),
     simulate: flags.has('simulate'),
   }
+}
+
+const SNAPSHOT_URL = 'https://qubitcoin.finance/snapshot/qtc-snapshot.jsonl'
+
+function downloadFile(url: string, destPath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const tmpPath = destPath + '.tmp'
+    const get = url.startsWith('https') ? httpsGet : httpGet
+
+    get(url, (res) => {
+      // Follow redirects
+      if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location) {
+        downloadFile(res.headers.location, destPath).then(resolve, reject)
+        return
+      }
+      if (res.statusCode !== 200) {
+        reject(new Error(`Download failed: HTTP ${res.statusCode}`))
+        return
+      }
+
+      const totalBytes = parseInt(res.headers['content-length'] ?? '0', 10)
+      let downloadedBytes = 0
+      let lastLoggedPct = 0
+
+      const file = createWriteStream(tmpPath)
+      res.on('data', (chunk: Buffer) => {
+        downloadedBytes += chunk.length
+        if (totalBytes > 0) {
+          const pct = Math.floor((downloadedBytes / totalBytes) * 100)
+          if (pct >= lastLoggedPct + 10) {
+            lastLoggedPct = pct
+            const mb = (downloadedBytes / 1024 / 1024).toFixed(0)
+            const totalMb = (totalBytes / 1024 / 1024).toFixed(0)
+            log.info({ component: 'snapshot', progress: `${pct}%`, downloaded: `${mb}MB`, total: `${totalMb}MB` }, 'Downloading snapshot')
+          }
+        }
+      })
+      res.pipe(file)
+      file.on('finish', () => {
+        file.close(() => {
+          renameSync(tmpPath, destPath)
+          resolve()
+        })
+      })
+      file.on('error', (err) => reject(err))
+    }).on('error', (err) => reject(err))
+  })
 }
 
 async function main() {
@@ -78,8 +132,28 @@ async function main() {
     dataDir: config.dataDir,
     seeds: config.seeds,
     mining: config.mine,
+    full: config.full,
     simulate: config.simulate,
   })
+
+  // --full: default to public seed if no seeds specified
+  if (config.full && config.seeds.length === 0) {
+    config.seeds = ['qubitcoin.finance:6001']
+  }
+
+  // --full: auto-download snapshot if not provided and not on disk
+  if (config.full && !config.snapshotPath) {
+    mkdirSync(config.dataDir, { recursive: true })
+    const defaultPath = join(config.dataDir, 'qtc-snapshot.jsonl')
+    if (existsSync(defaultPath)) {
+      log.info({ component: 'snapshot', path: defaultPath }, 'Snapshot already exists')
+    } else {
+      log.info({ component: 'snapshot', url: SNAPSHOT_URL, dest: defaultPath }, 'Downloading snapshot')
+      await downloadFile(SNAPSHOT_URL, defaultPath)
+      log.info({ component: 'snapshot', path: defaultPath }, 'Snapshot download complete')
+    }
+    config.snapshotPath = defaultPath
+  }
 
   // Load snapshot if provided
   let snapshot: BtcSnapshot | undefined

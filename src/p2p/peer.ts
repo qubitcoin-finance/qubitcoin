@@ -168,6 +168,7 @@ export class Peer {
       clearTimeout(this.pongTimer)
       this.pongTimer = null
     }
+    this.resetIdleTimer()
   }
 
   private clearTimers(): void {

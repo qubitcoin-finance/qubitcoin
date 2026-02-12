@@ -269,6 +269,8 @@ describe('P2P fork resolution', () => {
   let p2p1: P2PServer
   let p2p2: P2PServer
 
+  const TEST_TARGET = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+
   beforeEach(async () => {
     tmpDir1 = fs.mkdtempSync(path.join(os.tmpdir(), 'qtc-fork-1-'))
     tmpDir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'qtc-fork-2-'))
@@ -276,9 +278,12 @@ describe('P2P fork resolution', () => {
     const storage1 = new FileBlockStorage(tmpDir1)
     const storage2 = new FileBlockStorage(tmpDir2)
 
-    // Don't override difficulty — use STARTING_DIFFICULTY so resetToHeight works correctly
     node1 = new Node('alice', undefined, storage1)
     node2 = new Node('bob', undefined, storage2)
+
+    // Use easy difficulty for fast test mining
+    node1.chain.difficulty = TEST_TARGET
+    node2.chain.difficulty = TEST_TARGET
 
     p2p1 = new P2PServer(node1, 0, tmpDir1)
     p2p2 = new P2PServer(node2, 0, tmpDir2)
@@ -298,19 +303,27 @@ describe('P2P fork resolution', () => {
     const wallet1 = walletA
     const wallet2 = walletB
 
-    // Both nodes mine independently — creating divergent chains
-    // Node1 mines 1 block (shorter fork)
+    // Mine a shared block so both nodes have a common ancestor at height 1
+    // (ensures resetToHeight uses the fast path, preserving test difficulty)
     node1.mine(wallet1.address, false)
-    // Node2 mines 3 blocks (longer fork)
+    node2.chain.addBlock(node1.chain.blocks[1])
+
+    expect(node1.chain.getHeight()).toBe(1)
+    expect(node2.chain.getHeight()).toBe(1)
+
+    // Both nodes mine independently — creating divergent chains
+    // Node1 mines 1 more block (shorter fork, height 2)
+    node1.mine(wallet1.address, false)
+    // Node2 mines 3 more blocks (longer fork, height 4)
     for (let i = 0; i < 3; i++) {
       node2.mine(wallet2.address, false)
     }
 
-    expect(node1.chain.getHeight()).toBe(1)
-    expect(node2.chain.getHeight()).toBe(3)
+    expect(node1.chain.getHeight()).toBe(2)
+    expect(node2.chain.getHeight()).toBe(4)
 
-    // Chains are divergent (different blocks at same heights)
-    expect(node1.chain.blocks[1].hash).not.toBe(node2.chain.blocks[1].hash)
+    // Chains are divergent (different blocks after the shared ancestor)
+    expect(node1.chain.blocks[2].hash).not.toBe(node2.chain.blocks[2].hash)
 
     // Connect node1 to node2 — node1 should detect fork and reorg to node2's chain
     const addr = (p2p2 as any).server.address()
@@ -318,9 +331,9 @@ describe('P2P fork resolution', () => {
     p2p1.connectOutbound('127.0.0.1', port)
 
     // Wait for node1 to sync to node2's height
-    await waitFor(() => node1.chain.getHeight() >= 3, 30_000)
+    await waitFor(() => node1.chain.getHeight() >= 4, 30_000)
 
-    expect(node1.chain.getHeight()).toBe(3)
+    expect(node1.chain.getHeight()).toBe(4)
     // Should now have the same chain tip
     expect(node1.chain.getChainTip().hash).toBe(node2.chain.getChainTip().hash)
   })
@@ -329,11 +342,15 @@ describe('P2P fork resolution', () => {
     const wallet1 = walletA
     const wallet2 = walletB
 
-    // Node1 mines 3 blocks (longer)
+    // Mine a shared block so both nodes have a common ancestor at height 1
+    node1.mine(wallet1.address, false)
+    node2.chain.addBlock(node1.chain.blocks[1])
+
+    // Node1 mines 3 more blocks (longer, height 4)
     for (let i = 0; i < 3; i++) {
       node1.mine(wallet1.address, false)
     }
-    // Node2 mines 1 block (shorter)
+    // Node2 mines 1 more block (shorter, height 2)
     node2.mine(wallet2.address, false)
 
     const originalTip = node1.chain.getChainTip().hash
@@ -350,7 +367,7 @@ describe('P2P fork resolution', () => {
     await new Promise((r) => setTimeout(r, 2000))
 
     // Node1 should keep its longer chain
-    expect(node1.chain.getHeight()).toBe(3)
+    expect(node1.chain.getHeight()).toBe(4)
     expect(node1.chain.getChainTip().hash).toBe(originalTip)
   })
 })

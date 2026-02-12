@@ -51,10 +51,10 @@ export const INITIAL_TARGET =
 
 /**
  * Starting difficulty for the live chain.
- * Currently set easy for testing (~5s blocks). Production target: 0000000fff...
+ * Set for ~20min blocks with SHA-256 PoW. Adjusts via difficulty retarget.
  */
 export const STARTING_DIFFICULTY =
-  '00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+  '0000000fffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
 
 /** Difficulty adjustment interval (blocks) */
 export const DIFFICULTY_ADJUSTMENT_INTERVAL = 10
@@ -152,7 +152,7 @@ export function createGenesisBlock(): Block {
   if (_cachedGenesis) return structuredClone(_cachedGenesis)
 
   const burnAddress = '0'.repeat(64)
-  const timestamp = Date.parse('2025-01-01T00:00:00Z')
+  const timestamp = Date.now()
 
   // Genesis coinbase - pays to burn address (unspendable, like Bitcoin's genesis)
   const coinbaseTx: Transaction = {
@@ -221,7 +221,7 @@ export function createForkGenesisBlock(snapshot: BtcSnapshot): Block {
   if (cached) return structuredClone(cached)
 
   const burnAddress = '0'.repeat(64)
-  const timestamp = Date.parse('2025-01-01T00:00:00Z')
+  const timestamp = snapshot.btcTimestamp ? snapshot.btcTimestamp * 1000 : Date.now()
   const encoder = new TextEncoder()
 
   // Genesis coinbase embeds the snapshot commitment

@@ -64,6 +64,15 @@ interface Block {
   transactions: Transaction[];
 }
 
+interface MempoolTx {
+  id: string;
+  timestamp: number;
+  sender: string | null;
+  inputs: { txId: string; outputIndex: number }[];
+  outputs: TxOutput[];
+  claimData?: ClaimData;
+}
+
 interface ClaimStats {
   btcBlockHeight: number;
   totalEntries: number;
@@ -96,7 +105,7 @@ const fetchStatus = () => api<Status>('/status');
 const fetchBlocks = (count = 10) => api<Block[]>(`/blocks?count=${count}`);
 const fetchBlock = (hash: string) => api<Block>(`/block/${hash}`);
 const fetchTx = (txid: string) => api<Transaction>(`/tx/${txid}`);
-const fetchMempoolTxs = () => api<Transaction[]>('/mempool/txs');
+const fetchMempoolTxs = (limit?: number) => api<MempoolTx[]>(limit ? `/mempool/txs?limit=${limit}` : '/mempool/txs');
 const fetchMempoolStats = () => api<{ size: number }>('/mempool/stats');
 const fetchBalance = (addr: string) => api<{ balance: number }>(`/address/${addr}/balance`);
 const fetchUtxos = (addr: string) => api<UTXO[]>(`/address/${addr}/utxos`);
@@ -147,9 +156,10 @@ function formatDuration(ms: number): string {
 
 function blockEta(lastBlockTime: number, targetBlockTime: number): string {
   const eta = lastBlockTime + targetBlockTime - Date.now();
-  if (eta <= 0) return 'any moment';
-  const mins = Math.floor(eta / 60000);
-  const secs = Math.floor((eta % 60000) / 1000);
+  // PoW is memoryless — if overdue, expected wait is still the target
+  const remaining = eta > 0 ? eta : targetBlockTime;
+  const mins = Math.floor(remaining / 60000);
+  const secs = Math.floor((remaining % 60000) / 1000);
   if (mins > 0) return `~${mins}m ${secs}s`;
   return `~${secs}s`;
 }
@@ -180,20 +190,20 @@ async function senderAddress(tx: Transaction): Promise<string | null> {
 }
 
 /** Get the transfer amount (excluding change back to sender) */
-function transferAmount(tx: Transaction, sender: string | null): number {
+function transferAmount(tx: Transaction | MempoolTx, sender: string | null): number {
   if (!sender) return tx.outputs.reduce((s, o) => s + o.amount, 0);
   return tx.outputs.filter(o => o.address !== sender).reduce((s, o) => s + o.amount, 0);
 }
 
-function isCoinbase(tx: Transaction): boolean {
+function isCoinbase(tx: Transaction | MempoolTx): boolean {
   return tx.inputs.length === 1 && tx.inputs[0].txId === COINBASE_TXID;
 }
 
-function isClaim(tx: Transaction): boolean {
+function isClaim(tx: Transaction | MempoolTx): boolean {
   return tx.claimData !== undefined;
 }
 
-function txTypeBadge(tx: Transaction): string {
+function txTypeBadge(tx: Transaction | MempoolTx): string {
   if (isCoinbase(tx)) return '<span class="px-2 py-0.5 rounded text-xs font-medium bg-entropy-cyan/20 text-entropy-cyan">Coinbase</span>';
   if (isClaim(tx)) return '<span class="px-2 py-0.5 rounded text-xs font-medium bg-qubit-600/20 text-qubit-400">Claim</span>';
   return '<span class="px-2 py-0.5 rounded text-xs font-medium bg-entropy-blue/20 text-entropy-blue">Transfer</span>';
@@ -338,7 +348,7 @@ async function renderDashboard(): Promise<void> {
     return;
   }
 
-  let html = `<h1 class="text-3xl font-bold mb-6">Explorer</h1>`;
+  let html = `<h1 class="text-3xl font-bold mb-6">Mempool</h1>`;
 
   // Status cards
   html += `<div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
@@ -399,19 +409,14 @@ async function renderDashboard(): Promise<void> {
   }
   html += `</div>`;
 
-  // Mempool preview
+  // Pending transactions
   html += `<div class="bg-surface rounded-lg glow-border p-5">
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="text-lg font-semibold">Mempool</h2>
-      <a href="#/mempool" class="text-qubit-400 hover:text-qubit-300 text-sm transition-colors">View all</a>
-    </div>`;
-  const mempoolTxs = await fetchMempoolTxs();
+    <h2 class="text-lg font-semibold mb-4">Pending Transactions</h2>`;
+  const mempoolTxs = await fetchMempoolTxs(8);
   if (mempoolTxs && mempoolTxs.length > 0) {
-    const senders = await Promise.all(mempoolTxs.slice(0, 8).map(senderAddress));
     html += `<div class="space-y-3">`;
-    for (let i = 0; i < Math.min(8, mempoolTxs.length); i++) {
-      const tx = mempoolTxs[i];
-      const amount = transferAmount(tx, senders[i]);
+    for (const tx of mempoolTxs) {
+      const amount = transferAmount(tx, tx.sender);
       html += `<div class="flex items-center justify-between py-2 border-b border-border last:border-0">
         <div class="flex items-center gap-2">
           ${txTypeBadge(tx)}
@@ -444,12 +449,12 @@ async function renderBlock(hash: string): Promise<void> {
       return;
     }
     root.innerHTML = `<p class="text-red-500">Block not found: ${truncHash(hash)}</p>
-      <a href="#/mempool" class="text-qubit-400 hover:text-qubit-300 text-sm mt-2 inline-block">Back to dashboard</a>`;
+      <a href="#/mempool" class="text-qubit-400 hover:text-qubit-300 text-sm mt-2 inline-block">Back</a>`;
     return;
   }
 
   const h = block.header;
-  let html = `<div class="mb-4"><a href="#/mempool" class="text-qubit-400 hover:text-qubit-300 text-sm">Back</a></div>`;
+  let html = ``;
   html += `<h1 class="text-2xl font-bold mb-6">Block</h1>`;
 
   html += `<div class="bg-surface rounded-lg glow-border p-6 mb-6">
@@ -519,7 +524,7 @@ async function renderTx(txid: string): Promise<void> {
   const tx = await fetchTx(txid);
   if (!tx) {
     root.innerHTML = `<p class="text-red-500">Transaction not found: ${truncHash(txid)}</p>
-      <a href="#/mempool" class="text-qubit-400 hover:text-qubit-300 text-sm mt-2 inline-block">Back to dashboard</a>`;
+      <a href="#/mempool" class="text-qubit-400 hover:text-qubit-300 text-sm mt-2 inline-block">Back</a>`;
     return;
   }
 
@@ -527,7 +532,7 @@ async function renderTx(txid: string): Promise<void> {
   const amount = transferAmount(tx, sender);
   const totalOut = tx.outputs.reduce((s, o) => s + o.amount, 0);
 
-  let html = `<div class="mb-4"><a href="#/mempool" class="text-qubit-400 hover:text-qubit-300 text-sm">Back</a></div>`;
+  let html = ``;
   html += `<h1 class="text-2xl font-bold mb-6">Transaction</h1>`;
 
   // Header info
@@ -623,7 +628,7 @@ async function renderAddress(addr: string): Promise<void> {
     fetchUtxos(addr),
   ]);
 
-  let html = `<div class="mb-4"><a href="#/mempool" class="text-qubit-400 hover:text-qubit-300 text-sm">Back</a></div>`;
+  let html = ``;
   html += `<h1 class="text-2xl font-bold mb-6">Address</h1>`;
 
   html += `<div class="bg-surface rounded-lg glow-border p-6 mb-6">
@@ -663,8 +668,7 @@ async function renderAddress(addr: string): Promise<void> {
 async function renderMempool(): Promise<void> {
   const txs = await fetchMempoolTxs();
 
-  let html = `<div class="mb-4"><a href="#/mempool" class="text-qubit-400 hover:text-qubit-300 text-sm">Back</a></div>`;
-  html += `<h1 class="text-2xl font-bold mb-6">Mempool</h1>`;
+  let html = `<h1 class="text-2xl font-bold mb-6">Mempool</h1>`;
 
   if (!txs || txs.length === 0) {
     html += `<p class="text-text-muted">Mempool is empty.</p>`;
@@ -672,12 +676,10 @@ async function renderMempool(): Promise<void> {
     return;
   }
 
-  const mempoolSenders = await Promise.all(txs.map(senderAddress));
   html += `<p class="text-text-muted text-sm mb-4">${txs.length} pending transaction${txs.length !== 1 ? 's' : ''}</p>`;
   html += `<div class="space-y-3">`;
-  for (let i = 0; i < txs.length; i++) {
-    const tx = txs[i];
-    const amount = transferAmount(tx, mempoolSenders[i]);
+  for (const tx of txs) {
+    const amount = transferAmount(tx, tx.sender);
     html += `<div class="bg-surface rounded-lg glow-border p-4 flex items-center justify-between">
       <div class="flex items-center gap-3">
         ${txTypeBadge(tx)}
@@ -753,8 +755,6 @@ async function dispatch(): Promise<void> {
   switch (route.view) {
     case 'mempool':
       await renderDashboard();
-      // Auto-refresh every 5 seconds
-      refreshTimer = setInterval(() => renderDashboard(), 5000);
       break;
     case 'dashboard':
       // #/ alone → show landing

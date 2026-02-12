@@ -21,6 +21,7 @@ export interface BtcAddressBalance {
 export interface BtcSnapshot {
   btcBlockHeight: number  // Bitcoin block height at snapshot
   btcBlockHash: string    // Bitcoin block hash at snapshot
+  btcTimestamp: number     // Bitcoin block timestamp (unix seconds)
   entries: BtcAddressBalance[]
   merkleRoot: string      // commitment hash over all entries
 }
@@ -126,6 +127,7 @@ export function createMockSnapshot(): {
   const snapshot: BtcSnapshot = {
     btcBlockHeight: 850_000,
     btcBlockHash: doubleSha256Hex(new TextEncoder().encode('mock-btc-block-850000')),
+    btcTimestamp: Math.floor(Date.now() / 1000),
     entries,
     merkleRoot,
   }

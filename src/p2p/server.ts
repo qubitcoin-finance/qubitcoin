@@ -198,12 +198,14 @@ export class P2PServer {
   }
 
   getPeers(): Array<{ id: string; address: string; inbound: boolean; height: number }> {
-    return Array.from(this.peers.values()).map((p) => ({
-      id: p.id,
-      address: p.address,
-      inbound: p.inbound,
-      height: p.remoteHeight,
-    }))
+    return Array.from(this.peers.values())
+      .filter((p) => p.handshakeComplete)
+      .map((p) => ({
+        id: p.id,
+        address: p.address,
+        inbound: p.inbound,
+        height: p.remoteHeight,
+      }))
   }
 
   private handleInbound(socket: net.Socket): void {
@@ -442,7 +444,6 @@ export class P2PServer {
       } else {
         log.warn({ component: 'p2p', peer: peer.id, height: block.height, hash: block.hash?.slice(0, 16), error: result.error }, 'Rejected block from peer')
         peer.send({ type: 'reject', payload: { reason: `block ${block.height} rejected: ${result.error}` } as RejectPayload })
-        peer.addMisbehavior(5)
       }
     }
 
@@ -491,7 +492,6 @@ export class P2PServer {
       })
     } else {
       log.warn({ component: 'p2p', peer: peer.id, txid: tx.id?.slice(0, 16), error: result.error }, 'Rejected tx from peer')
-      peer.addMisbehavior(2)
     }
   }
 

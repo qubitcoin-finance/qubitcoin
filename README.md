@@ -39,15 +39,17 @@ Running
 -------
 
 ```bash
-# Start a full node with mining enabled
-pnpm run qtcd
+# Easiest way: auto-download the BTC snapshot and start mining
+pnpm run qtcd -- --mine --full
 
-# Start with a BTC snapshot for claim support
-pnpm run qtcd -- --snapshot /path/to/qtc-snapshot.jsonl
+# With a local snapshot
+pnpm run qtcd -- --mine --snapshot /path/to/qtc-snapshot.jsonl
 
-# Join the network (qubitcoin.finance is the default seed)
-pnpm run qtcd
+# Without mining (relay-only node)
+pnpm run qtcd -- --full
 ```
+
+The `--full` flag automatically downloads the 2.4 GB BTC snapshot from `qubitcoin.finance` on first run (saved to `<datadir>/qtc-snapshot.jsonl`). Subsequent starts skip the download. The default seed node is `qubitcoin.finance:6001`.
 
 ### qtcd CLI options
 
@@ -58,6 +60,7 @@ pnpm run qtcd
 --datadir <path>        Data directory (default data/node)
 --seeds <host:port,...> Comma-separated seed peers (default qubitcoin.finance:6001)
 --mine                  Enable mining
+--full                  Auto-download snapshot if missing, then start as full node
 --simulate              Dev mode: easy difficulty, fake transactions
 ```
 

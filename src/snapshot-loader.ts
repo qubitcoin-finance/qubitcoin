@@ -14,6 +14,7 @@ export async function loadSnapshot(filePath: string): Promise<BtcSnapshot> {
   let merkleRoot = ''
   let btcBlockHash = ''
   let btcBlockHeight = 0
+  let btcTimestamp = 0
   let isFirstLine = true
 
   const rl = readline.createInterface({
@@ -32,6 +33,7 @@ export async function loadSnapshot(filePath: string): Promise<BtcSnapshot> {
         merkleRoot = raw.merkleRoot
         btcBlockHash = raw.hash || ''
         btcBlockHeight = raw.height || 0
+        btcTimestamp = raw.timestamp || 0
         continue
       }
       // No header — treat as a regular entry
@@ -55,6 +57,7 @@ export async function loadSnapshot(filePath: string): Promise<BtcSnapshot> {
   return {
     btcBlockHeight,
     btcBlockHash,
+    btcTimestamp,
     entries,
     merkleRoot,
   }
