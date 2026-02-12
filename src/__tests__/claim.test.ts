@@ -5,7 +5,8 @@ import {
   serializeClaimMessage,
 } from '../claim.js'
 import { createMockSnapshot } from '../snapshot.js'
-import { generateWallet, generateBtcKeypair, bytesToHex, hash160, deriveP2shP2wpkhAddress } from '../crypto.js'
+import { generateWallet, generateBtcKeypair, bytesToHex, hash160, deriveP2shP2wpkhAddress, getSchnorrPublicKey, deriveP2trAddress } from '../crypto.js'
+import { secp256k1 } from '@noble/curves/secp256k1.js'
 import { isClaimTransaction, CLAIM_TXID } from '../transaction.js'
 import { Blockchain } from '../chain.js'
 import { createCoinbaseTransaction, createTransaction, utxoKey } from '../transaction.js'
@@ -366,5 +367,148 @@ describe('P2SH-P2WPKH claims', () => {
 
     expect(chain.getBalance(recipient.address)).toBe(50)
     expect(chain.getBalance(qtcWallet.address)).toBe(p2shHolder.amount - 50 - 1)
+  })
+})
+
+describe('P2TR (Taproot) claims', () => {
+  it('deriveP2trAddress produces correct 64-char hex different from internal key', () => {
+    const sk = secp256k1.utils.randomSecretKey()
+    const internalPubkey = getSchnorrPublicKey(sk)
+    const addr = deriveP2trAddress(internalPubkey)
+    expect(addr).toHaveLength(64)
+    expect(/^[0-9a-f]{64}$/.test(addr)).toBe(true)
+    // Tweaked key must differ from internal key
+    expect(addr).not.toBe(bytesToHex(internalPubkey))
+  })
+
+  it('creates and verifies a P2TR claim', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const p2trHolder = holders.find(h => h.type === 'p2tr')!
+    expect(p2trHolder).toBeDefined()
+
+    const p2trEntry = snapshot.entries.find(e => e.type === 'p2tr')!
+    expect(p2trEntry).toBeDefined()
+
+    const qtcWallet = qtcWalletA
+    const tx = createClaimTransaction(
+      p2trHolder.secretKey,
+      p2trHolder.publicKey,
+      p2trEntry,
+      qtcWallet,
+      snapshot.btcBlockHash
+    )
+
+    // Check P2TR claim structure
+    expect(tx.claimData!.schnorrPublicKey).toBeDefined()
+    expect(tx.claimData!.schnorrPublicKey!.length).toBe(32)
+    expect(tx.claimData!.schnorrSignature).toBeDefined()
+    expect(tx.claimData!.schnorrSignature!.length).toBe(64)
+    expect(tx.claimData!.ecdsaPublicKey.length).toBe(0)
+    expect(tx.claimData!.ecdsaSignature.length).toBe(0)
+
+    const result = verifyClaimProof(tx, snapshot)
+    expect(result.valid).toBe(true)
+  })
+
+  it('rejects wrong key for P2TR claim', () => {
+    const { snapshot } = createMockSnapshot()
+    const p2trEntry = snapshot.entries.find(e => e.type === 'p2tr')!
+    const wrongSk = secp256k1.utils.randomSecretKey()
+    const wrongPubkey = getSchnorrPublicKey(wrongSk)
+    const qtcWallet = qtcWalletA
+
+    const tx = createClaimTransaction(
+      wrongSk,
+      wrongPubkey,
+      p2trEntry,
+      qtcWallet,
+      snapshot.btcBlockHash
+    )
+
+    const result = verifyClaimProof(tx, snapshot)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('does not match P2TR address')
+  })
+
+  it('P2PKH key cannot claim P2TR address', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const p2pkhHolder = holders[0]
+    const p2trEntry = snapshot.entries.find(e => e.type === 'p2tr')!
+    const qtcWallet = qtcWalletA
+
+    // P2PKH holder's compressed key (33 bytes) gets used as schnorrPublicKey via P2TR path.
+    // Verification rejects because schnorrPublicKey must be exactly 32 bytes.
+    const tx = createClaimTransaction(
+      p2pkhHolder.secretKey,
+      p2pkhHolder.publicKey, // 33-byte compressed key, not 32-byte x-only
+      p2trEntry,
+      qtcWallet,
+      snapshot.btcBlockHash
+    )
+
+    const result = verifyClaimProof(tx, snapshot)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('Schnorr public key')
+  })
+
+  it('P2TR key cannot claim P2PKH address', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const p2trHolder = holders.find(h => h.type === 'p2tr')!
+    const p2pkhEntry = snapshot.entries[0]
+    const qtcWallet = qtcWalletA
+
+    // P2TR holder tries to claim a P2PKH entry - entry.type is undefined, so ECDSA path
+    // But the publicKey is 32-byte x-only, not 33-byte compressed - HASH160 won't match
+    const tx = createClaimTransaction(
+      p2trHolder.secretKey,
+      p2trHolder.publicKey,
+      p2pkhEntry,
+      qtcWallet,
+      snapshot.btcBlockHash
+    )
+
+    const result = verifyClaimProof(tx, snapshot)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('does not match BTC address')
+  })
+
+  it('end-to-end: P2TR claim → mine → spend', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const chain = new Blockchain(snapshot)
+    const qtcWallet = qtcWalletA
+    const recipient = qtcWalletB
+
+    const p2trHolder = holders.find(h => h.type === 'p2tr')!
+    const p2trEntry = snapshot.entries.find(e => e.type === 'p2tr')!
+
+    // Claim
+    const claimTx = createClaimTransaction(
+      p2trHolder.secretKey,
+      p2trHolder.publicKey,
+      p2trEntry,
+      qtcWallet,
+      snapshot.btcBlockHash
+    )
+    const block1 = mineOnChain(chain, 'f'.repeat(64), [claimTx])
+    const addResult = chain.addBlock(block1)
+    expect(addResult.success).toBe(true)
+    expect(chain.getBalance(qtcWallet.address)).toBe(p2trHolder.amount)
+
+    // Spend claimed coins
+    const utxos = chain.findUTXOs(qtcWallet.address)
+    expect(utxos.length).toBe(1)
+
+    const spendTx = createTransaction(
+      qtcWallet,
+      utxos,
+      [{ address: recipient.address, amount: 100 }],
+      1
+    )
+    const block2 = mineOnChain(chain, 'f'.repeat(64), [spendTx])
+    const addResult2 = chain.addBlock(block2)
+    expect(addResult2.success).toBe(true)
+
+    expect(chain.getBalance(recipient.address)).toBe(100)
+    expect(chain.getBalance(qtcWallet.address)).toBe(p2trHolder.amount - 100 - 1)
   })
 })

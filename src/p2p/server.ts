@@ -41,7 +41,7 @@ const SEED_RECONNECT_DELAY_MS = 5_000
 
 /** Known Uint8Array fields that need deserialization from P2P messages */
 const TX_INPUT_BINARY_FIELDS = ['publicKey', 'signature'] as const
-const CLAIM_DATA_BINARY_FIELDS = ['ecdsaPublicKey', 'ecdsaSignature'] as const
+const CLAIM_DATA_BINARY_FIELDS = ['ecdsaPublicKey', 'ecdsaSignature', 'schnorrPublicKey', 'schnorrSignature'] as const
 
 function deserializeTransaction(raw: Record<string, unknown>): Transaction {
   const tx = raw as unknown as Transaction

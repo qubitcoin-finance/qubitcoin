@@ -43,7 +43,7 @@ export async function loadSnapshot(filePath: string): Promise<BtcSnapshot> {
     entries.push({
       btcAddress: raw.a,
       amount: raw.b,
-      ...(raw.t === 'p2sh' ? { type: 'p2sh' as const } : {}),
+      ...(raw.t === 'p2sh' ? { type: 'p2sh' as const } : raw.t === 'p2tr' ? { type: 'p2tr' as const } : {}),
     })
   }
 

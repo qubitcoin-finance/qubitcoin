@@ -14,7 +14,7 @@
 import * as readline from 'node:readline'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { generateWallet, hash160, deriveP2shP2wpkhAddress, bytesToHex, hexToBytes } from '../crypto.js'
+import { generateWallet, hash160, deriveP2shP2wpkhAddress, getSchnorrPublicKey, deriveP2trAddress, bytesToHex, hexToBytes } from '../crypto.js'
 import { createClaimTransaction } from '../claim.js'
 import { sanitize } from '../rpc.js'
 import { secp256k1 } from '@noble/curves/secp256k1.js'
@@ -76,18 +76,28 @@ function deriveFromSeed(mnemonic: string): DerivedKey[] {
     { path: "m/49'/0'/0'/0/0", label: 'BIP49 P2SH-P2WPKH (wrapped segwit, address starts with 3)' },
     { path: "m/49'/0'/0'/0/1", label: 'BIP49 P2SH-P2WPKH index 1' },
     { path: "m/49'/0'/0'/0/2", label: 'BIP49 P2SH-P2WPKH index 2' },
+    { path: "m/86'/0'/0'/0/0", label: 'BIP86 P2TR (taproot, address starts with bc1p)' },
+    { path: "m/86'/0'/0'/0/1", label: 'BIP86 P2TR index 1' },
+    { path: "m/86'/0'/0'/0/2", label: 'BIP86 P2TR index 2' },
   ]
   const results: DerivedKey[] = []
   for (const { path, label } of paths) {
     const child = master.derive(path)
     if (!child.privateKey) continue
     const secretKey = child.privateKey
-    const publicKey = secp256k1.getPublicKey(secretKey, true)
-    // BIP49 paths use P2SH-P2WPKH address derivation
-    const address = path.startsWith("m/49'")
-      ? deriveP2shP2wpkhAddress(publicKey)
-      : bytesToHex(hash160(publicKey))
-    results.push({ path, label, secretKey, publicKey, address })
+    if (path.startsWith("m/86'")) {
+      // BIP86 P2TR: use x-only Schnorr pubkey + Taproot tweaked address
+      const publicKey = getSchnorrPublicKey(secretKey)
+      const address = deriveP2trAddress(publicKey)
+      results.push({ path, label, secretKey, publicKey, address })
+    } else {
+      const publicKey = secp256k1.getPublicKey(secretKey, true)
+      // BIP49 paths use P2SH-P2WPKH address derivation
+      const address = path.startsWith("m/49'")
+        ? deriveP2shP2wpkhAddress(publicKey)
+        : bytesToHex(hash160(publicKey))
+      results.push({ path, label, secretKey, publicKey, address })
+    }
   }
   return results
 }
@@ -163,15 +173,22 @@ async function resolveBtcCredentials(rl: readline.Interface): Promise<{ secretKe
   const publicKey = secp256k1.getPublicKey(secretKey, true)
   const keyhashAddr = bytesToHex(hash160(publicKey))
   const p2shAddr = deriveP2shP2wpkhAddress(publicKey)
+  const schnorrPubkey = getSchnorrPublicKey(secretKey)
+  const p2trAddr = deriveP2trAddress(schnorrPubkey)
   console.log(`\n  ✓ ${format === 'wif' ? 'WIF' : 'Hex'} key parsed`)
   console.log(`  P2PKH/P2WPKH address: ${keyhashAddr}`)
   console.log(`  P2SH-P2WPKH address:  ${p2shAddr}`)
+  console.log(`  P2TR address:         ${p2trAddr}`)
   console.log()
   console.log(`  Which address type do you want to claim?`)
   console.log(`    [1] P2PKH / P2WPKH (HASH160 of pubkey)`)
   console.log(`    [2] P2SH-P2WPKH (wrapped segwit, address starts with 3)`)
+  console.log(`    [3] P2TR (taproot, address starts with bc1p)`)
   console.log()
-  const choice = await ask(rl, '  Select [1-2] (default 1): ')
+  const choice = await ask(rl, '  Select [1-3] (default 1): ')
+  if (choice.trim() === '3') {
+    return { secretKey, publicKey: schnorrPubkey, address: p2trAddr }
+  }
   const address = choice.trim() === '2' ? p2shAddr : keyhashAddr
   return { secretKey, publicKey, address }
 }

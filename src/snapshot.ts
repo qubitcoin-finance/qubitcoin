@@ -10,15 +10,18 @@ import {
   hash160,
   generateBtcKeypair,
   deriveP2shP2wpkhAddress,
+  getSchnorrPublicKey,
+  deriveP2trAddress,
   doubleSha256Hex,
   bytesToHex,
   concatBytes,
 } from './crypto.js'
+import { secp256k1 } from '@noble/curves/secp256k1.js'
 
 export interface BtcAddressBalance {
-  btcAddress: string  // 40-char hex HASH160(compressed pubkey) or HASH160(redeemScript) for P2SH
+  btcAddress: string  // 40-char hex HASH160(compressed pubkey), HASH160(redeemScript) for P2SH, or 64-char hex tweaked key for P2TR
   amount: number      // total satoshis for this address
-  type?: 'p2sh'       // absent = P2PKH/P2WPKH (keyhash), 'p2sh' = P2SH-P2WPKH
+  type?: 'p2sh' | 'p2tr'  // absent = P2PKH/P2WPKH (keyhash), 'p2sh' = P2SH-P2WPKH, 'p2tr' = Taproot
 }
 
 export interface BtcSnapshot {
@@ -103,12 +106,13 @@ export function createMockSnapshot(): {
 } {
   const holderAmounts = [100, 250, 50, 500, 75] // BTC amounts for 5 P2PKH/P2WPKH holders
   const p2shAmounts = [200] // BTC amounts for P2SH-P2WPKH holders
+  const p2trAmounts = [300] // BTC amounts for P2TR (Taproot) holders
   const holders: Array<{
     secretKey: Uint8Array
     publicKey: Uint8Array
     address: string
     amount: number
-    type?: 'p2sh'
+    type?: 'p2sh' | 'p2tr'
   }> = []
   const entries: BtcAddressBalance[] = []
 
@@ -144,6 +148,26 @@ export function createMockSnapshot(): {
       btcAddress: address,
       amount: p2shAmounts[i],
       type: 'p2sh',
+    })
+  }
+
+  // Add P2TR (Taproot) holders
+  for (let i = 0; i < p2trAmounts.length; i++) {
+    const secretKey = secp256k1.utils.randomSecretKey()
+    const internalPubkey = getSchnorrPublicKey(secretKey)
+    const address = deriveP2trAddress(internalPubkey)
+    holders.push({
+      secretKey,
+      publicKey: internalPubkey, // 32-byte x-only for P2TR
+      address,
+      amount: p2trAmounts[i],
+      type: 'p2tr',
+    })
+
+    entries.push({
+      btcAddress: address,
+      amount: p2trAmounts[i],
+      type: 'p2tr',
     })
   }
 

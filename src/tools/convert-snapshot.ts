@@ -61,8 +61,8 @@ const DEFAULT_WORKDIR = join(HOME, 'qtc-work')
 const DEFAULT_OUTPUT = join(HOME, 'qtc-snapshot.jsonl')
 
 interface ExtractArgs { command: 'extract'; input: string; workdir: string }
-interface AggregateArgs { command: 'aggregate'; workdir: string; output: string; gzip: boolean }
-interface FullArgs { command: 'full'; input: string; workdir: string; output: string; gzip: boolean }
+interface AggregateArgs { command: 'aggregate'; workdir: string; output: string; gzip: boolean; force: boolean }
+interface FullArgs { command: 'full'; input: string; workdir: string; output: string; gzip: boolean; force: boolean }
 
 type Args = ExtractArgs | AggregateArgs | FullArgs
 
@@ -75,6 +75,7 @@ function parseArgs(): Args {
   let output = ''
   let workdir = ''
   let gzip = false
+  let force = false
 
   // Find subcommand (first arg that isn't a flag)
   let subcommand = ''
@@ -86,13 +87,14 @@ function parseArgs(): Args {
     else if (args[i] === '--output' && args[i + 1]) output = args[++i]
     else if (args[i] === '--workdir' && args[i + 1]) workdir = args[++i]
     else if (args[i] === '--gzip') gzip = true
+    else if (args[i] === '--force') force = true
   }
 
   if (subcommand === 'extract') {
     return { command: 'extract', input: input || DEFAULT_INPUT, workdir: workdir || DEFAULT_WORKDIR }
   }
   if (subcommand === 'aggregate') {
-    return { command: 'aggregate', workdir: workdir || DEFAULT_WORKDIR, output: output || DEFAULT_OUTPUT, gzip }
+    return { command: 'aggregate', workdir: workdir || DEFAULT_WORKDIR, output: output || DEFAULT_OUTPUT, gzip, force }
   }
 
   // Default: full pipeline (extract + aggregate)
@@ -102,6 +104,7 @@ function parseArgs(): Args {
     workdir: workdir || DEFAULT_WORKDIR,
     output: output || DEFAULT_OUTPUT,
     gzip,
+    force,
   }
 }
 
@@ -205,8 +208,8 @@ async function runExtract(input: string, workdir: string) {
       }
     }, resumeFrom)) {
 
-      // Include P2PKH, P2WPKH, and P2SH (P2SH-P2WPKH single-signer)
-      if (coin.scriptType === 'p2pkh' || coin.scriptType === 'p2wpkh' || coin.scriptType === 'p2sh') {
+      // Include P2PKH, P2WPKH, P2SH (P2SH-P2WPKH single-signer), and P2TR (Taproot)
+      if (coin.scriptType === 'p2pkh' || coin.scriptType === 'p2wpkh' || coin.scriptType === 'p2sh' || coin.scriptType === 'p2tr') {
         const line = JSON.stringify({
           a: coin.addressHash,
           b: coin.amount.toString(),
@@ -327,6 +330,7 @@ async function aggregateCoins(workdir: string) {
   let p2pkhCount = 0n
   let p2wpkhCount = 0n
   let p2shCount = 0n
+  let p2trCount = 0n
 
   let currentAddr = ''
   let currentBalance = 0n
@@ -336,6 +340,7 @@ async function aggregateCoins(workdir: string) {
     if (!currentAddr) return
     const obj: Record<string, string> = { a: currentAddr, b: currentBalance.toString() }
     if (currentType === 'p2sh') obj.t = 'p2sh'
+    else if (currentType === 'p2tr') obj.t = 'p2tr'
     const line = JSON.stringify(obj) + '\n'
     writeSync(fd, line)
     addressCount++
@@ -365,6 +370,7 @@ async function aggregateCoins(workdir: string) {
 
       if (entry.t === 'p2pkh') p2pkhCount++
       else if (entry.t === 'p2sh') p2shCount++
+      else if (entry.t === 'p2tr') p2trCount++
       else p2wpkhCount++
 
       if (totalCoins % 5_000_000n === 0n) {
@@ -388,6 +394,7 @@ async function aggregateCoins(workdir: string) {
     p2pkhCoins: p2pkhCount.toString(),
     p2wpkhCoins: p2wpkhCount.toString(),
     p2shCoins: p2shCount.toString(),
+    p2trCoins: p2trCount.toString(),
     totalCoins: totalCoins.toString(),
     totalClaimableSats: totalClaimableValue.toString(),
   }
@@ -399,6 +406,7 @@ async function aggregateCoins(workdir: string) {
   console.log(`  P2PKH coins:        ${p2pkhCount.toLocaleString()}`)
   console.log(`  P2WPKH coins:       ${p2wpkhCount.toLocaleString()}`)
   console.log(`  P2SH coins:         ${p2shCount.toLocaleString()}`)
+  console.log(`  P2TR coins:         ${p2trCount.toLocaleString()}`)
   console.log(`  Unique addresses:   ${addressCount.toLocaleString()}`)
   console.log(`  Total claimable:    ${(Number(totalClaimableValue) / 1e8).toFixed(2)} BTC`)
   console.log()
@@ -461,6 +469,7 @@ async function finalizeSnapshot(workdir: string, output: string, gzip: boolean) 
     p2pkhCoins: Number(balancesMeta.p2pkhCoins),
     p2wpkhCoins: Number(balancesMeta.p2wpkhCoins),
     p2shCoins: Number(balancesMeta.p2shCoins || '0'),
+    p2trCoins: Number(balancesMeta.p2trCoins || '0'),
     totalClaimableSats: balancesMeta.totalClaimableSats,
   })
 
@@ -474,7 +483,7 @@ async function finalizeSnapshot(workdir: string, output: string, gzip: boolean) 
     for await (const line of rl2) {
       if (!line) continue
       const entry = JSON.parse(line) as { a: string; b: string; t?: string }
-      yield JSON.stringify({ a: entry.a, b: Number(entry.b), ...(entry.t === 'p2sh' ? { t: 'p2sh' } : {}) }) + '\n'
+      yield JSON.stringify({ a: entry.a, b: Number(entry.b), ...(entry.t ? { t: entry.t } : {}) }) + '\n'
     }
   }
 
@@ -516,6 +525,18 @@ async function runAggregate(workdir: string, output: string, gzip: boolean) {
 
 // --- Main ---
 
+function guardOutputExists(output: string, force: boolean) {
+  if (!existsSync(output)) return
+  if (force) {
+    console.log(`Removing existing snapshot: ${output}`)
+    unlinkSync(output)
+    return
+  }
+  console.error(`ERROR: Output file already exists: ${output}`)
+  console.error(`  Use --force to overwrite.`)
+  process.exit(1)
+}
+
 async function main() {
   const args = parseArgs()
 
@@ -524,9 +545,11 @@ async function main() {
       await runExtract(args.input, args.workdir)
       break
     case 'aggregate':
+      guardOutputExists(args.output, args.force)
       await runAggregate(args.workdir, args.output, args.gzip)
       break
     case 'full': {
+      guardOutputExists(args.output, args.force)
       console.log('Running full pipeline (extract + aggregate)...')
       console.log(`  Input:   ${args.input}`)
       console.log(`  Workdir: ${args.workdir}`)

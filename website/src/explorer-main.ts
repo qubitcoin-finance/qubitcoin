@@ -154,10 +154,22 @@ function formatDuration(ms: number): string {
   return `${mins}m ${remSecs}s`;
 }
 
-function blockEta(lastBlockTime: number, targetBlockTime: number): string {
-  const eta = lastBlockTime + targetBlockTime - Date.now();
-  // PoW is memoryless — if overdue, expected wait is still the target
-  const remaining = eta > 0 ? eta : targetBlockTime;
+/** Estimate avg block interval from recent blocks (newest-first). Falls back to targetBlockTime. */
+function avgBlockInterval(blocks: Block[] | null, targetBlockTime: number): number {
+  if (!blocks || blocks.length < 2) return targetBlockTime;
+  // blocks are newest-first; timestamps are in ms
+  const timestamps = blocks.map(b => b.header.timestamp);
+  const intervals: number[] = [];
+  for (let i = 0; i < timestamps.length - 1; i++) {
+    intervals.push(timestamps[i] - timestamps[i + 1]);
+  }
+  return intervals.reduce((a, b) => a + b, 0) / intervals.length;
+}
+
+function blockEta(lastBlockTime: number, avgInterval: number): string {
+  const eta = lastBlockTime + avgInterval - Date.now();
+  // PoW is memoryless — if overdue, expected wait is still the average
+  const remaining = eta > 0 ? eta : avgInterval;
   const mins = Math.floor(remaining / 60000);
   const secs = Math.floor((remaining % 60000) / 1000);
   if (mins > 0) return `~${mins}m ${secs}s`;
@@ -358,7 +370,7 @@ async function renderDashboard(): Promise<void> {
     card('Hashrate', formatHashrate(status.hashrate)),
     card('Difficulty', formatDifficulty(status.difficulty)),
     card('Avg Block Time', formatDuration(status.avgBlockTime)),
-    card('Next Block', blockEta(status.lastBlockTime, status.targetBlockTime)),
+    card('Next Block', blockEta(status.lastBlockTime, avgBlockInterval(blocks, status.targetBlockTime))),
     card('Peers', status.peers),
     card('Block Reward', status.blockReward + ' QTC'),
     card('Total Txs', status.totalTxs),

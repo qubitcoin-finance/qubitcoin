@@ -7,7 +7,7 @@ import { ml_dsa65 } from '@noble/post-quantum/ml-dsa.js'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { ripemd160 } from '@noble/hashes/legacy.js'
 import { bytesToHex, concatBytes } from '@noble/hashes/utils.js'
-import { secp256k1 } from '@noble/curves/secp256k1.js'
+import { secp256k1, schnorr } from '@noble/curves/secp256k1.js'
 
 export interface Wallet {
   publicKey: Uint8Array  // 1,952 bytes (ML-DSA-65)
@@ -102,6 +102,45 @@ export function verifyEcdsaSignature(
   publicKey: Uint8Array
 ): boolean {
   return secp256k1.verify(signature, msgHash, publicKey)
+}
+
+/** Sign a message hash with Schnorr (BIP340) */
+export function schnorrSign(msgHash: Uint8Array, secretKey: Uint8Array): Uint8Array {
+  return schnorr.sign(msgHash, secretKey)
+}
+
+/** Verify a Schnorr (BIP340) signature */
+export function verifySchnorrSignature(
+  signature: Uint8Array,
+  msgHash: Uint8Array,
+  publicKey: Uint8Array
+): boolean {
+  return schnorr.verify(signature, msgHash, publicKey)
+}
+
+/** Get 32-byte x-only public key for Schnorr/Taproot */
+export function getSchnorrPublicKey(secretKey: Uint8Array): Uint8Array {
+  return schnorr.getPublicKey(secretKey)
+}
+
+/**
+ * Compute Taproot output key Q from internal pubkey P (BIP341, BIP86 key-path).
+ * Q = P + taggedHash("TapTweak", P) * G
+ * Returns 32-byte x-only tweaked key.
+ */
+export function computeTaprootOutputKey(internalPubkey: Uint8Array): Uint8Array {
+  const tweak = schnorr.utils.taggedHash('TapTweak', internalPubkey)
+  const xBig = BigInt('0x' + bytesToHex(internalPubkey))
+  const P = schnorr.utils.lift_x(xBig)
+  const tBig = BigInt('0x' + bytesToHex(tweak))
+  const tG = schnorr.Point.BASE.multiply(tBig)
+  const Q = P.add(tG)
+  return schnorr.utils.pointToBytes(Q)
+}
+
+/** Derive P2TR address: hex of tweaked output key Q */
+export function deriveP2trAddress(internalPubkey: Uint8Array): string {
+  return bytesToHex(computeTaprootOutputKey(internalPubkey))
 }
 
 export { bytesToHex, concatBytes }

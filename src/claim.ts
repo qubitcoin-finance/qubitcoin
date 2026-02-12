@@ -8,6 +8,9 @@ import {
   doubleSha256,
   ecdsaSign,
   verifyEcdsaSignature,
+  schnorrSign,
+  verifySchnorrSignature,
+  computeTaprootOutputKey,
   hash160,
   deriveP2shP2wpkhAddress,
   bytesToHex,
@@ -48,19 +51,34 @@ export function createClaimTransaction(
   qcoinWallet: Wallet,
   snapshotBlockHash: string
 ): Transaction {
-  // Sign the claim message with ECDSA
   const claimMsgHash = serializeClaimMessage(
     entry.btcAddress,
     qcoinWallet.address,
     snapshotBlockHash
   )
-  const ecdsaSig = ecdsaSign(claimMsgHash, btcSecretKey)
 
-  const claimData: ClaimData = {
-    btcAddress: entry.btcAddress,
-    ecdsaPublicKey: btcPubKey,
-    ecdsaSignature: ecdsaSig,
-    qcoinAddress: qcoinWallet.address,
+  let claimData: ClaimData
+
+  if (entry.type === 'p2tr') {
+    // P2TR: sign with Schnorr (BIP340), btcPubKey is 32-byte x-only internal key
+    const schnorrSig = schnorrSign(claimMsgHash, btcSecretKey)
+    claimData = {
+      btcAddress: entry.btcAddress,
+      ecdsaPublicKey: new Uint8Array(0),
+      ecdsaSignature: new Uint8Array(0),
+      qcoinAddress: qcoinWallet.address,
+      schnorrPublicKey: btcPubKey,
+      schnorrSignature: schnorrSig,
+    }
+  } else {
+    // P2PKH / P2WPKH / P2SH-P2WPKH: sign with ECDSA
+    const ecdsaSig = ecdsaSign(claimMsgHash, btcSecretKey)
+    claimData = {
+      btcAddress: entry.btcAddress,
+      ecdsaPublicKey: btcPubKey,
+      ecdsaSignature: ecdsaSig,
+      qcoinAddress: qcoinWallet.address,
+    }
   }
 
   const timestamp = Date.now()
@@ -116,10 +134,36 @@ export function verifyClaimProof(
     }
   }
 
-  // Verify public key matches the claimed address
-  // P2SH-P2WPKH: HASH160(0x0014 || HASH160(pubkey)) === btcAddress
-  // P2PKH/P2WPKH: HASH160(pubkey) === btcAddress
-  if (entry.type === 'p2sh') {
+  const claimMsgHash = serializeClaimMessage(
+    claim.btcAddress,
+    claim.qcoinAddress,
+    snapshot.btcBlockHash
+  )
+
+  if (entry.type === 'p2tr') {
+    // P2TR: verify Schnorr signature against internal key, check tweaked key matches address
+    if (!claim.schnorrPublicKey || claim.schnorrPublicKey.length !== 32) {
+      return { valid: false, error: 'P2TR claim missing 32-byte Schnorr public key' }
+    }
+    if (!claim.schnorrSignature || claim.schnorrSignature.length !== 64) {
+      return { valid: false, error: 'P2TR claim missing 64-byte Schnorr signature' }
+    }
+
+    // Compute tweaked output key Q from internal key P, check it matches snapshot address
+    const derivedAddress = bytesToHex(computeTaprootOutputKey(claim.schnorrPublicKey))
+    if (derivedAddress !== claim.btcAddress) {
+      return {
+        valid: false,
+        error: 'Schnorr public key does not match P2TR address in snapshot',
+      }
+    }
+
+    // Verify Schnorr signature against internal key
+    if (!verifySchnorrSignature(claim.schnorrSignature, claimMsgHash, claim.schnorrPublicKey)) {
+      return { valid: false, error: 'Invalid Schnorr signature' }
+    }
+  } else if (entry.type === 'p2sh') {
+    // P2SH-P2WPKH: HASH160(0x0014 || HASH160(pubkey)) === btcAddress
     const derivedAddress = deriveP2shP2wpkhAddress(claim.ecdsaPublicKey)
     if (derivedAddress !== claim.btcAddress) {
       return {
@@ -127,7 +171,12 @@ export function verifyClaimProof(
         error: 'ECDSA public key does not match P2SH-P2WPKH address in snapshot',
       }
     }
+
+    if (!verifyEcdsaSignature(claim.ecdsaSignature, claimMsgHash, claim.ecdsaPublicKey)) {
+      return { valid: false, error: 'Invalid ECDSA signature' }
+    }
   } else {
+    // P2PKH/P2WPKH: HASH160(pubkey) === btcAddress
     const derivedAddress = bytesToHex(hash160(claim.ecdsaPublicKey))
     if (derivedAddress !== claim.btcAddress) {
       return {
@@ -135,16 +184,10 @@ export function verifyClaimProof(
         error: 'ECDSA public key does not match BTC address in snapshot',
       }
     }
-  }
 
-  // Verify ECDSA signature
-  const claimMsgHash = serializeClaimMessage(
-    claim.btcAddress,
-    claim.qcoinAddress,
-    snapshot.btcBlockHash
-  )
-  if (!verifyEcdsaSignature(claim.ecdsaSignature, claimMsgHash, claim.ecdsaPublicKey)) {
-    return { valid: false, error: 'Invalid ECDSA signature' }
+    if (!verifyEcdsaSignature(claim.ecdsaSignature, claimMsgHash, claim.ecdsaPublicKey)) {
+      return { valid: false, error: 'Invalid ECDSA signature' }
+    }
   }
 
   // Verify output amount matches snapshot
