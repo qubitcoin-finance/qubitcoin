@@ -14,7 +14,7 @@
 import * as readline from 'node:readline'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { generateWallet, hash160, bytesToHex, hexToBytes } from '../crypto.js'
+import { generateWallet, hash160, deriveP2shP2wpkhAddress, bytesToHex, hexToBytes } from '../crypto.js'
 import { createClaimTransaction } from '../claim.js'
 import { sanitize } from '../rpc.js'
 import { secp256k1 } from '@noble/curves/secp256k1.js'
@@ -73,6 +73,9 @@ function deriveFromSeed(mnemonic: string): DerivedKey[] {
     { path: "m/84'/0'/0'/0/0", label: 'BIP84 P2WPKH (native segwit, address starts with bc1q)' },
     { path: "m/84'/0'/0'/0/1", label: 'BIP84 P2WPKH index 1' },
     { path: "m/84'/0'/0'/0/2", label: 'BIP84 P2WPKH index 2' },
+    { path: "m/49'/0'/0'/0/0", label: 'BIP49 P2SH-P2WPKH (wrapped segwit, address starts with 3)' },
+    { path: "m/49'/0'/0'/0/1", label: 'BIP49 P2SH-P2WPKH index 1' },
+    { path: "m/49'/0'/0'/0/2", label: 'BIP49 P2SH-P2WPKH index 2' },
   ]
   const results: DerivedKey[] = []
   for (const { path, label } of paths) {
@@ -80,7 +83,10 @@ function deriveFromSeed(mnemonic: string): DerivedKey[] {
     if (!child.privateKey) continue
     const secretKey = child.privateKey
     const publicKey = secp256k1.getPublicKey(secretKey, true)
-    const address = bytesToHex(hash160(publicKey))
+    // BIP49 paths use P2SH-P2WPKH address derivation
+    const address = path.startsWith("m/49'")
+      ? deriveP2shP2wpkhAddress(publicKey)
+      : bytesToHex(hash160(publicKey))
     results.push({ path, label, secretKey, publicKey, address })
   }
   return results
@@ -155,8 +161,18 @@ async function resolveBtcCredentials(rl: readline.Interface): Promise<{ secretKe
     process.exit(1)
   }
   const publicKey = secp256k1.getPublicKey(secretKey, true)
-  const address = bytesToHex(hash160(publicKey))
+  const keyhashAddr = bytesToHex(hash160(publicKey))
+  const p2shAddr = deriveP2shP2wpkhAddress(publicKey)
   console.log(`\n  ✓ ${format === 'wif' ? 'WIF' : 'Hex'} key parsed`)
+  console.log(`  P2PKH/P2WPKH address: ${keyhashAddr}`)
+  console.log(`  P2SH-P2WPKH address:  ${p2shAddr}`)
+  console.log()
+  console.log(`  Which address type do you want to claim?`)
+  console.log(`    [1] P2PKH / P2WPKH (HASH160 of pubkey)`)
+  console.log(`    [2] P2SH-P2WPKH (wrapped segwit, address starts with 3)`)
+  console.log()
+  const choice = await ask(rl, '  Select [1-2] (default 1): ')
+  const address = choice.trim() === '2' ? p2shAddr : keyhashAddr
   return { secretKey, publicKey, address }
 }
 

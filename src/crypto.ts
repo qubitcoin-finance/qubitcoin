@@ -76,6 +76,13 @@ export function hash160(data: Uint8Array): Uint8Array {
   return ripemd160(sha256(data))
 }
 
+/** Derive P2SH-P2WPKH address: HASH160(0x0014 || HASH160(pubkey)) */
+export function deriveP2shP2wpkhAddress(compressedPubKey: Uint8Array): string {
+  const keyhash = hash160(compressedPubKey) // 20 bytes
+  const redeemScript = concatBytes(new Uint8Array([0x00, 0x14]), keyhash) // 22 bytes
+  return bytesToHex(hash160(redeemScript)) // 20 bytes → 40 hex
+}
+
 /** Generate a Bitcoin-style secp256k1 keypair */
 export function generateBtcKeypair(): { secretKey: Uint8Array; publicKey: Uint8Array } {
   const secretKey = secp256k1.utils.randomSecretKey()

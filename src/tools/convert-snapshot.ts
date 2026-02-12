@@ -5,7 +5,7 @@
  * Two-phase pipeline with checkpointed resume:
  *
  *   Phase 1 — Extract (slow, resumable):
- *     Parse binary → filter P2PKH+P2WPKH → append intermediate NDJSON
+ *     Parse binary → filter P2PKH+P2WPKH+P2SH → append intermediate NDJSON
  *     Periodic checkpoints store byte offset; kill & re-run to resume.
  *
  *   Phase 2 — Aggregate (fast, ~2 min):
@@ -54,7 +54,9 @@ interface LegacyArgs { command: 'legacy'; input: string; output: string; gzip: b
 type Args = ExtractArgs | AggregateArgs | LegacyArgs
 
 function parseArgs(): Args {
-  const args = process.argv.slice(2)
+  const rawArgs = process.argv.slice(2)
+  // pnpm passes '--' separator literally; strip it
+  const args = rawArgs[0] === '--' ? rawArgs.slice(1) : rawArgs
   const subcommand = args[0]
 
   // Check for subcommand
@@ -207,8 +209,8 @@ async function runExtract(input: string, workdir: string) {
       }
     }, resumeFrom)) {
 
-      // Only include P2PKH and P2WPKH
-      if (coin.scriptType === 'p2pkh' || coin.scriptType === 'p2wpkh') {
+      // Include P2PKH, P2WPKH, and P2SH (P2SH-P2WPKH single-signer)
+      if (coin.scriptType === 'p2pkh' || coin.scriptType === 'p2wpkh' || coin.scriptType === 'p2sh') {
         const line = JSON.stringify({
           a: coin.addressHash,
           b: coin.amount.toString(),
@@ -328,13 +330,17 @@ async function aggregateCoins(workdir: string) {
   let totalClaimableValue = 0n
   let p2pkhCount = 0n
   let p2wpkhCount = 0n
+  let p2shCount = 0n
 
   let currentAddr = ''
   let currentBalance = 0n
+  let currentType = ''
 
   function flushAddress() {
     if (!currentAddr) return
-    const line = JSON.stringify({ a: currentAddr, b: currentBalance.toString() }) + '\n'
+    const obj: Record<string, string> = { a: currentAddr, b: currentBalance.toString() }
+    if (currentType === 'p2sh') obj.t = 'p2sh'
+    const line = JSON.stringify(obj) + '\n'
     writeSync(fd, line)
     addressCount++
   }
@@ -354,6 +360,7 @@ async function aggregateCoins(workdir: string) {
         flushAddress()
         currentAddr = entry.a
         currentBalance = 0n
+        currentType = entry.t
       }
 
       currentBalance += amount
@@ -361,6 +368,7 @@ async function aggregateCoins(workdir: string) {
       totalCoins++
 
       if (entry.t === 'p2pkh') p2pkhCount++
+      else if (entry.t === 'p2sh') p2shCount++
       else p2wpkhCount++
 
       if (totalCoins % 5_000_000n === 0n) {
@@ -383,6 +391,7 @@ async function aggregateCoins(workdir: string) {
     addressCount,
     p2pkhCoins: p2pkhCount.toString(),
     p2wpkhCoins: p2wpkhCount.toString(),
+    p2shCoins: p2shCount.toString(),
     totalCoins: totalCoins.toString(),
     totalClaimableSats: totalClaimableValue.toString(),
   }
@@ -393,6 +402,7 @@ async function aggregateCoins(workdir: string) {
   console.log(`  Total coins:        ${totalCoins.toLocaleString()}`)
   console.log(`  P2PKH coins:        ${p2pkhCount.toLocaleString()}`)
   console.log(`  P2WPKH coins:       ${p2wpkhCount.toLocaleString()}`)
+  console.log(`  P2SH coins:         ${p2shCount.toLocaleString()}`)
   console.log(`  Unique addresses:   ${addressCount.toLocaleString()}`)
   console.log(`  Total claimable:    ${(Number(totalClaimableValue) / 1e8).toFixed(2)} BTC`)
   console.log()
@@ -432,8 +442,9 @@ async function finalizeSnapshot(workdir: string, output: string, gzip: boolean) 
 
   for await (const line of rl) {
     if (!line) continue
-    const entry = JSON.parse(line) as { a: string; b: string }
-    inner.update(encoder.encode(`${entry.a}:${entry.b};`))
+    const entry = JSON.parse(line) as { a: string; b: string; t?: string }
+    const prefix = entry.t ? `${entry.t}:` : ''
+    inner.update(encoder.encode(`${prefix}${entry.a}:${entry.b};`))
     entryCount++
     if (entryCount % 5_000_000 === 0) {
       process.stdout.write(`\r  Hashed ${entryCount.toLocaleString()} entries`)
@@ -453,6 +464,7 @@ async function finalizeSnapshot(workdir: string, output: string, gzip: boolean) 
     merkleRoot,
     p2pkhCoins: Number(balancesMeta.p2pkhCoins),
     p2wpkhCoins: Number(balancesMeta.p2wpkhCoins),
+    p2shCoins: Number(balancesMeta.p2shCoins || '0'),
     totalClaimableSats: balancesMeta.totalClaimableSats,
   })
 
@@ -465,8 +477,8 @@ async function finalizeSnapshot(workdir: string, output: string, gzip: boolean) 
     })
     for await (const line of rl2) {
       if (!line) continue
-      const entry = JSON.parse(line) as { a: string; b: string }
-      yield JSON.stringify({ a: entry.a, b: Number(entry.b) }) + '\n'
+      const entry = JSON.parse(line) as { a: string; b: string; t?: string }
+      yield JSON.stringify({ a: entry.a, b: Number(entry.b), ...(entry.t === 'p2sh' ? { t: 'p2sh' } : {}) }) + '\n'
     }
   }
 

@@ -9,6 +9,7 @@ import {
   ecdsaSign,
   verifyEcdsaSignature,
   hash160,
+  deriveP2shP2wpkhAddress,
   bytesToHex,
   type Wallet,
 } from './crypto.js'
@@ -115,12 +116,24 @@ export function verifyClaimProof(
     }
   }
 
-  // Verify HASH160(pubkey) matches the claimed address
-  const derivedAddress = bytesToHex(hash160(claim.ecdsaPublicKey))
-  if (derivedAddress !== claim.btcAddress) {
-    return {
-      valid: false,
-      error: 'ECDSA public key does not match BTC address in snapshot',
+  // Verify public key matches the claimed address
+  // P2SH-P2WPKH: HASH160(0x0014 || HASH160(pubkey)) === btcAddress
+  // P2PKH/P2WPKH: HASH160(pubkey) === btcAddress
+  if (entry.type === 'p2sh') {
+    const derivedAddress = deriveP2shP2wpkhAddress(claim.ecdsaPublicKey)
+    if (derivedAddress !== claim.btcAddress) {
+      return {
+        valid: false,
+        error: 'ECDSA public key does not match P2SH-P2WPKH address in snapshot',
+      }
+    }
+  } else {
+    const derivedAddress = bytesToHex(hash160(claim.ecdsaPublicKey))
+    if (derivedAddress !== claim.btcAddress) {
+      return {
+        valid: false,
+        error: 'ECDSA public key does not match BTC address in snapshot',
+      }
     }
   }
 

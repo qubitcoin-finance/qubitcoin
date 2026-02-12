@@ -5,7 +5,7 @@ import {
   serializeClaimMessage,
 } from '../claim.js'
 import { createMockSnapshot } from '../snapshot.js'
-import { generateWallet, generateBtcKeypair, bytesToHex, hash160 } from '../crypto.js'
+import { generateWallet, generateBtcKeypair, bytesToHex, hash160, deriveP2shP2wpkhAddress } from '../crypto.js'
 import { isClaimTransaction, CLAIM_TXID } from '../transaction.js'
 import { Blockchain } from '../chain.js'
 import { createCoinbaseTransaction, createTransaction, utxoKey } from '../transaction.js'
@@ -233,5 +233,138 @@ describe('end-to-end: claim → mine → spend', () => {
     // Verify balances
     expect(chain.getBalance(recipient.address)).toBe(30)
     expect(chain.getBalance(qtcWallet.address)).toBe(holders[0].amount - 30 - 1) // minus send minus fee
+  })
+})
+
+describe('P2SH-P2WPKH claims', () => {
+  it('deriveP2shP2wpkhAddress produces correct 40-char hex', () => {
+    const kp = generateBtcKeypair()
+    const addr = deriveP2shP2wpkhAddress(kp.publicKey)
+    expect(addr).toHaveLength(40)
+    expect(/^[0-9a-f]{40}$/.test(addr)).toBe(true)
+    // Must differ from plain HASH160
+    const plainAddr = bytesToHex(hash160(kp.publicKey))
+    expect(addr).not.toBe(plainAddr)
+  })
+
+  it('creates and verifies a P2SH-P2WPKH claim', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    // The last holder is P2SH-P2WPKH
+    const p2shHolder = holders.find(h => h.type === 'p2sh')!
+    expect(p2shHolder).toBeDefined()
+
+    const p2shEntry = snapshot.entries.find(e => e.type === 'p2sh')!
+    expect(p2shEntry).toBeDefined()
+
+    const qtcWallet = qtcWalletA
+    const tx = createClaimTransaction(
+      p2shHolder.secretKey,
+      p2shHolder.publicKey,
+      p2shEntry,
+      qtcWallet,
+      snapshot.btcBlockHash
+    )
+
+    const result = verifyClaimProof(tx, snapshot)
+    expect(result.valid).toBe(true)
+  })
+
+  it('rejects wrong key for P2SH-P2WPKH claim', () => {
+    const { snapshot } = createMockSnapshot()
+    const p2shEntry = snapshot.entries.find(e => e.type === 'p2sh')!
+    const wrongKey = generateBtcKeypair()
+    const qtcWallet = qtcWalletA
+
+    const tx = createClaimTransaction(
+      wrongKey.secretKey,
+      wrongKey.publicKey,
+      p2shEntry,
+      qtcWallet,
+      snapshot.btcBlockHash
+    )
+
+    const result = verifyClaimProof(tx, snapshot)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('does not match P2SH-P2WPKH address')
+  })
+
+  it('P2PKH key cannot claim P2SH address', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    // Use a P2PKH holder's key to try claiming a P2SH entry
+    const p2pkhHolder = holders[0] // first holder is P2PKH
+    const p2shEntry = snapshot.entries.find(e => e.type === 'p2sh')!
+    const qtcWallet = qtcWalletA
+
+    const tx = createClaimTransaction(
+      p2pkhHolder.secretKey,
+      p2pkhHolder.publicKey,
+      p2shEntry,
+      qtcWallet,
+      snapshot.btcBlockHash
+    )
+
+    const result = verifyClaimProof(tx, snapshot)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('does not match P2SH-P2WPKH address')
+  })
+
+  it('P2SH key cannot claim P2PKH address', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    // Use a P2SH holder's key to try claiming a P2PKH entry
+    const p2shHolder = holders.find(h => h.type === 'p2sh')!
+    const p2pkhEntry = snapshot.entries[0] // first entry is P2PKH
+    const qtcWallet = qtcWalletA
+
+    const tx = createClaimTransaction(
+      p2shHolder.secretKey,
+      p2shHolder.publicKey,
+      p2pkhEntry,
+      qtcWallet,
+      snapshot.btcBlockHash
+    )
+
+    const result = verifyClaimProof(tx, snapshot)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('does not match BTC address')
+  })
+
+  it('end-to-end: P2SH-P2WPKH claim → mine → spend', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const chain = new Blockchain(snapshot)
+    const qtcWallet = qtcWalletA
+    const recipient = qtcWalletB
+
+    const p2shHolder = holders.find(h => h.type === 'p2sh')!
+    const p2shEntry = snapshot.entries.find(e => e.type === 'p2sh')!
+
+    // Claim
+    const claimTx = createClaimTransaction(
+      p2shHolder.secretKey,
+      p2shHolder.publicKey,
+      p2shEntry,
+      qtcWallet,
+      snapshot.btcBlockHash
+    )
+    const block1 = mineOnChain(chain, 'f'.repeat(64), [claimTx])
+    const addResult = chain.addBlock(block1)
+    expect(addResult.success).toBe(true)
+    expect(chain.getBalance(qtcWallet.address)).toBe(p2shHolder.amount)
+
+    // Spend
+    const utxos = chain.findUTXOs(qtcWallet.address)
+    expect(utxos.length).toBe(1)
+
+    const spendTx = createTransaction(
+      qtcWallet,
+      utxos,
+      [{ address: recipient.address, amount: 50 }],
+      1
+    )
+    const block2 = mineOnChain(chain, 'f'.repeat(64), [spendTx])
+    const addResult2 = chain.addBlock(block2)
+    expect(addResult2.success).toBe(true)
+
+    expect(chain.getBalance(recipient.address)).toBe(50)
+    expect(chain.getBalance(qtcWallet.address)).toBe(p2shHolder.amount - 50 - 1)
   })
 })

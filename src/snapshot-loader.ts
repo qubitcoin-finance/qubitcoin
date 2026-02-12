@@ -39,8 +39,12 @@ export async function loadSnapshot(filePath: string): Promise<BtcSnapshot> {
       // No header — treat as a regular entry
     }
 
-    const raw = JSON.parse(line) as { a: string; b: number }
-    entries.push({ btcAddress: raw.a, amount: raw.b })
+    const raw = JSON.parse(line) as { a: string; b: number; t?: string }
+    entries.push({
+      btcAddress: raw.a,
+      amount: raw.b,
+      ...(raw.t === 'p2sh' ? { type: 'p2sh' as const } : {}),
+    })
   }
 
   if (!merkleRoot) {

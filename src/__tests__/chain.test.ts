@@ -565,7 +565,7 @@ describe('Blockchain with snapshot', () => {
     const chain = new Blockchain(snapshot)
 
     let stats = chain.getClaimStats()
-    expect(stats.totalEntries).toBe(5)
+    expect(stats.totalEntries).toBe(6) // 5 P2PKH/P2WPKH + 1 P2SH-P2WPKH
     expect(stats.claimed).toBe(0)
 
     const qtcWallet = walletB
@@ -582,6 +582,6 @@ describe('Blockchain with snapshot', () => {
     stats = chain.getClaimStats()
     expect(stats.claimed).toBe(1)
     expect(stats.claimedAmount).toBe(holders[0].amount)
-    expect(stats.unclaimed).toBe(4)
+    expect(stats.unclaimed).toBe(5)
   })
 })

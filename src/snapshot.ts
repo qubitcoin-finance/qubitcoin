@@ -2,20 +2,23 @@
  * Bitcoin address balance snapshot for qcoin claim mechanism
  *
  * Represents aggregated balances per BTC address at a specific block height.
+ * Supports P2PKH, P2WPKH, and P2SH-P2WPKH (wrapped SegWit) addresses.
  * BTC holders prove ownership of their address to claim qcoin equivalents.
  */
 import { sha256 } from '@noble/hashes/sha2.js'
 import {
   hash160,
   generateBtcKeypair,
+  deriveP2shP2wpkhAddress,
   doubleSha256Hex,
   bytesToHex,
   concatBytes,
 } from './crypto.js'
 
 export interface BtcAddressBalance {
-  btcAddress: string  // 40-char hex HASH160(compressed pubkey)
+  btcAddress: string  // 40-char hex HASH160(compressed pubkey) or HASH160(redeemScript) for P2SH
   amount: number      // total satoshis for this address
+  type?: 'p2sh'       // absent = P2PKH/P2WPKH (keyhash), 'p2sh' = P2SH-P2WPKH
 }
 
 export interface BtcSnapshot {
@@ -38,7 +41,8 @@ export function computeSnapshotMerkleRoot(entries: BtcAddressBalance[]): string 
   const encoder = new TextEncoder()
   const inner = sha256.create()
   for (const entry of entries) {
-    inner.update(encoder.encode(`${entry.btcAddress}:${entry.amount};`))
+    const prefix = entry.type ? `${entry.type}:` : ''
+    inner.update(encoder.encode(`${prefix}${entry.btcAddress}:${entry.amount};`))
   }
   return bytesToHex(sha256(inner.digest()))
 }
@@ -97,12 +101,14 @@ export function createMockSnapshot(): {
   snapshot: BtcSnapshot
   holders: Array<{ secretKey: Uint8Array; publicKey: Uint8Array; address: string; amount: number }>
 } {
-  const holderAmounts = [100, 250, 50, 500, 75] // BTC amounts for 5 holders
+  const holderAmounts = [100, 250, 50, 500, 75] // BTC amounts for 5 P2PKH/P2WPKH holders
+  const p2shAmounts = [200] // BTC amounts for P2SH-P2WPKH holders
   const holders: Array<{
     secretKey: Uint8Array
     publicKey: Uint8Array
     address: string
     amount: number
+    type?: 'p2sh'
   }> = []
   const entries: BtcAddressBalance[] = []
 
@@ -119,6 +125,25 @@ export function createMockSnapshot(): {
     entries.push({
       btcAddress: address,
       amount: holderAmounts[i],
+    })
+  }
+
+  // Add P2SH-P2WPKH holders
+  for (let i = 0; i < p2shAmounts.length; i++) {
+    const kp = generateBtcKeypair()
+    const address = deriveP2shP2wpkhAddress(kp.publicKey)
+    holders.push({
+      secretKey: kp.secretKey,
+      publicKey: kp.publicKey,
+      address,
+      amount: p2shAmounts[i],
+      type: 'p2sh',
+    })
+
+    entries.push({
+      btcAddress: address,
+      amount: p2shAmounts[i],
+      type: 'p2sh',
     })
   }
 
