@@ -141,16 +141,18 @@ export function isClaimTransaction(tx: Transaction): boolean {
 export function createCoinbaseTransaction(
   minerAddress: string,
   blockHeight: number,
-  fees: number
+  fees: number,
+  message?: string
 ): Transaction {
   const reward = blockSubsidy(blockHeight) + fees
   const timestamp = Date.now()
 
+  const encoder = new TextEncoder()
   const inputs: TransactionInput[] = [
     {
       txId: COINBASE_TXID,
       outputIndex: 0xffffffff,
-      publicKey: new Uint8Array(0),
+      publicKey: message ? encoder.encode(message) : new Uint8Array(0),
       signature: new Uint8Array(0),
     },
   ]

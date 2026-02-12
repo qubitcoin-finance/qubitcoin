@@ -27,7 +27,8 @@ import { log } from './log.js'
 export function assembleCandidateBlock(
   chain: Blockchain,
   mempool: Mempool,
-  minerAddress: string
+  minerAddress: string,
+  message?: string
 ): Block {
   const tip = chain.getChainTip()
   const height = chain.getHeight() + 1
@@ -51,7 +52,7 @@ export function assembleCandidateBlock(
   }
 
   // Create coinbase
-  const coinbase = createCoinbaseTransaction(minerAddress, height, totalFees)
+  const coinbase = createCoinbaseTransaction(minerAddress, height, totalFees, message)
 
   // All transactions: coinbase first
   const transactions: Transaction[] = [coinbase, ...includedTxs]

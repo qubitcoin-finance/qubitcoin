@@ -464,7 +464,7 @@ async function modeFull() {
       console.error(`\n  ✗ ${errBody.error ?? 'Unknown error'}`)
       if (errBody.error?.includes('not found in snapshot')) {
         console.error(`\n  The address ${btc.address} is not in the BTC snapshot.`)
-        console.error(`  Only P2PKH and P2WPKH addresses from block 935,941 are eligible.\n`)
+        console.error(`  Only P2PKH, P2PK, P2WPKH, P2SH-P2WPKH, and P2TR addresses from block 935,941 are eligible.\n`)
       } else if (errBody.error?.includes('already claimed')) {
         console.error(`\n  This BTC address has already been claimed.\n`)
       }

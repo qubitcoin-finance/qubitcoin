@@ -51,6 +51,7 @@ Options:
   --mine                  Enable mining (connects to network by default)
   --full                  Auto-download snapshot if missing, then start as full node
   --local                 Run without default seed (isolated local chain)
+  --message <text>        Coinbase message included in every mined block
   --simulate              Dev mode: pinned easy difficulty, fake txs
   -h, --help              Show this help`)
       process.exit(0)
@@ -77,6 +78,7 @@ Options:
     full: flags.has('full'),
     local: flags.has('local'),
     simulate: flags.has('simulate'),
+    message: opts['message'] ?? null,
   }
 }
 
@@ -232,7 +234,7 @@ async function main() {
       log.info({ component: 'p2p', height: node.chain.getHeight(), peers: p2p.getPeers().length, seeds: config.seeds }, 'Connected to QubitCoin network')
     }
 
-    node.startMining(minerWallet.address)
+    node.startMining(minerWallet.address, config.message ?? undefined)
   }
 
   // Simulation mode (dev only)

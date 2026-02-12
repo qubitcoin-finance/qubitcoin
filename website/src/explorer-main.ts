@@ -115,6 +115,15 @@ const fetchClaimStats = () => api<ClaimStats>('/claims/stats');
 
 const COINBASE_TXID = '0'.repeat(64);
 
+function hexToUtf8(hex: string): string {
+  const bytes = new Uint8Array(hex.match(/.{1,2}/g)!.map(b => parseInt(b, 16)));
+  return new TextDecoder().decode(bytes);
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 function truncHash(hash: string, len = 6): string {
   if (hash.length <= len * 2 + 3) return hash;
   return hash.slice(0, len) + '...' + hash.slice(-len);
@@ -502,6 +511,20 @@ async function renderBlock(hash: string): Promise<void> {
         <p class="text-text-muted mb-1">Miner</p>
         <p class="font-mono text-xs break-all">${block.transactions[0]?.outputs[0]?.address ? hashLink(block.transactions[0].outputs[0].address, 'address', block.transactions[0].outputs[0].address) : 'Unknown'}</p>
       </div>
+      ${(() => {
+        const cbPubKey = block.transactions[0]?.inputs[0]?.publicKey;
+        if (!cbPubKey || cbPubKey === '' || cbPubKey === '00'.repeat(0)) {
+          return '';
+        }
+        try {
+          const msg = hexToUtf8(cbPubKey);
+          if (!msg) return '';
+          return `<div class="md:col-span-2">
+            <p class="text-text-muted mb-1">Message</p>
+            <p class="text-sm break-all">${escapeHtml(msg)}</p>
+          </div>`;
+        } catch { return ''; }
+      })()}
     </div>
   </div>`;
 
@@ -768,7 +791,7 @@ ${docH2('Key Properties')}
   <li><span class="text-text-primary font-medium">Quantum-safe signatures</span> — ML-DSA-65 (FIPS 204), NIST security level 3. Based on the Module-LWE problem, resistant to both classical and quantum attacks.</li>
   <li><span class="text-text-primary font-medium">Bitcoin UTXO model</span> — same unspent transaction output design. Transactions consume UTXOs as inputs and create new UTXOs as outputs.</li>
   <li><span class="text-text-primary font-medium">SHA-256 proof-of-work</span> — quantum computers can only achieve a quadratic speedup via Grover\'s algorithm, reducing SHA-256 to 128-bit quantum security — still practically unbreakable.</li>
-  <li><span class="text-text-primary font-medium">Real BTC snapshot</span> — genesis commits to a merkle root of 43,235,452 aggregated address balances from BTC block 935,941.</li>
+  <li><span class="text-text-primary font-medium">Real BTC snapshot</span> — genesis commits to a merkle root of 54,399,607 aggregated address balances from BTC block 935,941.</li>
   <li><span class="text-text-primary font-medium">One-time ECDSA claims</span> — prove BTC ownership with a secp256k1 signature, receive your full address balance as quantum-safe QTC. 1:1 ratio.</li>
   <li><span class="text-text-primary font-medium">Open source</span> — TypeScript / Node.js. Run a node, mine blocks, and verify the chain yourself.</li>
 </ul>
@@ -795,7 +818,7 @@ ${docH2('How It Differs from Bitcoin')}
 </div>
 
 ${docH2('Supply')}
-${docP('QubitCoin has no premine. The genesis block commits to the BTC snapshot but mints zero coins. All initial supply comes from BTC holders claiming their balances (12,736,980.37 QTC claimable). New supply enters circulation through mining rewards at 3.125 QTC per block, halving every 210,000 blocks.')}`;
+${docP('QubitCoin has no premine. The genesis block commits to the BTC snapshot but mints zero coins. All initial supply comes from BTC holders claiming their balances (18,617,734.62 QTC claimable). New supply enters circulation through mining rewards at 3.125 QTC per block, halving every 210,000 blocks.')}`;
 }
 
 function renderDocsGettingStarted(): string {
@@ -846,7 +869,7 @@ pnpm run node:charlie`)}
 ${docP('Alice mines on port 3001/6001, Bob on 3002/6002, Charlie on 3003/6003. Bob and Charlie connect to Alice as a seed and sync automatically.')}
 
 ${docH2('Claiming BTC')}
-${docP('If you hold BTC in a P2PKH or P2WPKH address included in the snapshot, you can claim your balance as QTC:')}
+${docP('If you hold BTC in a supported address type (P2PKH, P2PK, P2WPKH, P2SH-P2WPKH, or P2TR) included in the snapshot, you can claim your balance as QTC:')}
 ${docCode(`pnpm run claim`)}
 ${docP('The interactive claim tool walks you through generating a QTC wallet, signing a claim message, and broadcasting the transaction. Accepts seed phrases, WIF keys, or hex keys. See the <a href="#/docs/btc-claims" class="text-qubit-400 hover:text-qubit-300">BTC Claims</a> section for details.')}
 ${docP('For air-gapped workflows, you can split the process: <span class="font-mono text-xs text-qubit-400">pnpm run claim:generate</span> creates the signed transaction offline, and <span class="font-mono text-xs text-qubit-400">pnpm run claim:send</span> broadcasts it from an online machine.')}
@@ -1045,7 +1068,7 @@ ${docH2('Rules')}
 <ul class="text-text-secondary text-sm leading-relaxed list-disc list-inside space-y-2">
   <li><span class="text-text-primary font-medium">One claim per address</span> — once a BTC address is claimed, it\'s marked permanently. The same address cannot be claimed again, even with a different QTC destination.</li>
   <li><span class="text-text-primary font-medium">Aggregated balance</span> — claims are per-address, not per-UTXO. All UTXOs belonging to a BTC address are summed into a single balance. You get everything in one claim.</li>
-  <li><span class="text-text-primary font-medium">Supported address types</span> — only P2PKH and P2WPKH addresses can be claimed. P2SH, P2WSH, P2TR, bare multisig, and other types are excluded from the snapshot.</li>
+  <li><span class="text-text-primary font-medium">Supported address types</span> — P2PKH, P2WPKH, P2SH-P2WPKH, P2TR, and P2PK addresses can be claimed. P2WSH, bare multisig, and other exotic types are not yet supported.</li>
   <li><span class="text-text-primary font-medium">1:1 ratio</span> — 1 BTC = 1 QTC. No conversion rate, no fees, no slippage.</li>
   <li><span class="text-text-primary font-medium">Double-claim prevention</span> — the mempool also rejects claim transactions for addresses that already have a pending claim, preventing double-claims before mining.</li>
 </ul>
@@ -1064,19 +1087,23 @@ ${docP('The current snapshot is derived from a Bitcoin Core <span class="font-mo
   <tbody>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">BTC block height</td><td class="py-2 font-mono text-qubit-300">935,941</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Raw UTXOs parsed</td><td class="py-2 font-mono">164,352,533</td></tr>
-    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">After filtering</td><td class="py-2 font-mono">92,062,776 (P2PKH + P2WPKH only)</td></tr>
-    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Unique addresses</td><td class="py-2 font-mono text-entropy-cyan">43,235,452</td></tr>
-    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Total claimable</td><td class="py-2 font-mono text-qubit-300">12,736,980.37 QTC</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">After filtering</td><td class="py-2 font-mono">159,227,478 (P2PKH + P2PK + P2WPKH + P2SH + P2TR)</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Unique addresses</td><td class="py-2 font-mono text-entropy-cyan">54,399,607</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Total claimable</td><td class="py-2 font-mono text-qubit-300">18,617,734.62 QTC</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">P2PKH coins</td><td class="py-2 font-mono">45,115,135</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">P2PK coins</td><td class="py-2 font-mono">44,617</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">P2WPKH coins</td><td class="py-2 font-mono">46,947,641</td></tr>
-    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Snapshot size</td><td class="py-2 font-mono">2.4 GB (NDJSON)</td></tr>
-    <tr class="border-b border-border last:border-0"><td class="py-2 pr-4 text-text-muted">Merkle root</td><td class="py-2 font-mono text-xs break-all">a2c2ddc7456df15c0a22c7b7ebafd30e9e75abf352f3844af160eb205bc61af1</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">P2SH coins</td><td class="py-2 font-mono">12,451,522</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">P2TR coins</td><td class="py-2 font-mono">54,668,563</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Snapshot size</td><td class="py-2 font-mono">~3.5 GB (NDJSON)</td></tr>
+    <tr class="border-b border-border last:border-0"><td class="py-2 pr-4 text-text-muted">Merkle root</td><td class="py-2 font-mono text-xs break-all">d2ad73b5366e648d0254fb20fd49ea9543b3d7782b17f5b95b20b638acf67938</td></tr>
   </tbody>
 </table>
 </div>
 
 ${docH2('Why Not All BTC?')}
-${docP('The snapshot contains ~12.7M BTC out of ~19.8M circulating supply. The ~7.1M BTC gap is because ~72M UTXOs were filtered out — they belong to address types we don\'t support for claiming: P2SH (multisig wallets), P2WSH, P2TR (Taproot), bare multisig, and other exotic script types. Only P2PKH and P2WPKH addresses have a straightforward public key derivation path that enables trustless ECDSA claim proofs.')}`;
+${docP('The snapshot contains ~18.6M BTC out of ~19.8M circulating supply across 54.4M addresses. The ~1.2M BTC gap comes from address types we don\'t yet support: P2WSH (SegWit multisig), bare multisig, and other exotic script types. These require multiple signers to coordinate, making trustless claims significantly more complex.')}
+${docP('Supported claim types: P2PKH (legacy), P2PK (raw pubkey), P2WPKH (native SegWit), P2SH-P2WPKH (wrapped SegWit), and P2TR (Taproot) — covering the vast majority of Bitcoin holdings.')}`;
 }
 
 function renderDocsConsensus(): string {
@@ -1134,7 +1161,7 @@ ${docP('Miners also collect transaction fees — the difference between total in
 ${docH3('Supply Schedule')}
 ${docP('New QTC enters circulation from two sources:')}
 <ul class="text-text-secondary text-sm leading-relaxed mb-3 list-disc list-inside space-y-1">
-  <li><span class="text-text-primary font-medium">BTC claims</span> — 12,736,980.37 QTC claimable from the snapshot (P2PKH + P2WPKH only; ~7.1M BTC in unsupported address types is excluded)</li>
+  <li><span class="text-text-primary font-medium">BTC claims</span> — 18,617,734.62 QTC claimable from the snapshot (P2PKH, P2PK, P2WPKH, P2SH-P2WPKH, P2TR; ~1.2M BTC in unsupported address types is excluded)</li>
   <li><span class="text-text-primary font-medium">Mining rewards</span> — 3.125 QTC per block, halving every 210,000 blocks</li>
 </ul>
 ${docP('There is no premine, no ICO, and no team allocation. All coins come from either BTC claims or mining.')}

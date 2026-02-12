@@ -49,7 +49,7 @@ export class Node {
   }
 
   /** Mine a new block with pending transactions */
-  mine(minerAddress: string, verbose = true): Block {
+  mine(minerAddress: string, verbose = true, message?: string): Block {
     if (verbose) {
       log.info({ component: 'miner', block: this.chain.getHeight() + 1, pendingTxs: this.mempool.size() }, 'Mining block')
     }
@@ -57,7 +57,8 @@ export class Node {
     const candidate = assembleCandidateBlock(
       this.chain,
       this.mempool,
-      minerAddress
+      minerAddress,
+      message
     )
     const block = mineBlock(candidate, verbose)
 
@@ -96,7 +97,7 @@ export class Node {
    * nonce batches so RPC/P2P stay responsive. Automatically restarts
    * when a peer's block arrives (receiveBlock aborts the current round).
    */
-  async startMining(minerAddress: string): Promise<void> {
+  async startMining(minerAddress: string, message?: string): Promise<void> {
     log.info({ component: 'miner', address: minerAddress }, 'Mining started')
 
     while (true) {
@@ -105,7 +106,8 @@ export class Node {
       const candidate = assembleCandidateBlock(
         this.chain,
         this.mempool,
-        minerAddress
+        minerAddress,
+        message
       )
 
       const block = await mineBlockAsync(candidate, this.miningAbort.signal)
