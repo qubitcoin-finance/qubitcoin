@@ -94,9 +94,10 @@ export class Blockchain {
     // Genesis coinbase goes to burn address - don't add to UTXO set
   }
 
-  /** Replace genesis block with one received from a peer (fresh node only) */
+  /** Replace genesis block with one received from a peer (fresh node without snapshot only) */
   replaceGenesis(genesis: Block): boolean {
     if (this.getHeight() !== 0) return false
+    if (this.btcSnapshot) return false
     this.blocks[0] = genesis
     if (this.storage) {
       this.storage.rewriteBlocks(this.blocks)

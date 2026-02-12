@@ -146,7 +146,7 @@ export class P2PServer {
       this.reconnectTimer = setInterval(() => {
         for (const seed of this.seeds) {
           if (!this.isConnectedToSeed(seed.host, seed.port)) {
-            log.info({ component: 'p2p', seed: `${seed.host}:${seed.port}` }, 'Reconnecting to seed')
+            log.debug({ component: 'p2p', seed: `${seed.host}:${seed.port}` }, 'Reconnecting to seed')
             this.connectOutbound(seed.host, seed.port)
           }
         }
@@ -259,7 +259,7 @@ export class P2PServer {
     // Schedule quick reconnect if it was a seed
     if (!peer.inbound) {
       for (const seed of this.seeds) {
-        if (peer.address.includes(seed.host)) {
+        if (peer.id === `${seed.host}:${seed.port}` || peer.address.includes(seed.host)) {
           setTimeout(() => {
             if (!this.isConnectedToSeed(seed.host, seed.port)) {
               log.info({ component: 'p2p', seed: `${seed.host}:${seed.port}` }, 'Quick reconnect to seed')
@@ -337,10 +337,10 @@ export class P2PServer {
     }
 
     // Genesis check: reject peers on wrong network
-    // Exception: fresh peers (height 0) are allowed — they'll adopt our genesis during IBD
+    // Exception: fresh peers (height 0) without snapshot are allowed — they'll adopt our genesis during IBD
     const ourGenesis = this.node.chain.blocks[0].hash
     const weAreFresh = this.node.chain.getHeight() === 0 && !this.node.chain.btcSnapshot
-    const peerIsFresh = payload.height === 0
+    const peerIsFresh = payload.height === 0 && !this.node.chain.btcSnapshot
     if (payload.genesisHash !== ourGenesis && !weAreFresh && !peerIsFresh) {
       peer.send({
         type: 'reject',
@@ -370,7 +370,7 @@ export class P2PServer {
 
   private handleVerack(peer: Peer): void {
     peer.completeHandshake()
-    log.info({ component: 'p2p', peer: peer.id, remoteHeight: peer.remoteHeight }, 'Handshake complete')
+    log.debug({ component: 'p2p', peer: peer.id, remoteHeight: peer.remoteHeight }, 'Handshake complete')
 
     // IBD: if peer is ahead, request blocks
     const ourHeight = this.node.chain.getHeight()
@@ -422,13 +422,15 @@ export class P2PServer {
       const block = deserializeBlock(raw as Record<string, unknown>)
       if (this.seenBlocks.has(block.hash)) continue
 
-      // Genesis adoption: fresh node receives peer's genesis block
+      // Genesis adoption: fresh node (no snapshot) receives peer's genesis block
       if (block.height === 0 && block.hash !== this.node.chain.blocks[0].hash) {
         if (this.node.chain.replaceGenesis(block)) {
           log.info({ component: 'p2p', peer: peer.id, genesis: block.hash.slice(0, 16) }, 'Adopted peer genesis')
           this.addSeen(this.seenBlocks, block.hash)
           added++
           continue
+        } else {
+          log.warn({ component: 'p2p', peer: peer.id, theirGenesis: block.hash.slice(0, 16), ourGenesis: this.node.chain.blocks[0].hash.slice(0, 16) }, 'Rejected genesis replacement')
         }
       }
 
@@ -695,8 +697,9 @@ export class P2PServer {
 
   /** Check if we have an active connection to a specific seed */
   private isConnectedToSeed(host: string, port: number): boolean {
+    const label = `${host}:${port}`
     for (const peer of this.peers.values()) {
-      if (!peer.inbound && peer.address.includes(host)) {
+      if (!peer.inbound && (peer.id === label || peer.address.includes(host))) {
         return true
       }
     }

@@ -11,6 +11,7 @@
  *   --seeds <host:port,...>  Comma-separated seed peers
  *   --mine            Enable mining (generates a wallet and mines continuously)
  *   --full            Auto-download snapshot if missing, then start as full node
+ *   --local           Run without default seed (isolated local chain)
  *   --simulate        Enable periodic mining and transaction simulation (dev only)
  */
 import { Node } from './node.js'
@@ -47,8 +48,9 @@ Options:
   --snapshot <path>       Path to BTC snapshot NDJSON file
   --datadir <path>        Data directory (default data/node)
   --seeds <host:port,...> Comma-separated seed peers (default: qubitcoin.finance:6001 with --full)
-  --mine                  Enable mining
+  --mine                  Enable mining (connects to network by default)
   --full                  Auto-download snapshot if missing, then start as full node
+  --local                 Run without default seed (isolated local chain)
   --simulate              Dev mode: pinned easy difficulty, fake txs
   -h, --help              Show this help`)
       process.exit(0)
@@ -58,6 +60,8 @@ Options:
       flags.add('mine')
     } else if (arg === '--full') {
       flags.add('full')
+    } else if (arg === '--local') {
+      flags.add('local')
     } else if (arg.startsWith('--') && i + 1 < args.length) {
       opts[arg.slice(2)] = args[++i]
     }
@@ -71,6 +75,7 @@ Options:
     seeds: opts['seeds'] !== undefined ? (opts['seeds'] ? opts['seeds'].split(',') : []) : [],
     mine: flags.has('mine'),
     full: flags.has('full'),
+    local: flags.has('local'),
     simulate: flags.has('simulate'),
   }
 }
@@ -133,11 +138,12 @@ async function main() {
     seeds: config.seeds,
     mining: config.mine,
     full: config.full,
+    local: config.local,
     simulate: config.simulate,
   })
 
-  // --full: default to public seed if no seeds specified
-  if (config.full && config.seeds.length === 0) {
+  // Default to public seed when mining or running as full node, unless --local
+  if ((config.mine || config.full) && config.seeds.length === 0 && !config.local) {
     config.seeds = ['qubitcoin.finance:6001']
   }
 
@@ -223,7 +229,7 @@ async function main() {
         log.fatal({ component: 'p2p', seeds: config.seeds }, 'Could not sync with seed nodes — refusing to mine on a fork')
         process.exit(1)
       }
-      log.info({ component: 'p2p', height: node.chain.getHeight() }, 'Sync complete')
+      log.info({ component: 'p2p', height: node.chain.getHeight(), peers: p2p.getPeers().length, seeds: config.seeds }, 'Connected to QubitCoin network')
     }
 
     node.startMining(minerWallet.address)
@@ -279,7 +285,7 @@ async function main() {
     log.info({ component: 'simulate' }, 'Simulation mode active (mining every 10s, txs every 15s)')
   }
 
-  log.info({ rpcUrl: `http://127.0.0.1:${config.port}` }, 'Node ready')
+  log.debug({ rpcUrl: `http://127.0.0.1:${config.port}` }, 'Node ready')
 }
 
 main().catch((err) => {
