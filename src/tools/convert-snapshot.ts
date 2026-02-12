@@ -12,12 +12,20 @@
  *     Read intermediate NDJSON → aggregate by address → merkle root → final snapshot
  *
  * Usage:
- *   # Two-phase (recommended for large dumps):
- *   pnpm run convert-snapshot -- extract --input ~/utxos.dat --workdir ~/qtc-work/
- *   pnpm run convert-snapshot -- aggregate --workdir ~/qtc-work/ --output ~/qtc-snapshot.jsonl
+ *   # Full pipeline with defaults (extract + aggregate):
+ *   pnpm run convert-snapshot
  *
- *   # Legacy single command (runs both phases):
- *   pnpm run convert-snapshot -- --input ~/utxos.dat --output ~/qtc-snapshot.jsonl
+ *   # With custom paths:
+ *   pnpm run convert-snapshot -- --input ~/utxos.dat --workdir ~/qtc-work/ --output ~/qtc-snapshot.jsonl
+ *
+ *   # Run phases separately (for large dumps — kill extract and re-run to resume):
+ *   pnpm run convert-snapshot -- extract
+ *   pnpm run convert-snapshot -- aggregate
+ *
+ * Defaults:
+ *   --input   ~/utxos.dat
+ *   --workdir ~/qtc-work/
+ *   --output  ~/qtc-snapshot.jsonl
  */
 import {
   createWriteStream, createReadStream,
@@ -47,66 +55,54 @@ interface Checkpoint {
 
 // --- CLI args ---
 
+const HOME = process.env.HOME || '~'
+const DEFAULT_INPUT = join(HOME, 'utxos.dat')
+const DEFAULT_WORKDIR = join(HOME, 'qtc-work')
+const DEFAULT_OUTPUT = join(HOME, 'qtc-snapshot.jsonl')
+
 interface ExtractArgs { command: 'extract'; input: string; workdir: string }
 interface AggregateArgs { command: 'aggregate'; workdir: string; output: string; gzip: boolean }
-interface LegacyArgs { command: 'legacy'; input: string; output: string; gzip: boolean }
+interface FullArgs { command: 'full'; input: string; workdir: string; output: string; gzip: boolean }
 
-type Args = ExtractArgs | AggregateArgs | LegacyArgs
+type Args = ExtractArgs | AggregateArgs | FullArgs
 
 function parseArgs(): Args {
   const rawArgs = process.argv.slice(2)
   // pnpm passes '--' separator literally; strip it
   const args = rawArgs[0] === '--' ? rawArgs.slice(1) : rawArgs
-  const subcommand = args[0]
 
-  // Check for subcommand
-  if (subcommand === 'extract' || subcommand === 'aggregate') {
-    let input = ''
-    let output = ''
-    let workdir = ''
-    let gzip = false
-
-    for (let i = 1; i < args.length; i++) {
-      if (args[i] === '--input' && args[i + 1]) input = args[++i]
-      else if (args[i] === '--output' && args[i + 1]) output = args[++i]
-      else if (args[i] === '--workdir' && args[i + 1]) workdir = args[++i]
-      else if (args[i] === '--gzip') gzip = true
-    }
-
-    if (subcommand === 'extract') {
-      if (!input || !workdir) {
-        console.error('Usage: convert-snapshot extract --input <utxos.dat> --workdir <dir>')
-        process.exit(1)
-      }
-      return { command: 'extract', input, workdir }
-    } else {
-      if (!workdir || !output) {
-        console.error('Usage: convert-snapshot aggregate --workdir <dir> --output <snapshot.jsonl> [--gzip]')
-        process.exit(1)
-      }
-      return { command: 'aggregate', workdir, output, gzip }
-    }
-  }
-
-  // Legacy single-command mode
   let input = ''
   let output = ''
+  let workdir = ''
   let gzip = false
 
-  for (let i = 0; i < args.length; i++) {
+  // Find subcommand (first arg that isn't a flag)
+  let subcommand = ''
+  const flagStart = args[0] === 'extract' || args[0] === 'aggregate' ? 1 : 0
+  if (flagStart === 1) subcommand = args[0]
+
+  for (let i = flagStart; i < args.length; i++) {
     if (args[i] === '--input' && args[i + 1]) input = args[++i]
     else if (args[i] === '--output' && args[i + 1]) output = args[++i]
+    else if (args[i] === '--workdir' && args[i + 1]) workdir = args[++i]
     else if (args[i] === '--gzip') gzip = true
   }
 
-  if (!input || !output) {
-    console.error('Usage: convert-snapshot --input <utxos.dat> --output <snapshot.jsonl> [--gzip]')
-    console.error('       convert-snapshot extract --input <utxos.dat> --workdir <dir>')
-    console.error('       convert-snapshot aggregate --workdir <dir> --output <snapshot.jsonl> [--gzip]')
-    process.exit(1)
+  if (subcommand === 'extract') {
+    return { command: 'extract', input: input || DEFAULT_INPUT, workdir: workdir || DEFAULT_WORKDIR }
+  }
+  if (subcommand === 'aggregate') {
+    return { command: 'aggregate', workdir: workdir || DEFAULT_WORKDIR, output: output || DEFAULT_OUTPUT, gzip }
   }
 
-  return { command: 'legacy', input, output, gzip }
+  // Default: full pipeline (extract + aggregate)
+  return {
+    command: 'full',
+    input: input || DEFAULT_INPUT,
+    workdir: workdir || DEFAULT_WORKDIR,
+    output: output || DEFAULT_OUTPUT,
+    gzip,
+  }
 }
 
 // --- Checkpoint helpers ---
@@ -530,15 +526,15 @@ async function main() {
     case 'aggregate':
       await runAggregate(args.workdir, args.output, args.gzip)
       break
-    case 'legacy': {
-      // Run both phases with a temp workdir next to the output
-      const workdir = args.output + '.work'
+    case 'full': {
       console.log('Running full pipeline (extract + aggregate)...')
-      console.log(`  Workdir: ${workdir}`)
+      console.log(`  Input:   ${args.input}`)
+      console.log(`  Workdir: ${args.workdir}`)
+      console.log(`  Output:  ${args.output}`)
       console.log()
-      await runExtract(args.input, workdir)
+      await runExtract(args.input, args.workdir)
       console.log()
-      await runAggregate(workdir, args.output, args.gzip)
+      await runAggregate(args.workdir, args.output, args.gzip)
       break
     }
   }
