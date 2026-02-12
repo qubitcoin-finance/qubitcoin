@@ -13,6 +13,9 @@
  */
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
+import { sha256 } from '@noble/hashes/sha2.js'
+import { ripemd160 } from '@noble/hashes/legacy.js'
+import { bytesToHex } from '@noble/hashes/utils.js'
 
 // --- Types ---
 
@@ -23,7 +26,7 @@ export interface SnapshotHeader {
   coinCount: bigint
 }
 
-export type ScriptType = 'p2pkh' | 'p2sh' | 'p2pk' | 'p2wpkh' | 'p2wsh' | 'p2tr' | 'other'
+export type ScriptType = 'p2pkh' | 'p2sh' | 'p2pk' | 'p2wpkh' | 'p2wsh' | 'p2tr' | 'multisig' | 'op_return' | 'other'
 
 export interface ParsedCoin {
   txid: string            // 64-char hex
@@ -251,14 +254,19 @@ async function readCompressedScript(reader: BufferedReader): Promise<Decompresse
     return { scriptType: 'p2sh', addressHash: hash.toString('hex') }
   }
   if (nSize === 0x02 || nSize === 0x03) {
-    // P2PK compressed: 32-byte pubkey x-coord
-    await reader.readBytes(32) // skip pubkey data
-    return { scriptType: 'p2pk' }
+    // P2PK compressed: nSize is the prefix byte, followed by 32-byte x-coord
+    const xCoord = await reader.readBytes(32)
+    const compressed = Buffer.concat([Buffer.from([nSize]), xCoord])
+    const hash = bytesToHex(ripemd160(sha256(compressed)))
+    return { scriptType: 'p2pk', addressHash: hash }
   }
   if (nSize === 0x04 || nSize === 0x05) {
-    // P2PK uncompressed: 32-byte x-coord
-    await reader.readBytes(32) // skip pubkey data
-    return { scriptType: 'p2pk' }
+    // P2PK uncompressed: recover compressed prefix (0x04→0x02 even y, 0x05→0x03 odd y)
+    const xCoord = await reader.readBytes(32)
+    const prefix = nSize === 0x04 ? 0x02 : 0x03
+    const compressed = Buffer.concat([Buffer.from([prefix]), xCoord])
+    const hash = bytesToHex(ripemd160(sha256(compressed)))
+    return { scriptType: 'p2pk', addressHash: hash }
   }
 
   // Other scripts: nSize - 6 = actual script length
@@ -280,6 +288,16 @@ async function readCompressedScript(reader: BufferedReader): Promise<Decompresse
   // P2TR: OP_1 PUSH32 <32 bytes> = 34 bytes
   if (scriptLen === 34 && script[0] === 0x51 && script[1] === 0x20) {
     return { scriptType: 'p2tr', addressHash: script.subarray(2, 34).toString('hex') }
+  }
+
+  // OP_RETURN (nulldata / provably unspendable): OP_RETURN ...
+  if (script[0] === 0x6a) {
+    return { scriptType: 'op_return' }
+  }
+
+  // Bare multisig: <m> <pubkeys...> <n> OP_CHECKMULTISIG (0xae)
+  if (script[scriptLen - 1] === 0xae) {
+    return { scriptType: 'multisig' }
   }
 
   return { scriptType: 'other' }

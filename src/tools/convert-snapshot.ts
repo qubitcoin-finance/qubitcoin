@@ -58,7 +58,7 @@ interface Checkpoint {
 const HOME = process.env.HOME || '~'
 const DEFAULT_INPUT = join(HOME, 'utxos.dat')
 const DEFAULT_WORKDIR = join(HOME, 'qtc-work')
-const DEFAULT_OUTPUT = join(HOME, 'qtc-snapshot.jsonl')
+const DEFAULT_OUTPUT = join(HOME, `qtc-snapshot-${new Date().toISOString().slice(0, 10)}.jsonl`)
 
 interface ExtractArgs { command: 'extract'; input: string; workdir: string }
 interface AggregateArgs { command: 'aggregate'; workdir: string; output: string; gzip: boolean; force: boolean }
@@ -192,6 +192,9 @@ async function runExtract(input: string, workdir: string) {
   let latestCoinsRead = resumeFrom ? resumeFrom.coinsRead : 0n
   let coinsSinceCheckpoint = 0n
 
+  // Counters for skipped script types
+  const skipped = new Map<string, { count: bigint; sats: bigint }>()
+
   const progressInterval = 1_000_000n
 
   try {
@@ -208,8 +211,8 @@ async function runExtract(input: string, workdir: string) {
       }
     }, resumeFrom)) {
 
-      // Include P2PKH, P2WPKH, P2SH (P2SH-P2WPKH single-signer), and P2TR (Taproot)
-      if (coin.scriptType === 'p2pkh' || coin.scriptType === 'p2wpkh' || coin.scriptType === 'p2sh' || coin.scriptType === 'p2tr') {
+      // Include P2PKH, P2WPKH, P2SH (P2SH-P2WPKH single-signer), P2TR (Taproot), P2PK (raw pubkey)
+      if (coin.scriptType === 'p2pkh' || coin.scriptType === 'p2wpkh' || coin.scriptType === 'p2sh' || coin.scriptType === 'p2tr' || coin.scriptType === 'p2pk') {
         const line = JSON.stringify({
           a: coin.addressHash,
           b: coin.amount.toString(),
@@ -218,6 +221,11 @@ async function runExtract(input: string, workdir: string) {
         const buf = Buffer.from(line)
         writeSync(fd, buf)
         outputBytes += buf.length
+      } else {
+        const entry = skipped.get(coin.scriptType) ?? { count: 0n, sats: 0n }
+        entry.count++
+        entry.sats += coin.amount
+        skipped.set(coin.scriptType, entry)
       }
 
       coinsSinceCheckpoint++
@@ -255,6 +263,20 @@ async function runExtract(input: string, workdir: string) {
   if (existsSync(coinsPath)) {
     const size = statSync(coinsPath).size
     console.log(`  Size:   ${(size / 1024 / 1024).toFixed(1)} MB`)
+  }
+
+  // Skipped script type breakdown
+  if (skipped.size > 0) {
+    const fmt = (sats: bigint) => (Number(sats) / 1e8).toFixed(2)
+    let totalCount = 0n
+    let totalSats = 0n
+    console.log(`\n  Skipped script types:`)
+    for (const [type, { count, sats }] of [...skipped.entries()].sort((a, b) => Number(b[1].sats - a[1].sats))) {
+      console.log(`    ${type.padEnd(10)} ${count.toLocaleString().padStart(12)} coins, ${fmt(sats).padStart(14)} BTC`)
+      totalCount += count
+      totalSats += sats
+    }
+    console.log(`    ${'TOTAL'.padEnd(10)} ${totalCount.toLocaleString().padStart(12)} coins, ${fmt(totalSats).padStart(14)} BTC`)
   }
 }
 
@@ -331,6 +353,7 @@ async function aggregateCoins(workdir: string) {
   let p2wpkhCount = 0n
   let p2shCount = 0n
   let p2trCount = 0n
+  let p2pkCount = 0n
 
   let currentAddr = ''
   let currentBalance = 0n
@@ -369,6 +392,7 @@ async function aggregateCoins(workdir: string) {
       totalCoins++
 
       if (entry.t === 'p2pkh') p2pkhCount++
+      else if (entry.t === 'p2pk') p2pkCount++
       else if (entry.t === 'p2sh') p2shCount++
       else if (entry.t === 'p2tr') p2trCount++
       else p2wpkhCount++
@@ -392,6 +416,7 @@ async function aggregateCoins(workdir: string) {
   const meta = {
     addressCount,
     p2pkhCoins: p2pkhCount.toString(),
+    p2pkCoins: p2pkCount.toString(),
     p2wpkhCoins: p2wpkhCount.toString(),
     p2shCoins: p2shCount.toString(),
     p2trCoins: p2trCount.toString(),
@@ -404,6 +429,7 @@ async function aggregateCoins(workdir: string) {
   console.log(`\n  Aggregation complete in ${elapsed}s:`)
   console.log(`  Total coins:        ${totalCoins.toLocaleString()}`)
   console.log(`  P2PKH coins:        ${p2pkhCount.toLocaleString()}`)
+  console.log(`  P2PK coins:         ${p2pkCount.toLocaleString()}`)
   console.log(`  P2WPKH coins:       ${p2wpkhCount.toLocaleString()}`)
   console.log(`  P2SH coins:         ${p2shCount.toLocaleString()}`)
   console.log(`  P2TR coins:         ${p2trCount.toLocaleString()}`)
@@ -467,6 +493,7 @@ async function finalizeSnapshot(workdir: string, output: string, gzip: boolean) 
     count: Number(balancesMeta.addressCount),
     merkleRoot,
     p2pkhCoins: Number(balancesMeta.p2pkhCoins),
+    p2pkCoins: Number(balancesMeta.p2pkCoins || '0'),
     p2wpkhCoins: Number(balancesMeta.p2wpkhCoins),
     p2shCoins: Number(balancesMeta.p2shCoins || '0'),
     p2trCoins: Number(balancesMeta.p2trCoins || '0'),
@@ -514,13 +541,10 @@ async function runAggregate(workdir: string, output: string, gzip: boolean) {
   // Sub-phase B: stream balances → merkle root → final snapshot
   await finalizeSnapshot(workdir, output, gzip)
 
-  // Clean up workdir on success
-  console.log(`Cleaning up workdir...`)
-  await rm(workdir, { recursive: true, force: true })
-
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
   console.log(`Done in ${elapsed}s`)
   console.log(`Output: ${output}`)
+  console.log(`Workdir preserved: ${workdir} (rm -rf manually when done)`)
 }
 
 // --- Main ---
