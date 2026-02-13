@@ -728,14 +728,47 @@ async function renderMempool(): Promise<void> {
 
 // --- Docs ------------------------------------------------------------------
 
-const DOC_SECTIONS: { id: string; title: string; icon: string; render: () => string }[] = [
-  { id: 'overview', title: 'Overview', icon: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/>', render: renderDocsOverview },
-  { id: 'security', title: 'Security', icon: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>', render: renderDocsSecurity },
-  { id: 'getting-started', title: 'Getting Started', icon: '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>', render: renderDocsGettingStarted },
-  { id: 'architecture', title: 'Architecture', icon: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>', render: renderDocsArchitecture },
-  { id: 'btc-claims', title: 'BTC Claims', icon: '<path d="M11.5 3v2m0 14v2m3-18v2m0 14v2"/><path d="M9 7h5.5a2.5 2.5 0 010 5H9V7zm0 5h6.5a2.5 2.5 0 010 5H9v-5z"/>', render: renderDocsClaims },
+interface DocSection {
+  id: string;
+  title: string;
+  icon: string;
+  render: () => string;
+  children?: { id: string; title: string }[];
+}
+
+const DOC_SECTIONS: DocSection[] = [
+  { id: 'overview', title: 'Overview', icon: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/>', render: renderDocsOverview, children: [
+    { id: 'the-quantum-threat', title: 'The Quantum Threat' },
+    { id: 'key-properties', title: 'Key Properties' },
+    { id: 'supply', title: 'Supply' },
+  ]},
+  { id: 'security', title: 'Security', icon: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>', render: renderDocsSecurity, children: [
+    { id: 'why-ml-dsa-65', title: 'Why ML-DSA-65' },
+    { id: 'key-size-tradeoffs', title: 'Key Size Tradeoffs' },
+    { id: 'claim-safety', title: 'Claim Safety' },
+  ]},
+  { id: 'getting-started', title: 'Getting Started', icon: '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>', render: renderDocsGettingStarted, children: [
+    { id: 'quick-start-join-the-network', title: 'Quick Start' },
+    { id: 'claiming-btc', title: 'Claiming BTC' },
+    { id: 'cli-reference', title: 'CLI Reference' },
+  ]},
+  { id: 'architecture', title: 'Architecture', icon: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>', render: renderDocsArchitecture, children: [
+    { id: 'utxo-model', title: 'UTXO Model' },
+    { id: 'ml-dsa-65-signatures', title: 'ML-DSA-65' },
+    { id: 'sha-256-proof-of-work', title: 'SHA-256 PoW' },
+    { id: 'fork-genesis', title: 'Fork Genesis' },
+  ]},
+  { id: 'btc-claims', title: 'BTC Claims', icon: '<path d="M11.5 3v2m0 14v2m3-18v2m0 14v2"/><path d="M9 7h5.5a2.5 2.5 0 010 5H9V7zm0 5h6.5a2.5 2.5 0 010 5H9v-5z"/>', render: renderDocsClaims, children: [
+    { id: 'how-it-works', title: 'How It Works' },
+    { id: 'multisig-claims', title: 'Multisig Claims' },
+    { id: 'snapshot', title: 'Snapshot' },
+  ]},
   { id: 'wallet', title: 'Wallet Guide', icon: '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M22 10h-4a2 2 0 100 4h4"/>', render: renderDocsWallet },
-  { id: 'consensus', title: 'Consensus', icon: '<path d="M9 12l2 2 4-4"/><path d="M12 3a9 9 0 11-9 9 9 9 0 019-9z"/><path d="M12 7v1m0 8v1m4-5h1M6 12h1"/>', render: renderDocsConsensus },
+  { id: 'consensus', title: 'Consensus', icon: '<path d="M9 12l2 2 4-4"/><path d="M12 3a9 9 0 11-9 9 9 9 0 019-9z"/><path d="M12 7v1m0 8v1m4-5h1M6 12h1"/>', render: renderDocsConsensus, children: [
+    { id: 'difficulty-adjustment', title: 'Difficulty' },
+    { id: 'block-reward-supply', title: 'Block Reward' },
+    { id: 'mining', title: 'Mining' },
+  ]},
   { id: 'api', title: 'API Reference', icon: '<path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/>', render: renderDocsApi },
   { id: 'p2p', title: 'P2P Protocol', icon: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/>', render: renderDocsP2p },
   { id: 'faq', title: 'FAQ', icon: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>', render: renderDocsFaq },
@@ -769,7 +802,8 @@ function docSteps(items: string[]): string {
 }
 
 function docH2(text: string): string {
-  return `<h2 class="text-xl font-bold mt-8 mb-3">${text}</h2>`;
+  const id = text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  return `<h2 id="${id}" class="text-xl font-bold mt-8 mb-3 scroll-mt-24">${text}</h2>`;
 }
 
 function docH3(text: string): string {
@@ -1877,14 +1911,21 @@ function renderDocs(section?: string): void {
       ? 'bg-qubit-600/15 text-qubit-400 border-l-2 border-qubit-500'
       : 'text-text-muted hover:text-text-primary hover:bg-white/[0.03] border-l-2 border-transparent';
     const iconCls = active ? 'text-qubit-400' : 'text-text-muted/60';
-    return `<a href="#/docs/${s.id}" class="flex items-center gap-2.5 px-3 py-2 rounded-r-md text-sm ${linkCls} transition-all">
+    let html = `<a href="#/docs/${s.id}" class="flex items-center gap-2.5 px-3 py-2 rounded-r-md text-sm ${linkCls} transition-all">
       ${docIcon(s.icon, iconCls)}
       <span>${s.title}</span>
     </a>`;
+    if (active && s.children?.length) {
+      const childLinks = s.children.map(c =>
+        `<a href="#/docs/${s.id}#${c.id}" onclick="event.preventDefault();document.getElementById('${c.id}')?.scrollIntoView({behavior:'smooth',block:'start'});history.replaceState(null,'','#/docs/${s.id}')" class="block pl-10 py-1 text-xs text-text-muted/70 hover:text-qubit-400 transition-colors">${c.title}</a>`
+      ).join('');
+      html += `<div class="space-y-0.5 mt-0.5">${childLinks}</div>`;
+    }
+    return html;
   }).join('');
 
   root.innerHTML = `<div class="flex gap-8 items-start">
-    <nav class="w-56 shrink-0 hidden md:block sticky top-20">
+    <nav class="w-72 shrink-0 hidden md:block sticky top-20">
       <div class="bg-surface rounded-xl glow-border p-5">
         <a href="#/docs" class="flex items-center gap-2 text-xs text-text-muted hover:text-qubit-400 font-mono tracking-widest mb-4 pb-3 border-b border-border transition-colors">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
@@ -1895,7 +1936,7 @@ function renderDocs(section?: string): void {
         </div>
       </div>
     </nav>
-    <div class="flex-1 min-w-0">
+    <div class="flex-1 min-w-0 max-w-4xl">
       ${sectionData.render()}
     </div>
   </div>`;
@@ -1957,9 +1998,18 @@ async function dispatch(): Promise<void> {
 
   const route = parseRoute();
 
-  // Hide search bar on docs route
+  // Hide search bar on docs route; widen container for sidebar
   const searchBar = document.querySelector('#explorer-main > .mb-6') as HTMLElement | null;
   if (searchBar) searchBar.style.display = route.view === 'docs' ? 'none' : '';
+  if (explorerEl) {
+    if (route.view === 'docs') {
+      explorerEl.classList.remove('max-w-6xl');
+      explorerEl.classList.add('max-w-[90rem]');
+    } else {
+      explorerEl.classList.remove('max-w-[90rem]');
+      explorerEl.classList.add('max-w-6xl');
+    }
+  }
 
   if (route.view !== 'docs') renderLoading();
 
@@ -1985,6 +2035,7 @@ async function dispatch(): Promise<void> {
       renderDocs(route.section);
       break;
   }
+  window.scrollTo(0, 0);
 }
 
 // --- Init ------------------------------------------------------------------
