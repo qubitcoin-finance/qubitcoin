@@ -1,5 +1,5 @@
 /**
- * Block structure for qcoin
+ * Block structure for qbtc
  *
  * Block header uses fixed-size binary serialization for consistent hashing.
  * Block hash = doubleSha256(serialized header), same as Bitcoin.
@@ -83,7 +83,7 @@ export function transactionSize(tx: Transaction): number {
     size += 20 // btcAddress
     size += (tx.claimData.ecdsaPublicKey instanceof Uint8Array ? tx.claimData.ecdsaPublicKey.length : 33)
     size += (tx.claimData.ecdsaSignature instanceof Uint8Array ? tx.claimData.ecdsaSignature.length : 72)
-    size += 32 // qcoinAddress
+    size += 32 // qbtcAddress
   }
   return size
 }
@@ -225,8 +225,8 @@ export function createForkGenesisBlock(snapshot: BtcSnapshot): Block {
   const encoder = new TextEncoder()
 
   // Genesis coinbase embeds the snapshot commitment
-  // Format: "QCOIN_FORK:btcHeight:btcBlockHash:snapshotMerkleRoot"
-  const commitmentMsg = `QCOIN_FORK:${snapshot.btcBlockHeight}:${snapshot.btcBlockHash}:${snapshot.merkleRoot}`
+  // Format: "QBTC_FORK:btcHeight:btcBlockHash:snapshotMerkleRoot"
+  const commitmentMsg = `QBTC_FORK:${snapshot.btcBlockHeight}:${snapshot.btcBlockHash}:${snapshot.merkleRoot}`
 
   const coinbaseTx: Transaction = {
     id: '',

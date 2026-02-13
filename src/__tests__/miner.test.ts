@@ -118,7 +118,7 @@ describe('transactionSize', () => {
         btcAddress: 'b'.repeat(40),
         ecdsaPublicKey: new Uint8Array(33), // compressed secp256k1 pubkey
         ecdsaSignature: new Uint8Array(64), // ECDSA signature
-        qcoinAddress: walletA.address,
+        qbtcAddress: walletA.address,
       },
     }
 
@@ -127,7 +127,7 @@ describe('transactionSize', () => {
     // txId(32) + timestamp(8) = 40
     // 1 input: txId(32) + outputIndex(4) + pubKey(0) + sig(0) = 36
     // 1 output: address(32) + amount(8) = 40
-    // claimData: btcAddress(20) + ecdsaPubKey(33) + ecdsaSig(64) + qcoinAddress(32) = 149
+    // claimData: btcAddress(20) + ecdsaPubKey(33) + ecdsaSig(64) + qbtcAddress(32) = 149
     // total = 40 + 36 + 40 + 149 = 265
     expect(size).toBe(265)
   })
@@ -180,7 +180,7 @@ describe('blockSize', () => {
         btcAddress: 'd'.repeat(40),
         ecdsaPublicKey: new Uint8Array(33),
         ecdsaSignature: new Uint8Array(64),
-        qcoinAddress: walletB.address,
+        qbtcAddress: walletB.address,
       },
     }
 
@@ -309,7 +309,7 @@ describe('assembleCandidateBlock respects block size limit', () => {
           btcAddress: doubleSha256Hex(new TextEncoder().encode(`btc-addr-${i}`)).slice(0, 40),
           ecdsaPublicKey: new Uint8Array(33),
           ecdsaSignature: new Uint8Array(64),
-          qcoinAddress: walletB.address,
+          qbtcAddress: walletB.address,
         },
       }
       // Add to mempool directly (bypass validation since these are synthetic)

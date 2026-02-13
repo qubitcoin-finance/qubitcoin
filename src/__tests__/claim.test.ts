@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import {
   createClaimTransaction,
+  createP2wshClaimTransaction,
+  createP2shMultisigClaimTransaction,
   verifyClaimProof,
   serializeClaimMessage,
 } from '../claim.js'
 import { createMockSnapshot } from '../snapshot.js'
-import { generateWallet, generateBtcKeypair, bytesToHex, hash160, deriveP2shP2wpkhAddress, getSchnorrPublicKey, deriveP2trAddress } from '../crypto.js'
+import { generateWallet, generateBtcKeypair, bytesToHex, hash160, deriveP2shP2wpkhAddress, deriveP2shMultisigAddress, getSchnorrPublicKey, deriveP2trAddress, buildMultisigScript, deriveP2wshAddress, parseWitnessScript } from '../crypto.js'
 import { secp256k1 } from '@noble/curves/secp256k1.js'
 import { isClaimTransaction, CLAIM_TXID } from '../transaction.js'
 import { Blockchain } from '../chain.js'
@@ -18,8 +20,8 @@ import {
   type BlockHeader,
 } from '../block.js'
 
-const qtcWalletA = generateWallet()
-const qtcWalletB = generateWallet()
+const qbtcWalletA = generateWallet()
+const qbtcWalletB = generateWallet()
 
 // Easy target for tests: ~16 attempts to find valid hash
 const TEST_TARGET = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
@@ -53,37 +55,37 @@ function mineOnChain(chain: Blockchain, minerAddress: string, extraTxs: any[] = 
 describe('createClaimTransaction', () => {
   it('creates correct structure', () => {
     const { snapshot, holders } = createMockSnapshot()
-    const qtcWallet = qtcWalletA
+    const qbtcWallet = qbtcWalletA
 
     const tx = createClaimTransaction(
       holders[0].secretKey,
       holders[0].publicKey,
       snapshot.entries[0],
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
 
     expect(isClaimTransaction(tx)).toBe(true)
     expect(tx.claimData).toBeDefined()
     expect(tx.claimData!.btcAddress).toBe(snapshot.entries[0].btcAddress)
-    expect(tx.claimData!.qcoinAddress).toBe(qtcWallet.address)
+    expect(tx.claimData!.qbtcAddress).toBe(qbtcWallet.address)
     expect(tx.inputs[0].txId).toBe(CLAIM_TXID)
     expect(tx.inputs[0].outputIndex).toBe(0)
     expect(tx.outputs.length).toBe(1)
     expect(tx.outputs[0].amount).toBe(holders[0].amount)
-    expect(tx.outputs[0].address).toBe(qtcWallet.address)
+    expect(tx.outputs[0].address).toBe(qbtcWallet.address)
     expect(tx.id.length).toBe(64)
   })
 
   it('ECDSA signature is valid', () => {
     const { snapshot, holders } = createMockSnapshot()
-    const qtcWallet = qtcWalletA
+    const qbtcWallet = qbtcWalletA
 
     const tx = createClaimTransaction(
       holders[0].secretKey,
       holders[0].publicKey,
       snapshot.entries[0],
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
 
@@ -95,13 +97,13 @@ describe('createClaimTransaction', () => {
 describe('verifyClaimProof', () => {
   it('accepts valid proof', () => {
     const { snapshot, holders } = createMockSnapshot()
-    const qtcWallet = qtcWalletA
+    const qbtcWallet = qbtcWalletA
 
     const tx = createClaimTransaction(
       holders[0].secretKey,
       holders[0].publicKey,
       snapshot.entries[0],
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
 
@@ -110,7 +112,7 @@ describe('verifyClaimProof', () => {
 
   it('rejects wrong ECDSA key', () => {
     const { snapshot, holders } = createMockSnapshot()
-    const qtcWallet = qtcWalletA
+    const qbtcWallet = qbtcWalletA
     const wrongKey = generateBtcKeypair()
 
     // Sign with wrong key
@@ -118,7 +120,7 @@ describe('verifyClaimProof', () => {
       wrongKey.secretKey,
       wrongKey.publicKey,
       snapshot.entries[0],
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
 
@@ -129,13 +131,13 @@ describe('verifyClaimProof', () => {
 
   it('rejects wrong amount', () => {
     const { snapshot, holders } = createMockSnapshot()
-    const qtcWallet = qtcWalletA
+    const qbtcWallet = qbtcWalletA
 
     const tx = createClaimTransaction(
       holders[0].secretKey,
       holders[0].publicKey,
       snapshot.entries[0],
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
 
@@ -149,13 +151,13 @@ describe('verifyClaimProof', () => {
 
   it('rejects missing entry', () => {
     const { snapshot, holders } = createMockSnapshot()
-    const qtcWallet = qtcWalletA
+    const qbtcWallet = qbtcWalletA
 
     const tx = createClaimTransaction(
       holders[0].secretKey,
       holders[0].publicKey,
       snapshot.entries[0],
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
 
@@ -200,28 +202,28 @@ describe('end-to-end: claim → mine → spend', () => {
   it('claim, mine, then spend with ML-DSA-65', () => {
     const { snapshot, holders } = createMockSnapshot()
     const chain = new Blockchain(snapshot)
-    const qtcWallet = qtcWalletA
-    const recipient = qtcWalletB
+    const qbtcWallet = qbtcWalletA
+    const recipient = qbtcWalletB
 
     // Step 1: Create claim and mine it
     const claimTx = createClaimTransaction(
       holders[0].secretKey,
       holders[0].publicKey,
       snapshot.entries[0],
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
     const block1 = mineOnChain(chain, 'f'.repeat(64), [claimTx])
     const addResult = chain.addBlock(block1)
     expect(addResult.success).toBe(true)
-    expect(chain.getBalance(qtcWallet.address)).toBe(holders[0].amount)
+    expect(chain.getBalance(qbtcWallet.address)).toBe(holders[0].amount)
 
     // Step 2: Spend claimed coins with ML-DSA-65
-    const utxos = chain.findUTXOs(qtcWallet.address)
+    const utxos = chain.findUTXOs(qbtcWallet.address)
     expect(utxos.length).toBe(1)
 
     const spendTx = createTransaction(
-      qtcWallet,
+      qbtcWallet,
       utxos,
       [{ address: recipient.address, amount: 30 }],
       1
@@ -233,7 +235,7 @@ describe('end-to-end: claim → mine → spend', () => {
 
     // Verify balances
     expect(chain.getBalance(recipient.address)).toBe(30)
-    expect(chain.getBalance(qtcWallet.address)).toBe(holders[0].amount - 30 - 1) // minus send minus fee
+    expect(chain.getBalance(qbtcWallet.address)).toBe(holders[0].amount - 30 - 1) // minus send minus fee
   })
 })
 
@@ -257,12 +259,12 @@ describe('P2SH-P2WPKH claims', () => {
     const p2shEntry = snapshot.entries.find(e => e.type === 'p2sh')!
     expect(p2shEntry).toBeDefined()
 
-    const qtcWallet = qtcWalletA
+    const qbtcWallet = qbtcWalletA
     const tx = createClaimTransaction(
       p2shHolder.secretKey,
       p2shHolder.publicKey,
       p2shEntry,
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
 
@@ -274,13 +276,13 @@ describe('P2SH-P2WPKH claims', () => {
     const { snapshot } = createMockSnapshot()
     const p2shEntry = snapshot.entries.find(e => e.type === 'p2sh')!
     const wrongKey = generateBtcKeypair()
-    const qtcWallet = qtcWalletA
+    const qbtcWallet = qbtcWalletA
 
     const tx = createClaimTransaction(
       wrongKey.secretKey,
       wrongKey.publicKey,
       p2shEntry,
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
 
@@ -294,13 +296,13 @@ describe('P2SH-P2WPKH claims', () => {
     // Use a P2PKH holder's key to try claiming a P2SH entry
     const p2pkhHolder = holders[0] // first holder is P2PKH
     const p2shEntry = snapshot.entries.find(e => e.type === 'p2sh')!
-    const qtcWallet = qtcWalletA
+    const qbtcWallet = qbtcWalletA
 
     const tx = createClaimTransaction(
       p2pkhHolder.secretKey,
       p2pkhHolder.publicKey,
       p2shEntry,
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
 
@@ -314,13 +316,13 @@ describe('P2SH-P2WPKH claims', () => {
     // Use a P2SH holder's key to try claiming a P2PKH entry
     const p2shHolder = holders.find(h => h.type === 'p2sh')!
     const p2pkhEntry = snapshot.entries[0] // first entry is P2PKH
-    const qtcWallet = qtcWalletA
+    const qbtcWallet = qbtcWalletA
 
     const tx = createClaimTransaction(
       p2shHolder.secretKey,
       p2shHolder.publicKey,
       p2pkhEntry,
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
 
@@ -332,8 +334,8 @@ describe('P2SH-P2WPKH claims', () => {
   it('end-to-end: P2SH-P2WPKH claim → mine → spend', () => {
     const { snapshot, holders } = createMockSnapshot()
     const chain = new Blockchain(snapshot)
-    const qtcWallet = qtcWalletA
-    const recipient = qtcWalletB
+    const qbtcWallet = qbtcWalletA
+    const recipient = qbtcWalletB
 
     const p2shHolder = holders.find(h => h.type === 'p2sh')!
     const p2shEntry = snapshot.entries.find(e => e.type === 'p2sh')!
@@ -343,20 +345,20 @@ describe('P2SH-P2WPKH claims', () => {
       p2shHolder.secretKey,
       p2shHolder.publicKey,
       p2shEntry,
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
     const block1 = mineOnChain(chain, 'f'.repeat(64), [claimTx])
     const addResult = chain.addBlock(block1)
     expect(addResult.success).toBe(true)
-    expect(chain.getBalance(qtcWallet.address)).toBe(p2shHolder.amount)
+    expect(chain.getBalance(qbtcWallet.address)).toBe(p2shHolder.amount)
 
     // Spend
-    const utxos = chain.findUTXOs(qtcWallet.address)
+    const utxos = chain.findUTXOs(qbtcWallet.address)
     expect(utxos.length).toBe(1)
 
     const spendTx = createTransaction(
-      qtcWallet,
+      qbtcWallet,
       utxos,
       [{ address: recipient.address, amount: 50 }],
       1
@@ -366,7 +368,7 @@ describe('P2SH-P2WPKH claims', () => {
     expect(addResult2.success).toBe(true)
 
     expect(chain.getBalance(recipient.address)).toBe(50)
-    expect(chain.getBalance(qtcWallet.address)).toBe(p2shHolder.amount - 50 - 1)
+    expect(chain.getBalance(qbtcWallet.address)).toBe(p2shHolder.amount - 50 - 1)
   })
 })
 
@@ -389,12 +391,12 @@ describe('P2TR (Taproot) claims', () => {
     const p2trEntry = snapshot.entries.find(e => e.type === 'p2tr')!
     expect(p2trEntry).toBeDefined()
 
-    const qtcWallet = qtcWalletA
+    const qbtcWallet = qbtcWalletA
     const tx = createClaimTransaction(
       p2trHolder.secretKey,
       p2trHolder.publicKey,
       p2trEntry,
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
 
@@ -415,13 +417,13 @@ describe('P2TR (Taproot) claims', () => {
     const p2trEntry = snapshot.entries.find(e => e.type === 'p2tr')!
     const wrongSk = secp256k1.utils.randomSecretKey()
     const wrongPubkey = getSchnorrPublicKey(wrongSk)
-    const qtcWallet = qtcWalletA
+    const qbtcWallet = qbtcWalletA
 
     const tx = createClaimTransaction(
       wrongSk,
       wrongPubkey,
       p2trEntry,
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
 
@@ -434,7 +436,7 @@ describe('P2TR (Taproot) claims', () => {
     const { snapshot, holders } = createMockSnapshot()
     const p2pkhHolder = holders[0]
     const p2trEntry = snapshot.entries.find(e => e.type === 'p2tr')!
-    const qtcWallet = qtcWalletA
+    const qbtcWallet = qbtcWalletA
 
     // P2PKH holder's compressed key (33 bytes) gets used as schnorrPublicKey via P2TR path.
     // Verification rejects because schnorrPublicKey must be exactly 32 bytes.
@@ -442,7 +444,7 @@ describe('P2TR (Taproot) claims', () => {
       p2pkhHolder.secretKey,
       p2pkhHolder.publicKey, // 33-byte compressed key, not 32-byte x-only
       p2trEntry,
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
 
@@ -455,7 +457,7 @@ describe('P2TR (Taproot) claims', () => {
     const { snapshot, holders } = createMockSnapshot()
     const p2trHolder = holders.find(h => h.type === 'p2tr')!
     const p2pkhEntry = snapshot.entries[0]
-    const qtcWallet = qtcWalletA
+    const qbtcWallet = qbtcWalletA
 
     // P2TR holder tries to claim a P2PKH entry - entry.type is undefined, so ECDSA path
     // But the publicKey is 32-byte x-only, not 33-byte compressed - HASH160 won't match
@@ -463,7 +465,7 @@ describe('P2TR (Taproot) claims', () => {
       p2trHolder.secretKey,
       p2trHolder.publicKey,
       p2pkhEntry,
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
 
@@ -475,8 +477,8 @@ describe('P2TR (Taproot) claims', () => {
   it('end-to-end: P2TR claim → mine → spend', () => {
     const { snapshot, holders } = createMockSnapshot()
     const chain = new Blockchain(snapshot)
-    const qtcWallet = qtcWalletA
-    const recipient = qtcWalletB
+    const qbtcWallet = qbtcWalletA
+    const recipient = qbtcWalletB
 
     const p2trHolder = holders.find(h => h.type === 'p2tr')!
     const p2trEntry = snapshot.entries.find(e => e.type === 'p2tr')!
@@ -486,20 +488,20 @@ describe('P2TR (Taproot) claims', () => {
       p2trHolder.secretKey,
       p2trHolder.publicKey,
       p2trEntry,
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
     const block1 = mineOnChain(chain, 'f'.repeat(64), [claimTx])
     const addResult = chain.addBlock(block1)
     expect(addResult.success).toBe(true)
-    expect(chain.getBalance(qtcWallet.address)).toBe(p2trHolder.amount)
+    expect(chain.getBalance(qbtcWallet.address)).toBe(p2trHolder.amount)
 
     // Spend claimed coins
-    const utxos = chain.findUTXOs(qtcWallet.address)
+    const utxos = chain.findUTXOs(qbtcWallet.address)
     expect(utxos.length).toBe(1)
 
     const spendTx = createTransaction(
-      qtcWallet,
+      qbtcWallet,
       utxos,
       [{ address: recipient.address, amount: 100 }],
       1
@@ -509,6 +511,361 @@ describe('P2TR (Taproot) claims', () => {
     expect(addResult2.success).toBe(true)
 
     expect(chain.getBalance(recipient.address)).toBe(100)
-    expect(chain.getBalance(qtcWallet.address)).toBe(p2trHolder.amount - 100 - 1)
+    expect(chain.getBalance(qbtcWallet.address)).toBe(p2trHolder.amount - 100 - 1)
+  })
+})
+
+describe('P2WSH claims', () => {
+  it('deriveP2wshAddress computes correct 64-char hex SHA256', () => {
+    const kp1 = generateBtcKeypair()
+    const kp2 = generateBtcKeypair()
+    const script = buildMultisigScript(1, [kp1.publicKey, kp2.publicKey])
+    const addr = deriveP2wshAddress(script)
+    expect(addr).toHaveLength(64)
+    expect(/^[0-9a-f]{64}$/.test(addr)).toBe(true)
+  })
+
+  it('buildMultisigScript / parseWitnessScript roundtrip', () => {
+    const kp1 = generateBtcKeypair()
+    const kp2 = generateBtcKeypair()
+    const kp3 = generateBtcKeypair()
+    const script = buildMultisigScript(2, [kp1.publicKey, kp2.publicKey, kp3.publicKey])
+    const parsed = parseWitnessScript(script)
+    expect(parsed.type).toBe('multisig')
+    if (parsed.type === 'multisig') {
+      expect(parsed.m).toBe(2)
+      expect(parsed.n).toBe(3)
+      expect(parsed.pubkeys.length).toBe(3)
+      expect(bytesToHex(parsed.pubkeys[0])).toBe(bytesToHex(kp1.publicKey))
+      expect(bytesToHex(parsed.pubkeys[1])).toBe(bytesToHex(kp2.publicKey))
+      expect(bytesToHex(parsed.pubkeys[2])).toBe(bytesToHex(kp3.publicKey))
+    }
+  })
+
+  it('creates and verifies a valid 2-of-3 P2WSH claim', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const p2wshHolder = holders.find(h => h.type === 'p2wsh')!
+    expect(p2wshHolder).toBeDefined()
+    expect(p2wshHolder.signerKeys).toBeDefined()
+
+    const p2wshEntry = snapshot.entries.find(e => e.type === 'p2wsh')!
+    expect(p2wshEntry).toBeDefined()
+
+    const qbtcWallet = qbtcWalletA
+    // Sign with first two keys (2-of-3)
+    const tx = createP2wshClaimTransaction(
+      [p2wshHolder.signerKeys![0].secretKey, p2wshHolder.signerKeys![1].secretKey],
+      p2wshHolder.witnessScript!,
+      p2wshEntry,
+      qbtcWallet,
+      snapshot.btcBlockHash
+    )
+
+    expect(tx.claimData!.witnessScript).toBeDefined()
+    expect(tx.claimData!.witnessSignatures).toBeDefined()
+    expect(tx.claimData!.witnessSignatures!.length).toBe(128) // 2 × 64
+
+    const result = verifyClaimProof(tx, snapshot)
+    expect(result.valid).toBe(true)
+  })
+
+  it('rejects wrong witness script (hash mismatch)', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const p2wshHolder = holders.find(h => h.type === 'p2wsh')!
+    const p2wshEntry = snapshot.entries.find(e => e.type === 'p2wsh')!
+    const qbtcWallet = qbtcWalletA
+
+    // Build a different witness script
+    const wrongKeys = [generateBtcKeypair(), generateBtcKeypair(), generateBtcKeypair()]
+    const wrongScript = buildMultisigScript(2, wrongKeys.map(k => k.publicKey))
+
+    const tx = createP2wshClaimTransaction(
+      [wrongKeys[0].secretKey, wrongKeys[1].secretKey],
+      p2wshHolder.witnessScript!,
+      p2wshEntry,
+      qbtcWallet,
+      snapshot.btcBlockHash
+    )
+    // Tamper: replace witness script with wrong one
+    tx.claimData!.witnessScript = wrongScript
+
+    const result = verifyClaimProof(tx, snapshot)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('does not match P2WSH address')
+  })
+
+  it('rejects insufficient signatures (1 of required 2)', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const p2wshHolder = holders.find(h => h.type === 'p2wsh')!
+    const p2wshEntry = snapshot.entries.find(e => e.type === 'p2wsh')!
+    const qbtcWallet = qbtcWalletA
+
+    // Only provide 1 signature for a 2-of-3
+    const tx = createP2wshClaimTransaction(
+      [p2wshHolder.signerKeys![0].secretKey],
+      p2wshHolder.witnessScript!,
+      p2wshEntry,
+      qbtcWallet,
+      snapshot.btcBlockHash
+    )
+
+    const result = verifyClaimProof(tx, snapshot)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('requires exactly 2 signatures')
+  })
+
+  it('rejects invalid signature (wrong key)', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const p2wshHolder = holders.find(h => h.type === 'p2wsh')!
+    const p2wshEntry = snapshot.entries.find(e => e.type === 'p2wsh')!
+    const qbtcWallet = qbtcWalletA
+
+    // Sign with one valid key and one wrong key
+    const wrongKey = generateBtcKeypair()
+    const tx = createP2wshClaimTransaction(
+      [p2wshHolder.signerKeys![0].secretKey, wrongKey.secretKey],
+      p2wshHolder.witnessScript!,
+      p2wshEntry,
+      qbtcWallet,
+      snapshot.btcBlockHash
+    )
+
+    const result = verifyClaimProof(tx, snapshot)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('signatures verified')
+  })
+
+  it('rejects cross-type: P2WSH claim against P2PKH entry', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const p2wshHolder = holders.find(h => h.type === 'p2wsh')!
+    const p2pkhEntry = snapshot.entries[0] // first entry is P2PKH
+    const qbtcWallet = qbtcWalletA
+
+    // Try to use P2WSH claim against a P2PKH entry - the witness script hash won't match
+    // But we need to bypass the constructor check, so build manually
+    const tx = createP2wshClaimTransaction(
+      [p2wshHolder.signerKeys![0].secretKey, p2wshHolder.signerKeys![1].secretKey],
+      p2wshHolder.witnessScript!,
+      { ...p2pkhEntry, btcAddress: p2wshHolder.address, type: 'p2wsh' } as any,
+      qbtcWallet,
+      snapshot.btcBlockHash
+    )
+    // Tamper btcAddress to point at P2PKH entry
+    tx.claimData!.btcAddress = p2pkhEntry.btcAddress
+
+    const result = verifyClaimProof(tx, snapshot)
+    expect(result.valid).toBe(false)
+    // P2PKH entry has no type, so it takes the ECDSA path, not P2WSH
+    expect(result.error).toContain('does not match BTC address')
+  })
+
+  it('end-to-end: P2WSH claim → mine → spend with ML-DSA-65', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const chain = new Blockchain(snapshot)
+    const qbtcWallet = qbtcWalletA
+    const recipient = qbtcWalletB
+
+    const p2wshHolder = holders.find(h => h.type === 'p2wsh')!
+    const p2wshEntry = snapshot.entries.find(e => e.type === 'p2wsh')!
+
+    // Claim with 2-of-3 signatures
+    const claimTx = createP2wshClaimTransaction(
+      [p2wshHolder.signerKeys![0].secretKey, p2wshHolder.signerKeys![1].secretKey],
+      p2wshHolder.witnessScript!,
+      p2wshEntry,
+      qbtcWallet,
+      snapshot.btcBlockHash
+    )
+    const block1 = mineOnChain(chain, 'f'.repeat(64), [claimTx])
+    const addResult = chain.addBlock(block1)
+    expect(addResult.success).toBe(true)
+    expect(chain.getBalance(qbtcWallet.address)).toBe(p2wshHolder.amount)
+
+    // Spend claimed coins with ML-DSA-65
+    const utxos = chain.findUTXOs(qbtcWallet.address)
+    expect(utxos.length).toBe(1)
+
+    const spendTx = createTransaction(
+      qbtcWallet,
+      utxos,
+      [{ address: recipient.address, amount: 100 }],
+      1
+    )
+    const block2 = mineOnChain(chain, 'f'.repeat(64), [spendTx])
+    const addResult2 = chain.addBlock(block2)
+    expect(addResult2.success).toBe(true)
+
+    expect(chain.getBalance(recipient.address)).toBe(100)
+    expect(chain.getBalance(qbtcWallet.address)).toBe(p2wshHolder.amount - 100 - 1)
+  })
+})
+
+describe('P2SH multisig claims', () => {
+  it('deriveP2shMultisigAddress produces correct 40-char hex', () => {
+    const kp1 = generateBtcKeypair()
+    const kp2 = generateBtcKeypair()
+    const script = buildMultisigScript(1, [kp1.publicKey, kp2.publicKey])
+    const addr = deriveP2shMultisigAddress(script)
+    expect(addr).toHaveLength(40)
+    expect(/^[0-9a-f]{40}$/.test(addr)).toBe(true)
+    // Must differ from P2WSH (SHA256 vs HASH160)
+    const p2wshAddr = deriveP2wshAddress(script)
+    expect(addr).not.toBe(p2wshAddr)
+  })
+
+  it('creates and verifies a valid 2-of-3 P2SH multisig claim', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const p2shMultisigHolder = holders.find(h => h.type === 'p2sh' && h.signerKeys)!
+    expect(p2shMultisigHolder).toBeDefined()
+    expect(p2shMultisigHolder.signerKeys).toBeDefined()
+
+    const p2shMultisigEntry = snapshot.entries.find(e =>
+      e.type === 'p2sh' && e.btcAddress === p2shMultisigHolder.address
+    )!
+    expect(p2shMultisigEntry).toBeDefined()
+
+    const qbtcWallet = qbtcWalletA
+    const tx = createP2shMultisigClaimTransaction(
+      [p2shMultisigHolder.signerKeys![0].secretKey, p2shMultisigHolder.signerKeys![1].secretKey],
+      p2shMultisigHolder.witnessScript!,
+      p2shMultisigEntry,
+      qbtcWallet,
+      snapshot.btcBlockHash
+    )
+
+    expect(tx.claimData!.witnessScript).toBeDefined()
+    expect(tx.claimData!.witnessSignatures).toBeDefined()
+    expect(tx.claimData!.witnessSignatures!.length).toBe(128) // 2 × 64
+
+    const result = verifyClaimProof(tx, snapshot)
+    expect(result.valid).toBe(true)
+  })
+
+  it('rejects wrong redeem script (hash mismatch)', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const p2shMultisigHolder = holders.find(h => h.type === 'p2sh' && h.signerKeys)!
+    const p2shMultisigEntry = snapshot.entries.find(e =>
+      e.type === 'p2sh' && e.btcAddress === p2shMultisigHolder.address
+    )!
+    const qbtcWallet = qbtcWalletA
+
+    const wrongKeys = [generateBtcKeypair(), generateBtcKeypair(), generateBtcKeypair()]
+    const wrongScript = buildMultisigScript(2, wrongKeys.map(k => k.publicKey))
+
+    const tx = createP2shMultisigClaimTransaction(
+      [p2shMultisigHolder.signerKeys![0].secretKey, p2shMultisigHolder.signerKeys![1].secretKey],
+      p2shMultisigHolder.witnessScript!,
+      p2shMultisigEntry,
+      qbtcWallet,
+      snapshot.btcBlockHash
+    )
+    tx.claimData!.witnessScript = wrongScript
+
+    const result = verifyClaimProof(tx, snapshot)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('does not match P2SH address')
+  })
+
+  it('rejects insufficient signatures (1 of required 2)', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const p2shMultisigHolder = holders.find(h => h.type === 'p2sh' && h.signerKeys)!
+    const p2shMultisigEntry = snapshot.entries.find(e =>
+      e.type === 'p2sh' && e.btcAddress === p2shMultisigHolder.address
+    )!
+    const qbtcWallet = qbtcWalletA
+
+    const tx = createP2shMultisigClaimTransaction(
+      [p2shMultisigHolder.signerKeys![0].secretKey],
+      p2shMultisigHolder.witnessScript!,
+      p2shMultisigEntry,
+      qbtcWallet,
+      snapshot.btcBlockHash
+    )
+
+    const result = verifyClaimProof(tx, snapshot)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('requires exactly 2 signatures')
+  })
+
+  it('rejects invalid signature (wrong key)', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const p2shMultisigHolder = holders.find(h => h.type === 'p2sh' && h.signerKeys)!
+    const p2shMultisigEntry = snapshot.entries.find(e =>
+      e.type === 'p2sh' && e.btcAddress === p2shMultisigHolder.address
+    )!
+    const qbtcWallet = qbtcWalletA
+
+    const wrongKey = generateBtcKeypair()
+    const tx = createP2shMultisigClaimTransaction(
+      [p2shMultisigHolder.signerKeys![0].secretKey, wrongKey.secretKey],
+      p2shMultisigHolder.witnessScript!,
+      p2shMultisigEntry,
+      qbtcWallet,
+      snapshot.btcBlockHash
+    )
+
+    const result = verifyClaimProof(tx, snapshot)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('signatures verified')
+  })
+
+  it('P2SH-P2WPKH claim still works alongside P2SH multisig', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const p2shP2wpkhHolder = holders.find(h => h.type === 'p2sh' && !h.signerKeys)!
+    const p2shP2wpkhEntry = snapshot.entries.find(e =>
+      e.type === 'p2sh' && e.btcAddress === p2shP2wpkhHolder.address
+    )!
+    const qbtcWallet = qbtcWalletA
+
+    const tx = createClaimTransaction(
+      p2shP2wpkhHolder.secretKey,
+      p2shP2wpkhHolder.publicKey,
+      p2shP2wpkhEntry,
+      qbtcWallet,
+      snapshot.btcBlockHash
+    )
+
+    const result = verifyClaimProof(tx, snapshot)
+    expect(result.valid).toBe(true)
+  })
+
+  it('end-to-end: P2SH multisig claim → mine → spend', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const chain = new Blockchain(snapshot)
+    const qbtcWallet = qbtcWalletA
+    const recipient = qbtcWalletB
+
+    const p2shMultisigHolder = holders.find(h => h.type === 'p2sh' && h.signerKeys)!
+    const p2shMultisigEntry = snapshot.entries.find(e =>
+      e.type === 'p2sh' && e.btcAddress === p2shMultisigHolder.address
+    )!
+
+    const claimTx = createP2shMultisigClaimTransaction(
+      [p2shMultisigHolder.signerKeys![0].secretKey, p2shMultisigHolder.signerKeys![1].secretKey],
+      p2shMultisigHolder.witnessScript!,
+      p2shMultisigEntry,
+      qbtcWallet,
+      snapshot.btcBlockHash
+    )
+    const block1 = mineOnChain(chain, 'f'.repeat(64), [claimTx])
+    const addResult = chain.addBlock(block1)
+    expect(addResult.success).toBe(true)
+    expect(chain.getBalance(qbtcWallet.address)).toBe(p2shMultisigHolder.amount)
+
+    const utxos = chain.findUTXOs(qbtcWallet.address)
+    expect(utxos.length).toBe(1)
+
+    const spendTx = createTransaction(
+      qbtcWallet,
+      utxos,
+      [{ address: recipient.address, amount: 100 }],
+      1
+    )
+    const block2 = mineOnChain(chain, 'f'.repeat(64), [spendTx])
+    const addResult2 = chain.addBlock(block2)
+    expect(addResult2.success).toBe(true)
+
+    expect(chain.getBalance(recipient.address)).toBe(100)
+    expect(chain.getBalance(qbtcWallet.address)).toBe(p2shMultisigHolder.amount - 100 - 1)
   })
 })

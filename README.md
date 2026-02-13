@@ -6,9 +6,9 @@ For a live block explorer and network status, see https://qubitcoin.finance.
 What is QubitCoin?
 ------------------
 
-QubitCoin (QTC) is a post-quantum Bitcoin fork using ML-DSA-65 (Dilithium, FIPS 204) instead of ECDSA secp256k1 for all transaction signatures. SHA-256 proof-of-work is retained — it is already quantum-resistant due to Grover's quadratic limit (256-bit security → 128-bit effective).
+QubitCoin (QBTC) is a post-quantum Bitcoin fork using ML-DSA-65 (Dilithium, FIPS 204) instead of ECDSA secp256k1 for all transaction signatures. SHA-256 proof-of-work is retained — it is already quantum-resistant due to Grover's quadratic limit (256-bit security → 128-bit effective).
 
-BTC holders can claim QTC by proving ECDSA ownership of their Bitcoin address. The fork genesis block commits to a BTC UTXO set snapshot; no coins are minted at genesis. All ongoing transactions use quantum-safe ML-DSA-65 signatures.
+BTC holders can claim QBTC by proving ECDSA ownership of their Bitcoin address. The fork genesis block commits to a BTC UTXO set snapshot; no coins are minted at genesis. All ongoing transactions use quantum-safe ML-DSA-65 signatures.
 
 QubitCoin connects to the QubitCoin peer-to-peer network to download and fully validate blocks and transactions. It includes a built-in miner and a block explorer web interface.
 
@@ -17,8 +17,8 @@ Key properties:
 - **UTXO model** — Bitcoin-style unspent transaction outputs
 - **ML-DSA-65 signatures** — NIST FIPS 204 post-quantum standard (Dilithium)
 - **SHA-256 PoW** — Bitcoin-compatible mining
-- **ECDSA claims** — One-time BTC ownership proofs for claiming QTC
-- **3.125 QTC block reward** — Matching BTC's current subsidy, halving every 210,000 blocks
+- **ECDSA claims** — One-time BTC ownership proofs for claiming QBTC
+- **3.125 QBTC block reward** — Matching BTC's current subsidy, halving every 210,000 blocks
 - **P2P networking** — Length-prefixed JSON over TCP with initial block download
 
 License
@@ -40,18 +40,18 @@ Running
 
 ```bash
 # Easiest way: auto-download the BTC snapshot and start mining
-pnpm run qtcd -- --mine --full
+pnpm run qbtcd -- --mine --full
 
 # With a local snapshot
-pnpm run qtcd -- --mine --snapshot /path/to/qtc-snapshot.jsonl
+pnpm run qbtcd -- --mine --snapshot /path/to/qbtc-snapshot.jsonl
 
 # Without mining (relay-only node)
-pnpm run qtcd -- --full
+pnpm run qbtcd -- --full
 ```
 
-The `--full` flag automatically downloads the 2.4 GB BTC snapshot from `qubitcoin.finance` on first run (saved to `<datadir>/qtc-snapshot.jsonl`). Subsequent starts skip the download. The default seed node is `qubitcoin.finance:6001`.
+The `--full` flag automatically downloads the 2.4 GB BTC snapshot from `qubitcoin.finance` on first run (saved to `<datadir>/qbtc-snapshot.jsonl`). Subsequent starts skip the download. The default seed node is `qubitcoin.finance:6001`.
 
-### qtcd CLI options
+### qbtcd CLI options
 
 ```
 --port <n>              RPC port (default 3001)
@@ -108,7 +108,7 @@ Changes should be tested by somebody other than the developer who wrote the code
 
 ```bash
 # Start a node with mining
-pnpm run qtcd
+pnpm run qbtcd
 
 # In another terminal, generate random transactions
 pnpm run dev:tx
@@ -132,10 +132,10 @@ QubitCoin forks from a Bitcoin UTXO set snapshot. To generate one:
 
 1. Run Bitcoin Core (pruned mode is fine — only the UTXO set is needed)
 2. Dump the UTXO set: `bitcoin-cli dumptxoutset /path/to/utxos.dat latest`
-3. Convert to QTC format:
+3. Convert to QBTC format:
 
 ```bash
-pnpm run convert-snapshot -- --input ~/utxos.dat --output ~/qtc-snapshot.jsonl
+pnpm run convert-snapshot -- --input ~/utxos.dat --output ~/qbtc-snapshot.jsonl
 ```
 
 The converter parses Bitcoin Core's `dumptxoutset` v2 binary format, filters to claimable output types (P2PKH, P2WPKH), aggregates by address, and produces an NDJSON file.

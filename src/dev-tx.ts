@@ -1,5 +1,5 @@
 /**
- * dev-tx — Generate random transactions against a running qtcd node.
+ * dev-tx — Generate random transactions against a running qbtcd node.
  *
  * Loads the miner wallet from data/node/wallet.json, fetches UTXOs via RPC,
  * and submits transfers to random addresses every few seconds.
@@ -47,7 +47,7 @@ async function main() {
     }
   } catch {
     console.error(`Could not load wallet from ${WALLET_PATH}`)
-    console.error('Make sure qtcd is running with --mine first.')
+    console.error('Make sure qbtcd is running with --mine first.')
     process.exit(1)
   }
 
@@ -113,7 +113,7 @@ async function main() {
         pendingSpent.add(`${u.txId}:${u.outputIndex}`)
       }
 
-      console.log(`TX ${result.txid.slice(0, 16)}... → ${recipient.address.slice(0, 8)}... (${amount} QTC)`)
+      console.log(`TX ${result.txid.slice(0, 16)}... → ${recipient.address.slice(0, 8)}... (${amount} QBTC)`)
     } catch (err: any) {
       // Mark selected UTXOs as spent even on error (likely already in mempool)
       if (err.message?.includes('already claimed')) {

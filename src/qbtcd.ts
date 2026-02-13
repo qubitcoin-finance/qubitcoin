@@ -1,5 +1,5 @@
 /**
- * qtcd — QubitCoin daemon
+ * qbtcd — QubitCoin daemon
  *
  * Full node: RPC server, P2P networking, optional mining.
  *
@@ -38,9 +38,9 @@ function parseArgs() {
     const arg = args[i]
     if (arg === '--') continue
     if (arg === '--help' || arg === '-h') {
-      console.log(`qtcd — QubitCoin daemon
+      console.log(`qbtcd — QubitCoin daemon
 
-Usage: pnpm run qtcd [-- options]
+Usage: pnpm run qbtcd [-- options]
 
 Options:
   --port <n>              RPC port (default 3001)
@@ -82,7 +82,7 @@ Options:
   }
 }
 
-const SNAPSHOT_URL = 'https://qubitcoin.finance/snapshot/qtc-snapshot.jsonl'
+const SNAPSHOT_URL = 'https://qubitcoin.finance/snapshot/qbtc-snapshot.jsonl'
 
 function downloadFile(url: string, destPath: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -152,7 +152,7 @@ async function main() {
   // --full: auto-download snapshot if not provided and not on disk
   if (config.full && !config.snapshotPath) {
     mkdirSync(config.dataDir, { recursive: true })
-    const defaultPath = join(config.dataDir, 'qtc-snapshot.jsonl')
+    const defaultPath = join(config.dataDir, 'qbtc-snapshot.jsonl')
     if (existsSync(defaultPath)) {
       log.info({ component: 'snapshot', path: defaultPath }, 'Snapshot already exists')
     } else {

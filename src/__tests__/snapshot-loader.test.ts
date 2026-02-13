@@ -9,7 +9,7 @@ describe('loadSnapshot', () => {
   let tmpDir: string
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qtc-snapshot-'))
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-snapshot-'))
   })
 
   afterEach(() => {
@@ -78,7 +78,7 @@ describe('loadSnapshot', () => {
 describe('getSnapshotIndex', () => {
   it('should provide O(1) lookups by btcAddress', async () => {
     const filePath = path.join(
-      fs.mkdtempSync(path.join(os.tmpdir(), 'qtc-idx-')),
+      fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-idx-')),
       'test.jsonl'
     )
     const lines = [
@@ -96,7 +96,7 @@ describe('getSnapshotIndex', () => {
 
   it('should return the same cached index on repeated calls', async () => {
     const filePath = path.join(
-      fs.mkdtempSync(path.join(os.tmpdir(), 'qtc-idx2-')),
+      fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-idx2-')),
       'test.jsonl'
     )
     fs.writeFileSync(filePath, '{"a":"aabbccdd0011223344556677889900aabbccddee","b":1}\n')

@@ -1,5 +1,5 @@
 /**
- * Bitcoin → QubitCoin (QTC) Fork Simulation
+ * Bitcoin → QubitCoin (QBTC) Fork Simulation
  *
  * Demonstrates forking from Bitcoin's UTXO set:
  * 1. Snapshot Bitcoin's ledger at block #850,000
@@ -27,7 +27,7 @@ function propagateBlock(block: Block, nodes: Node[], excludeNode: Node) {
 
 function runForkSimulation() {
   console.log('╔══════════════════════════════════════════════════════════╗')
-  console.log('║  QubitCoin (QTC): Bitcoin Fork with Quantum Resistance  ║')
+  console.log('║  QubitCoin (QBTC): Bitcoin Fork with Quantum Resistance  ║')
   console.log('║  ECDSA claim proofs → ML-DSA-65 native signatures      ║')
   console.log('╚══════════════════════════════════════════════════════════╝')
 
@@ -59,11 +59,11 @@ function runForkSimulation() {
   // ============================================================
   banner('Phase 2: Fork Genesis')
 
-  console.log('  Creating 3 QTC nodes with fork genesis block...\n')
+  console.log('  Creating 3 QBTC nodes with fork genesis block...\n')
 
-  const node1 = new Node('QTC-1', snapshot)
-  const node2 = new Node('QTC-2', snapshot)
-  const node3 = new Node('QTC-3', snapshot)
+  const node1 = new Node('QBTC-1', snapshot)
+  const node2 = new Node('QBTC-2', snapshot)
+  const node3 = new Node('QBTC-3', snapshot)
   const nodes = [node1, node2, node3]
 
   const genesis = node1.chain.getChainTip()
@@ -83,24 +83,24 @@ function runForkSimulation() {
 
   console.log('  Quantum-safe migration: ECDSA secp256k1 → ML-DSA-65 (Dilithium)\n')
 
-  const qtcWallets: Wallet[] = []
+  const qbtcWallets: Wallet[] = []
   for (let i = 0; i < holders.length; i++) {
     const { result: wallet, ms } = timeIt(() => generateWallet())
-    qtcWallets.push(wallet)
+    qbtcWallets.push(wallet)
     console.log(
-      `  ${NAMES[i].padEnd(8)} QTC addr: ${wallet.address.slice(0, 24)}...  (${ms.toFixed(0)} ms)`
+      `  ${NAMES[i].padEnd(8)} QBTC addr: ${wallet.address.slice(0, 24)}...  (${ms.toFixed(0)} ms)`
     )
   }
 
-  console.log(`\n  ECDSA pubkey:  33 bytes  →  ML-DSA-65 pubkey: ${qtcWallets[0].publicKey.length.toLocaleString()} bytes`)
-  console.log(`  ECDSA secret:  32 bytes  →  ML-DSA-65 secret: ${qtcWallets[0].secretKey.length.toLocaleString()} bytes`)
+  console.log(`\n  ECDSA pubkey:  33 bytes  →  ML-DSA-65 pubkey: ${qbtcWallets[0].publicKey.length.toLocaleString()} bytes`)
+  console.log(`  ECDSA secret:  32 bytes  →  ML-DSA-65 secret: ${qbtcWallets[0].secretKey.length.toLocaleString()} bytes`)
 
   // ============================================================
   // Phase 4: Claim Transactions (3 of 5)
   // ============================================================
   banner('Phase 4: Claim Transactions')
 
-  console.log('  3 of 5 BTC holders claim — prove ECDSA ownership, get QTC UTXOs\n')
+  console.log('  3 of 5 BTC holders claim — prove ECDSA ownership, get QBTC UTXOs\n')
 
   const minerWallet = generateWallet()
 
@@ -110,14 +110,14 @@ function runForkSimulation() {
         holders[i].secretKey,
         holders[i].publicKey,
         snapshot.entries[i],
-        qtcWallets[i],
+        qbtcWallets[i],
         snapshot.btcBlockHash
       )
     )
 
-    console.log(`  ${NAMES[i]} claims ${holders[i].amount} BTC → QTC:`)
+    console.log(`  ${NAMES[i]} claims ${holders[i].amount} BTC → QBTC:`)
     console.log(`    ECDSA sig:   ${bytesToHex(claimTx.claimData!.ecdsaSignature).slice(0, 24)}... (${claimTx.claimData!.ecdsaSignature.length}B)`)
-    console.log(`    QTC dest:    ${qtcWallets[i].address.slice(0, 24)}...`)
+    console.log(`    QBTC dest:    ${qbtcWallets[i].address.slice(0, 24)}...`)
     console.log(`    Claim TX:    ${claimTx.id.slice(0, 24)}... (${ms.toFixed(0)} ms)`)
 
     for (const node of nodes) {
@@ -144,34 +144,34 @@ function runForkSimulation() {
 
   console.log('  Claimed coins are PQ-native. All spending uses ML-DSA-65.\n')
 
-  // Alice → Bob: 30 QTC
-  const aliceUtxos = node1.chain.findUTXOs(qtcWallets[0].address, 31)
+  // Alice → Bob: 30 QBTC
+  const aliceUtxos = node1.chain.findUTXOs(qbtcWallets[0].address, 31)
   const { result: sendTx1, ms: send1Ms } = timeIt(() =>
     createTransaction(
-      qtcWallets[0],
+      qbtcWallets[0],
       aliceUtxos,
-      [{ address: qtcWallets[1].address, amount: 30 }],
+      [{ address: qbtcWallets[1].address, amount: 30 }],
       1
     )
   )
-  console.log(`  Alice → Bob: 30 QTC (1 fee)`)
+  console.log(`  Alice → Bob: 30 QBTC (1 fee)`)
   console.log(`    ML-DSA-65 sig: ${sendTx1.inputs[0].signature.length.toLocaleString()} bytes | ${send1Ms.toFixed(0)} ms`)
 
   for (const node of nodes) {
     node.receiveTransaction(sendTx1)
   }
 
-  // Bob → Charlie: 10 QTC
-  const bobUtxos = node1.chain.findUTXOs(qtcWallets[1].address, 11)
+  // Bob → Charlie: 10 QBTC
+  const bobUtxos = node1.chain.findUTXOs(qbtcWallets[1].address, 11)
   const { result: sendTx2, ms: send2Ms } = timeIt(() =>
     createTransaction(
-      qtcWallets[1],
+      qbtcWallets[1],
       bobUtxos,
-      [{ address: qtcWallets[2].address, amount: 10 }],
+      [{ address: qbtcWallets[2].address, amount: 10 }],
       1
     )
   )
-  console.log(`  Bob → Charlie: 10 QTC (1 fee)`)
+  console.log(`  Bob → Charlie: 10 QBTC (1 fee)`)
   console.log(`    ML-DSA-65 sig: ${sendTx2.inputs[0].signature.length.toLocaleString()} bytes | ${send2Ms.toFixed(0)} ms`)
 
   for (const node of nodes) {
@@ -197,19 +197,19 @@ function runForkSimulation() {
 
   console.log('\n  Balances:')
   for (let i = 0; i < holders.length; i++) {
-    const bal = node1.chain.getBalance(qtcWallets[i].address)
+    const bal = node1.chain.getBalance(qbtcWallets[i].address)
     const status = i < 3 ? 'claimed' : 'not claimed'
-    console.log(`    ${NAMES[i].padEnd(8)} ${bal.toString().padStart(4)} QTC  (${status})`)
+    console.log(`    ${NAMES[i].padEnd(8)} ${bal.toString().padStart(4)} QBTC  (${status})`)
   }
   const minerBal = node1.chain.getBalance(minerWallet.address)
-  console.log(`    ${'Miner'.padEnd(8)} ${minerBal.toString().padStart(4)} QTC  (block rewards + fees)`)
+  console.log(`    ${'Miner'.padEnd(8)} ${minerBal.toString().padStart(4)} QBTC  (block rewards + fees)`)
 
   // All nodes agree?
   const allAgree = nodes.every((n) =>
     holders.every(
       (_, i) =>
-        n.chain.getBalance(qtcWallets[i].address) ===
-        node1.chain.getBalance(qtcWallets[i].address)
+        n.chain.getBalance(qbtcWallets[i].address) ===
+        node1.chain.getBalance(qbtcWallets[i].address)
     )
   )
   console.log(`\n  All 3 nodes agree on balances: ${allAgree}`)
@@ -226,11 +226,11 @@ function runForkSimulation() {
       holders[3].secretKey,
       holders[3].publicKey,
       snapshot.entries[3],
-      qtcWallets[3],
+      qbtcWallets[3],
       snapshot.btcBlockHash
     )
   )
-  console.log(`  Dave claims ${holders[3].amount} BTC → QTC (${lateMs.toFixed(0)} ms)`)
+  console.log(`  Dave claims ${holders[3].amount} BTC → QBTC (${lateMs.toFixed(0)} ms)`)
 
   for (const node of nodes) {
     node.receiveTransaction(lateClaim)
@@ -239,7 +239,7 @@ function runForkSimulation() {
   const lateBlock = node3.mine(minerWallet.address)
   propagateBlock(lateBlock, nodes, node3)
 
-  console.log(`  Dave's balance: ${node1.chain.getBalance(qtcWallets[3].address)} QTC`)
+  console.log(`  Dave's balance: ${node1.chain.getBalance(qbtcWallets[3].address)} QBTC`)
 
   const stats2 = node1.chain.getClaimStats()
   console.log(`  Migration rate: ${((stats2.claimed / stats2.totalEntries) * 100).toFixed(0)}% (${stats2.claimed}/${stats2.totalEntries})`)
@@ -255,7 +255,7 @@ function runForkSimulation() {
     holders[0].secretKey,
     holders[0].publicKey,
     snapshot.entries[0],
-    qtcWallets[0],
+    qbtcWallets[0],
     snapshot.btcBlockHash
   )
 

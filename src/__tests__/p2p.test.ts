@@ -86,8 +86,8 @@ describe('P2P server integration', () => {
   const TEST_TARGET = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
 
   beforeEach(async () => {
-    tmpDir1 = fs.mkdtempSync(path.join(os.tmpdir(), 'qtc-p2p-1-'))
-    tmpDir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'qtc-p2p-2-'))
+    tmpDir1 = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-p2p-1-'))
+    tmpDir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-p2p-2-'))
 
     const storage1 = new FileBlockStorage(tmpDir1)
     const storage2 = new FileBlockStorage(tmpDir2)
@@ -272,8 +272,8 @@ describe('P2P fork resolution', () => {
   const TEST_TARGET = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
 
   beforeEach(async () => {
-    tmpDir1 = fs.mkdtempSync(path.join(os.tmpdir(), 'qtc-fork-1-'))
-    tmpDir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'qtc-fork-2-'))
+    tmpDir1 = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-fork-1-'))
+    tmpDir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-fork-2-'))
 
     const storage1 = new FileBlockStorage(tmpDir1)
     const storage2 = new FileBlockStorage(tmpDir2)
@@ -378,7 +378,7 @@ describe('P2P waitForSync', () => {
   let p2p: P2PServer
 
   beforeEach(async () => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qtc-p2p-sync-'))
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-p2p-sync-'))
     const storage = new FileBlockStorage(tmpDir)
     node = new Node('lonely', undefined, storage)
     p2p = new P2PServer(node, 0, tmpDir) // port 0 = random

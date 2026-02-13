@@ -1,5 +1,5 @@
 /**
- * qcoin Blockchain Simulation
+ * qbtc Blockchain Simulation
  *
  * Multi-node demonstration of a Bitcoin-like blockchain
  * using ML-DSA-65 (Dilithium) post-quantum signatures.
@@ -53,7 +53,7 @@ function propagateBlock(block: Block, nodes: Node[], excludeNode: Node) {
 
 function runSimulation() {
   console.log('╔══════════════════════════════════════════════════════════╗')
-  console.log('║  qcoin: Post-Quantum Bitcoin-like Blockchain            ║')
+  console.log('║  qbtc: Post-Quantum Bitcoin-like Blockchain            ║')
   console.log('║  ML-DSA-65 (Dilithium) signatures + SHA-256 PoW        ║')
   console.log('╚══════════════════════════════════════════════════════════╝')
 
@@ -343,7 +343,7 @@ function runSimulation() {
   console.log('    - Tamper detection (hash chain + merkle root + signatures)')
   console.log('    - Post-quantum size analysis')
   console.log()
-  console.log('  qcoin: Bitcoin-compatible consensus, quantum-resistant signatures.')
+  console.log('  qbtc: Bitcoin-compatible consensus, quantum-resistant signatures.')
   console.log()
 }
 

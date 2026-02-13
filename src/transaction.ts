@@ -1,5 +1,5 @@
 /**
- * UTXO Transaction Model for qcoin
+ * UTXO Transaction Model for qbtc
  *
  * Each transaction consumes UTXOs (inputs) and creates new UTXOs (outputs).
  * Inputs carry ML-DSA-65 signatures proving ownership.
@@ -30,12 +30,14 @@ export interface TransactionOutput {
 }
 
 export interface ClaimData {
-  btcAddress: string          // the BTC address being claimed (40-char hex HASH160 or 64-char hex for P2TR)
-  ecdsaPublicKey: Uint8Array  // compressed secp256k1 public key (33 bytes, empty for P2TR)
-  ecdsaSignature: Uint8Array  // ECDSA signature proving BTC ownership (64 bytes, empty for P2TR)
-  qcoinAddress: string        // destination ML-DSA-65 address
+  btcAddress: string          // the BTC address being claimed (40-char hex HASH160 or 64-char hex for P2TR/P2WSH)
+  ecdsaPublicKey: Uint8Array  // compressed secp256k1 public key (33 bytes, empty for P2TR/P2WSH)
+  ecdsaSignature: Uint8Array  // ECDSA signature proving BTC ownership (64 bytes, empty for P2TR/P2WSH)
+  qbtcAddress: string        // destination ML-DSA-65 address
   schnorrPublicKey?: Uint8Array  // 32-byte x-only internal pubkey (P2TR only)
   schnorrSignature?: Uint8Array  // 64-byte BIP340 Schnorr signature (P2TR only)
+  witnessScript?: Uint8Array     // full witness/redeem script (P2WSH or P2SH multisig)
+  witnessSignatures?: Uint8Array // concatenated m × 64-byte ECDSA sigs (P2WSH or P2SH multisig)
 }
 
 export interface Transaction {
@@ -59,7 +61,7 @@ export const HALVING_INTERVAL = 210_000
 
 /**
  * Block mining reward.
- * Starts at 3.125 QTC (matching BTC's current post-4th-halving subsidy)
+ * Starts at 3.125 QBTC (matching BTC's current post-4th-halving subsidy)
  * and halves every 210,000 blocks from there.
  */
 const INITIAL_SUBSIDY = 3.125
@@ -108,7 +110,7 @@ export function serializeForSigning(
   // Include claim data in sighash if present
   if (claimData) {
     parts.push(encoder.encode(claimData.btcAddress))
-    parts.push(encoder.encode(claimData.qcoinAddress))
+    parts.push(encoder.encode(claimData.qbtcAddress))
   }
 
   return concatBytes(...parts)

@@ -137,7 +137,7 @@ describe('validateBlock', () => {
         btcAddress: 'b'.repeat(40),
         ecdsaPublicKey: new Uint8Array(33),
         ecdsaSignature: new Uint8Array(64),
-        qcoinAddress: 'a'.repeat(64),
+        qbtcAddress: 'a'.repeat(64),
       },
     }
 

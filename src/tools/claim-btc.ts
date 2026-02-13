@@ -1,5 +1,5 @@
 /**
- * Interactive BTC → QTC claim tool
+ * Interactive BTC → QBTC claim tool
  *
  * Three modes:
  *   pnpm run claim              — full flow (generate + send)
@@ -14,8 +14,8 @@
 import * as readline from 'node:readline'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { generateWallet, hash160, deriveP2shP2wpkhAddress, getSchnorrPublicKey, deriveP2trAddress, bytesToHex, hexToBytes } from '../crypto.js'
-import { createClaimTransaction } from '../claim.js'
+import { generateWallet, hash160, deriveP2shP2wpkhAddress, getSchnorrPublicKey, deriveP2trAddress, deriveP2wshAddress, parseWitnessScript, bytesToHex, hexToBytes } from '../crypto.js'
+import { createClaimTransaction, createP2wshClaimTransaction } from '../claim.js'
 import { sanitize } from '../rpc.js'
 import { secp256k1 } from '@noble/curves/secp256k1.js'
 import { sha256 } from '@noble/hashes/sha2.js'
@@ -27,7 +27,7 @@ import { HDKey } from '@scure/bip32'
 // Helpers
 // ---------------------------------------------------------------------------
 
-const RPC_BASE = process.env.QTC_RPC ?? 'http://127.0.0.1:3001'
+const RPC_BASE = process.env.QBTC_RPC ?? 'http://127.0.0.1:3001'
 
 function ask(rl: readline.Interface, question: string): Promise<string> {
   return new Promise(resolve => rl.question(question, resolve))
@@ -193,6 +193,108 @@ async function resolveBtcCredentials(rl: readline.Interface): Promise<{ secretKe
   return { secretKey, publicKey, address }
 }
 
+/** Resolve P2WSH credentials: witness script + signer keys */
+async function resolveP2wshCredentials(rl: readline.Interface): Promise<{ witnessScript: Uint8Array; signerSecretKeys: Uint8Array[]; address: string }> {
+  console.log('  Enter the witness script as a hex string.')
+  console.log('  (e.g. from your multisig wallet setup)')
+  console.log()
+
+  const scriptHex = await ask(rl, '  Witness script (hex): ')
+  let witnessScript: Uint8Array
+  try {
+    witnessScript = hexToBytes(scriptHex.trim())
+  } catch {
+    console.error('\n  ✗ Invalid hex string.\n')
+    process.exit(1)
+  }
+
+  let parsed: ReturnType<typeof parseWitnessScript>
+  try {
+    parsed = parseWitnessScript(witnessScript)
+  } catch (err) {
+    console.error(`\n  ✗ ${(err as Error).message}\n`)
+    process.exit(1)
+  }
+
+  const address = deriveP2wshAddress(witnessScript)
+  console.log(`\n  ✓ Witness script parsed`)
+
+  if (parsed.type === 'single-key') {
+    console.log(`    Type:    single-key P2WSH`)
+    console.log(`    Pubkey:  ${bytesToHex(parsed.pubkey)}`)
+  } else {
+    console.log(`    Type:    ${parsed.m}-of-${parsed.n} multisig`)
+    for (let i = 0; i < parsed.pubkeys.length; i++) {
+      console.log(`    Key [${i}]: ${bytesToHex(parsed.pubkeys[i])}`)
+    }
+  }
+  console.log(`    Address: ${address}`)
+  console.log()
+
+  const requiredSigs = parsed.type === 'single-key' ? 1 : parsed.m
+  const signerSecretKeys: Uint8Array[] = []
+
+  for (let i = 0; i < requiredSigs; i++) {
+    const label = requiredSigs === 1 ? '  Signer key' : `  Signer key ${i + 1}/${requiredSigs}`
+    console.log(`  ${label} (WIF or hex):`)
+    const keyInput = await ask(rl, '  Input: ')
+
+    let format: InputFormat
+    try {
+      format = detectFormat(keyInput)
+    } catch (err) {
+      console.error(`\n  ✗ ${(err as Error).message}\n`)
+      process.exit(1)
+    }
+    if (format === 'seed') {
+      console.error('\n  ✗ Seed phrases not supported for individual signer keys. Use WIF or hex.\n')
+      process.exit(1)
+    }
+
+    let sk: Uint8Array
+    try {
+      sk = format === 'wif' ? decodeWIF(keyInput.trim()) : hexToBytes(keyInput.trim())
+    } catch (err) {
+      console.error(`\n  ✗ ${(err as Error).message}\n`)
+      process.exit(1)
+    }
+
+    const pubkey = secp256k1.getPublicKey(sk, true)
+    const pubkeyHex = bytesToHex(pubkey)
+
+    // Verify this pubkey exists in the script
+    if (parsed.type === 'single-key') {
+      if (pubkeyHex !== bytesToHex(parsed.pubkey)) {
+        console.error(`\n  ✗ Key does not match the pubkey in the witness script.\n`)
+        process.exit(1)
+      }
+      console.log(`  ✓ Key matches script pubkey`)
+    } else {
+      const idx = parsed.pubkeys.findIndex(pk => bytesToHex(pk) === pubkeyHex)
+      if (idx === -1) {
+        console.error(`\n  ✗ Key does not match any pubkey in the witness script.\n`)
+        process.exit(1)
+      }
+      console.log(`  ✓ Matched pubkey index [${idx}]`)
+    }
+    console.log()
+
+    signerSecretKeys.push(sk)
+  }
+
+  // Sort signer keys to match pubkey order in script (CHECKMULTISIG ordering)
+  if (parsed.type === 'multisig') {
+    const pubkeyOrder = parsed.pubkeys.map(pk => bytesToHex(pk))
+    signerSecretKeys.sort((a, b) => {
+      const aPk = bytesToHex(secp256k1.getPublicKey(a, true))
+      const bPk = bytesToHex(secp256k1.getPublicKey(b, true))
+      return pubkeyOrder.indexOf(aPk) - pubkeyOrder.indexOf(bPk)
+    })
+  }
+
+  return { witnessScript, signerSecretKeys, address }
+}
+
 // ---------------------------------------------------------------------------
 // Mode: generate (offline)
 // ---------------------------------------------------------------------------
@@ -210,11 +312,30 @@ async function modeGenerate() {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
 
   try {
-    // BTC credentials
+    // Claim type selection
     console.log('  ── Step 1: BTC Credentials ──────────────────────────────')
-    const btc = await resolveBtcCredentials(rl)
-    console.log(`  Public key (compressed): ${bytesToHex(btc.publicKey)}`)
-    console.log(`  BTC address (HASH160):   ${btc.address}`)
+    console.log('  What type of claim?')
+    console.log('    [1] Single-key (P2PKH, P2WPKH, P2SH-P2WPKH, P2TR) (default)')
+    console.log('    [2] P2WSH (witness script — multisig or single-key)')
+    console.log()
+    const claimTypeChoice = await ask(rl, '  Select [1-2] (default 1): ')
+    const isP2wsh = claimTypeChoice.trim() === '2'
+
+    let btcAddress: string
+    let btc: { secretKey: Uint8Array; publicKey: Uint8Array; address: string } | undefined
+    let p2wsh: { witnessScript: Uint8Array; signerSecretKeys: Uint8Array[]; address: string } | undefined
+
+    if (isP2wsh) {
+      console.log()
+      p2wsh = await resolveP2wshCredentials(rl)
+      btcAddress = p2wsh.address
+      console.log(`  P2WSH address: ${btcAddress}`)
+    } else {
+      btc = await resolveBtcCredentials(rl)
+      btcAddress = btc.address
+      console.log(`  Public key (compressed): ${bytesToHex(btc.publicKey)}`)
+      console.log(`  BTC address (HASH160):   ${btcAddress}`)
+    }
 
     // Snapshot block hash — user must provide it for offline mode
     console.log('\n  ── Step 2: Snapshot Info ─────────────────────────────────')
@@ -232,27 +353,29 @@ async function modeGenerate() {
     console.log('\n  You need your exact BTC snapshot balance.')
     console.log('  The node will reject the claim if the amount doesn\'t match.')
     console.log()
-    const amountStr = await ask(rl, '  Snapshot balance (QTC): ')
+    const amountStr = await ask(rl, '  Snapshot balance (QBTC): ')
     const amount = parseFloat(amountStr.trim())
     if (isNaN(amount) || amount <= 0) {
       console.error('\n  ✗ Invalid amount.\n')
       process.exit(1)
     }
 
-    // Generate QTC wallet
-    console.log('\n  ── Step 3: Generate QTC Wallet ───────────────────────────')
+    // Generate QBTC wallet
+    console.log('\n  ── Step 3: Generate QBTC Wallet ───────────────────────────')
     console.log('  Generating ML-DSA-65 keypair (this may take a moment)...')
-    const qtcWallet = generateWallet()
-    console.log(`  ✓ QTC address: ${qtcWallet.address}`)
+    const qbtcWallet = generateWallet()
+    console.log(`  ✓ QBTC address: ${qbtcWallet.address}`)
 
     // Build claim tx
     console.log('\n  ── Step 4: Build Transaction ─────────────────────────────')
-    const entry = { btcAddress: btc.address, amount }
-    const tx = createClaimTransaction(btc.secretKey, btc.publicKey, entry, qtcWallet, snapshotBlockHash.trim())
+    const entry = { btcAddress, amount, ...(isP2wsh ? { type: 'p2wsh' as const } : {}) }
+    const tx = isP2wsh
+      ? createP2wshClaimTransaction(p2wsh!.signerSecretKeys, p2wsh!.witnessScript, entry, qbtcWallet, snapshotBlockHash.trim())
+      : createClaimTransaction(btc!.secretKey, btc!.publicKey, entry, qbtcWallet, snapshotBlockHash.trim())
     const serialized = JSON.stringify(sanitize(tx), null, 2)
 
     // Save to file
-    const filename = `claim-${btc.address.slice(0, 8)}-${Date.now()}.json`
+    const filename = `claim-${btcAddress.slice(0, 8)}-${Date.now()}.json`
     const filepath = path.resolve(filename)
     fs.writeFileSync(filepath, serialized + '\n')
 
@@ -262,13 +385,13 @@ async function modeGenerate() {
     console.log(`    pnpm run claim:send ${filename}`)
     console.log()
     console.log('  ┌─────────────────────────────────────────────────────────┐')
-    console.log('  │  IMPORTANT: Save your QTC wallet secret key securely!   │')
-    console.log('  │  Without it you cannot spend your claimed QTC.          │')
+    console.log('  │  IMPORTANT: Save your QBTC wallet secret key securely!   │')
+    console.log('  │  Without it you cannot spend your claimed QBTC.          │')
     console.log('  └─────────────────────────────────────────────────────────┘')
     console.log()
-    console.log(`  QTC address:    ${qtcWallet.address}`)
-    console.log(`  Public key:     ${bytesToHex(qtcWallet.publicKey).slice(0, 40)}...`)
-    console.log(`  Secret key len: ${qtcWallet.secretKey.length} bytes`)
+    console.log(`  QBTC address:    ${qbtcWallet.address}`)
+    console.log(`  Public key:     ${bytesToHex(qbtcWallet.publicKey).slice(0, 40)}...`)
+    console.log(`  Secret key len: ${qbtcWallet.secretKey.length} bytes`)
     console.log()
   } finally {
     rl.close()
@@ -304,8 +427,8 @@ async function modeSend(filepath: string) {
   const tx = JSON.parse(txPayload)
   console.log(`  Loaded claim transaction: ${tx.id?.slice(0, 16)}...`)
   console.log(`  BTC address: ${tx.claimData?.btcAddress ?? 'unknown'}`)
-  console.log(`  QTC address: ${tx.claimData?.qcoinAddress ?? 'unknown'}`)
-  console.log(`  Amount:      ${tx.outputs?.[0]?.amount ?? '?'} QTC`)
+  console.log(`  QBTC address: ${tx.claimData?.qbtcAddress ?? 'unknown'}`)
+  console.log(`  Amount:      ${tx.outputs?.[0]?.amount ?? '?'} QBTC`)
   console.log()
 
   // Connect to node
@@ -318,7 +441,7 @@ async function modeSend(filepath: string) {
     console.log(`  ✓ Connected — chain height: ${status.height}\n`)
   } catch {
     console.error('\n  ✗ Could not connect to the QubitCoin node.')
-    console.error(`    Make sure qtcd is running, or set QTC_RPC=http://host:port.\n`)
+    console.error(`    Make sure qbtcd is running, or set QBTC_RPC=http://host:port.\n`)
     process.exit(1)
   }
 
@@ -334,7 +457,7 @@ async function modeSend(filepath: string) {
     const result = await res.json() as { txid: string }
     console.log(`\n  ✓ Claim transaction broadcast!`)
     console.log(`    txid: ${result.txid}`)
-    console.log(`\n  Your QTC will appear once the transaction is mined.\n`)
+    console.log(`\n  Your QBTC will appear once the transaction is mined.\n`)
   } else {
     const err = await res.json() as { error?: string }
     console.error(`\n  ✗ Claim rejected: ${err.error ?? 'Unknown error'}`)
@@ -353,7 +476,7 @@ async function modeSend(filepath: string) {
 async function modeFull() {
   console.log()
   console.log('  ╔═══════════════════════════════════════════════════════╗')
-  console.log('  ║   QubitCoin — BTC → QTC Claim Tool                    ║')
+  console.log('  ║   QubitCoin — BTC → QBTC Claim Tool                    ║')
   console.log('  ╚═══════════════════════════════════════════════════════╝')
   console.log()
 
@@ -368,8 +491,8 @@ async function modeFull() {
     status = await res.json() as Record<string, unknown>
   } catch {
     console.error('\n  ✗ Could not connect to the QubitCoin node.')
-    console.error(`    Make sure qtcd is running: pnpm run qtcd -- --mine --full`)
-    console.error(`    Or set QTC_RPC=http://host:port to use a different node.\n`)
+    console.error(`    Make sure qbtcd is running: pnpm run qbtcd -- --mine --full`)
+    console.error(`    Or set QBTC_RPC=http://host:port to use a different node.\n`)
     process.exit(1)
   }
   console.log(`  ✓ Connected — chain height: ${status.height}\n`)
@@ -387,29 +510,48 @@ async function modeFull() {
     console.error('  ✗ Could not fetch claim stats.\n')
     process.exit(1)
   }
-  console.log(`  Snapshot: ${(claimStats.totalEntries as number).toLocaleString()} addresses, ${(claimStats.unclaimedAmount as number).toLocaleString()} QTC claimable`)
+  console.log(`  Snapshot: ${(claimStats.totalEntries as number).toLocaleString()} addresses, ${(claimStats.unclaimedAmount as number).toLocaleString()} QBTC claimable`)
   console.log()
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
 
   try {
-    // BTC credentials
+    // Claim type selection
     console.log('  ── Step 1: BTC Credentials ──────────────────────────────')
-    const btc = await resolveBtcCredentials(rl)
-    console.log(`  Public key (compressed): ${bytesToHex(btc.publicKey)}`)
-    console.log(`  BTC address (HASH160):   ${btc.address}`)
+    console.log('  What type of claim?')
+    console.log('    [1] Single-key (P2PKH, P2WPKH, P2SH-P2WPKH, P2TR) (default)')
+    console.log('    [2] P2WSH (witness script — multisig or single-key)')
+    console.log()
+    const claimTypeChoice = await ask(rl, '  Select [1-2] (default 1): ')
+    const isP2wsh = claimTypeChoice.trim() === '2'
 
-    // Generate QTC wallet
-    console.log('\n  ── Step 2: Generate QTC Wallet ───────────────────────────')
+    let btcAddress: string
+    let btc: { secretKey: Uint8Array; publicKey: Uint8Array; address: string } | undefined
+    let p2wsh: { witnessScript: Uint8Array; signerSecretKeys: Uint8Array[]; address: string } | undefined
+
+    if (isP2wsh) {
+      console.log()
+      p2wsh = await resolveP2wshCredentials(rl)
+      btcAddress = p2wsh.address
+      console.log(`  P2WSH address: ${btcAddress}`)
+    } else {
+      btc = await resolveBtcCredentials(rl)
+      btcAddress = btc.address
+      console.log(`  Public key (compressed): ${bytesToHex(btc.publicKey)}`)
+      console.log(`  BTC address (HASH160):   ${btcAddress}`)
+    }
+
+    // Generate QBTC wallet
+    console.log('\n  ── Step 2: Generate QBTC Wallet ───────────────────────────')
     console.log('  Generating ML-DSA-65 keypair (this may take a moment)...')
-    const qtcWallet = generateWallet()
-    console.log(`  ✓ QTC address: ${qtcWallet.address}`)
+    const qbtcWallet = generateWallet()
+    console.log(`  ✓ QBTC address: ${qbtcWallet.address}`)
     console.log()
 
     // Confirm
     console.log('  ── Step 3: Confirm ──────────────────────────────────────')
-    console.log(`  BTC address:  ${btc.address}`)
-    console.log(`  QTC address:  ${qtcWallet.address}`)
+    console.log(`  BTC address:  ${btcAddress}`)
+    console.log(`  QBTC address:  ${qbtcWallet.address}`)
     console.log(`  Node:         ${RPC_BASE}`)
     console.log()
 
@@ -431,7 +573,7 @@ async function modeFull() {
       const txs = (genesis as { transactions: Array<{ inputs: Array<{ publicKey: string }> }> }).transactions
       const coinbasePk = txs?.[0]?.inputs?.[0]?.publicKey ?? ''
       const parts = coinbasePk.split(':')
-      if (parts[0] === 'QCOIN_FORK' && parts[2]) {
+      if (parts[0] === 'QBTC_FORK' && parts[2]) {
         snapshotBlockHash = parts[2]
       } else {
         snapshotBlockHash = (genesis as { hash: string }).hash
@@ -441,9 +583,18 @@ async function modeFull() {
       process.exit(1)
     }
 
+    // Helper to build claim tx for the resolved type
+    const buildClaimTx = (amount: number) => {
+      if (isP2wsh) {
+        const entry = { btcAddress, amount, type: 'p2wsh' as const }
+        return createP2wshClaimTransaction(p2wsh!.signerSecretKeys, p2wsh!.witnessScript, entry, qbtcWallet, snapshotBlockHash)
+      }
+      const entry = { btcAddress, amount }
+      return createClaimTransaction(btc!.secretKey, btc!.publicKey, entry, qbtcWallet, snapshotBlockHash)
+    }
+
     // Probe with amount=0 to discover real balance
-    const testEntry = { btcAddress: btc.address, amount: 0 }
-    const testTx = createClaimTransaction(btc.secretKey, btc.publicKey, testEntry, qtcWallet, snapshotBlockHash)
+    const testTx = buildClaimTx(0)
     const testPayload = JSON.stringify(sanitize(testTx))
 
     let testRes = await fetch(`${rpcUrl}/tx`, {
@@ -454,7 +605,7 @@ async function modeFull() {
 
     if (testRes.ok) {
       const result = await testRes.json() as { txid: string }
-      printSuccess(result.txid, 0, qtcWallet)
+      printSuccess(result.txid, 0, qbtcWallet)
       process.exit(0)
     }
 
@@ -463,8 +614,8 @@ async function modeFull() {
     if (!amountMatch) {
       console.error(`\n  ✗ ${errBody.error ?? 'Unknown error'}`)
       if (errBody.error?.includes('not found in snapshot')) {
-        console.error(`\n  The address ${btc.address} is not in the BTC snapshot.`)
-        console.error(`  Only P2PKH, P2PK, P2WPKH, P2SH-P2WPKH, and P2TR addresses from block 935,941 are eligible.\n`)
+        console.error(`\n  The address ${btcAddress} is not in the BTC snapshot.`)
+        console.error(`  Only P2PKH, P2PK, P2WPKH, P2SH-P2WPKH, P2TR, and P2WSH addresses from block 935,941 are eligible.\n`)
       } else if (errBody.error?.includes('already claimed')) {
         console.error(`\n  This BTC address has already been claimed.\n`)
       }
@@ -472,10 +623,9 @@ async function modeFull() {
     }
 
     const realAmount = parseFloat(amountMatch[1])
-    console.log(`  Snapshot balance: ${realAmount} QTC`)
+    console.log(`  Snapshot balance: ${realAmount} QBTC`)
 
-    const entry = { btcAddress: btc.address, amount: realAmount }
-    const tx = createClaimTransaction(btc.secretKey, btc.publicKey, entry, qtcWallet, snapshotBlockHash)
+    const tx = buildClaimTx(realAmount)
     const payload = JSON.stringify(sanitize(tx))
 
     const res = await fetch(`${rpcUrl}/tx`, {
@@ -486,7 +636,7 @@ async function modeFull() {
 
     if (res.ok) {
       const result = await res.json() as { txid: string }
-      printSuccess(result.txid, realAmount, qtcWallet)
+      printSuccess(result.txid, realAmount, qbtcWallet)
     } else {
       const err = await res.json() as { error?: string }
       console.error(`\n  ✗ Claim rejected: ${err.error ?? 'Unknown error'}`)
@@ -501,20 +651,20 @@ async function modeFull() {
   }
 }
 
-function printSuccess(txid: string, amount: number, qtcWallet: { address: string; publicKey: Uint8Array; secretKey: Uint8Array }) {
+function printSuccess(txid: string, amount: number, qbtcWallet: { address: string; publicKey: Uint8Array; secretKey: Uint8Array }) {
   console.log(`\n  ✓ Claim transaction broadcast!`)
   console.log(`    txid:   ${txid}`)
-  if (amount > 0) console.log(`    amount: ${amount} QTC`)
-  console.log(`\n  Your QTC will appear at ${qtcWallet.address} once mined.`)
+  if (amount > 0) console.log(`    amount: ${amount} QBTC`)
+  console.log(`\n  Your QBTC will appear at ${qbtcWallet.address} once mined.`)
   console.log()
   console.log('  ┌─────────────────────────────────────────────────────────┐')
-  console.log('  │  IMPORTANT: Save your QTC wallet secret key securely!   │')
-  console.log('  │  Without it you cannot spend your claimed QTC.          │')
+  console.log('  │  IMPORTANT: Save your QBTC wallet secret key securely!   │')
+  console.log('  │  Without it you cannot spend your claimed QBTC.          │')
   console.log('  └─────────────────────────────────────────────────────────┘')
   console.log()
-  console.log(`  QTC address:    ${qtcWallet.address}`)
-  console.log(`  Public key:     ${bytesToHex(qtcWallet.publicKey).slice(0, 40)}...`)
-  console.log(`  Secret key len: ${qtcWallet.secretKey.length} bytes`)
+  console.log(`  QBTC address:    ${qbtcWallet.address}`)
+  console.log(`  Public key:     ${bytesToHex(qbtcWallet.publicKey).slice(0, 40)}...`)
+  console.log(`  Secret key len: ${qbtcWallet.secretKey.length} bytes`)
   console.log()
 }
 

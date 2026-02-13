@@ -1,8 +1,8 @@
 /**
- * BTC → qcoin claim transaction logic
+ * BTC → qbtc claim transaction logic
  *
  * Allows Bitcoin holders to prove ECDSA ownership and receive
- * post-quantum (ML-DSA-65) native UTXOs on the qcoin chain.
+ * post-quantum (ML-DSA-65) native UTXOs on the qbtc chain.
  */
 import {
   doubleSha256,
@@ -13,7 +13,11 @@ import {
   computeTaprootOutputKey,
   hash160,
   deriveP2shP2wpkhAddress,
+  deriveP2shMultisigAddress,
+  deriveP2wshAddress,
+  parseWitnessScript,
   bytesToHex,
+  concatBytes,
   type Wallet,
 } from './crypto.js'
 import {
@@ -27,33 +31,33 @@ import { type BtcSnapshot, type BtcAddressBalance, getSnapshotIndex } from './sn
 
 /**
  * Serialize the claim message that gets ECDSA-signed.
- * Format: "QTC_CLAIM:<btcAddress>:<qcoinAddress>:<snapshotBlockHash>"
- * This ensures replay protection (snapshot hash) and address binding (qcoin address).
+ * Format: "QBTC_CLAIM:<btcAddress>:<qbtcAddress>:<snapshotBlockHash>"
+ * This ensures replay protection (snapshot hash) and address binding (qbtc address).
  */
 export function serializeClaimMessage(
   btcAddress: string,
-  qcoinAddress: string,
+  qbtcAddress: string,
   snapshotBlockHash: string
 ): Uint8Array {
-  const msg = `QTC_CLAIM:${btcAddress}:${qcoinAddress}:${snapshotBlockHash}`
+  const msg = `QBTC_CLAIM:${btcAddress}:${qbtcAddress}:${snapshotBlockHash}`
   return doubleSha256(new TextEncoder().encode(msg))
 }
 
 /**
  * Create a claim transaction.
  * The BTC holder signs a message with their ECDSA key, proving ownership.
- * The output goes to their new ML-DSA-65 qcoin address.
+ * The output goes to their new ML-DSA-65 qbtc address.
  */
 export function createClaimTransaction(
   btcSecretKey: Uint8Array,
   btcPubKey: Uint8Array,
   entry: BtcAddressBalance,
-  qcoinWallet: Wallet,
+  qbtcWallet: Wallet,
   snapshotBlockHash: string
 ): Transaction {
   const claimMsgHash = serializeClaimMessage(
     entry.btcAddress,
-    qcoinWallet.address,
+    qbtcWallet.address,
     snapshotBlockHash
   )
 
@@ -66,7 +70,7 @@ export function createClaimTransaction(
       btcAddress: entry.btcAddress,
       ecdsaPublicKey: new Uint8Array(0),
       ecdsaSignature: new Uint8Array(0),
-      qcoinAddress: qcoinWallet.address,
+      qbtcAddress: qbtcWallet.address,
       schnorrPublicKey: btcPubKey,
       schnorrSignature: schnorrSig,
     }
@@ -77,7 +81,7 @@ export function createClaimTransaction(
       btcAddress: entry.btcAddress,
       ecdsaPublicKey: btcPubKey,
       ecdsaSignature: ecdsaSig,
-      qcoinAddress: qcoinWallet.address,
+      qbtcAddress: qbtcWallet.address,
     }
   }
 
@@ -94,9 +98,129 @@ export function createClaimTransaction(
   ]
 
   const outputs: TransactionOutput[] = [
-    { address: qcoinWallet.address, amount: entry.amount },
+    { address: qbtcWallet.address, amount: entry.amount },
   ]
 
+  const id = computeTxId(
+    [{ txId: CLAIM_TXID, outputIndex: 0 }],
+    outputs,
+    timestamp
+  )
+
+  return { id, inputs, outputs, timestamp, claimData }
+}
+
+/**
+ * Create a P2WSH claim transaction.
+ * Multiple signers provide ECDSA signatures over the claim message to satisfy the witness script.
+ * signerSecretKeys must be ordered to match the pubkey order in the witness script.
+ */
+export function createP2wshClaimTransaction(
+  signerSecretKeys: Uint8Array[],
+  witnessScript: Uint8Array,
+  entry: BtcAddressBalance,
+  qbtcWallet: Wallet,
+  snapshotBlockHash: string
+): Transaction {
+  // Verify witness script hashes to the claimed address
+  const derivedAddr = deriveP2wshAddress(witnessScript)
+  if (derivedAddr !== entry.btcAddress) {
+    throw new Error('Witness script does not match P2WSH address')
+  }
+
+  const claimMsgHash = serializeClaimMessage(
+    entry.btcAddress,
+    qbtcWallet.address,
+    snapshotBlockHash
+  )
+
+  // Each signer signs the claim message
+  const sigs: Uint8Array[] = []
+  for (const sk of signerSecretKeys) {
+    sigs.push(ecdsaSign(claimMsgHash, sk))
+  }
+  const witnessSignatures = concatBytes(...sigs)
+
+  const claimData: ClaimData = {
+    btcAddress: entry.btcAddress,
+    ecdsaPublicKey: new Uint8Array(0),
+    ecdsaSignature: new Uint8Array(0),
+    qbtcAddress: qbtcWallet.address,
+    witnessScript,
+    witnessSignatures,
+  }
+
+  const timestamp = Date.now()
+  const inputs = [
+    {
+      txId: CLAIM_TXID,
+      outputIndex: 0,
+      publicKey: new Uint8Array(0),
+      signature: new Uint8Array(0),
+    },
+  ]
+  const outputs: TransactionOutput[] = [
+    { address: qbtcWallet.address, amount: entry.amount },
+  ]
+  const id = computeTxId(
+    [{ txId: CLAIM_TXID, outputIndex: 0 }],
+    outputs,
+    timestamp
+  )
+
+  return { id, inputs, outputs, timestamp, claimData }
+}
+
+/**
+ * Create a P2SH multisig claim transaction.
+ * Same as P2WSH but address = HASH160(redeemScript) instead of SHA256(witnessScript).
+ * signerSecretKeys must be ordered to match the pubkey order in the redeem script.
+ */
+export function createP2shMultisigClaimTransaction(
+  signerSecretKeys: Uint8Array[],
+  redeemScript: Uint8Array,
+  entry: BtcAddressBalance,
+  qbtcWallet: Wallet,
+  snapshotBlockHash: string
+): Transaction {
+  const derivedAddr = deriveP2shMultisigAddress(redeemScript)
+  if (derivedAddr !== entry.btcAddress) {
+    throw new Error('Redeem script does not match P2SH address')
+  }
+
+  const claimMsgHash = serializeClaimMessage(
+    entry.btcAddress,
+    qbtcWallet.address,
+    snapshotBlockHash
+  )
+
+  const sigs: Uint8Array[] = []
+  for (const sk of signerSecretKeys) {
+    sigs.push(ecdsaSign(claimMsgHash, sk))
+  }
+  const witnessSignatures = concatBytes(...sigs)
+
+  const claimData: ClaimData = {
+    btcAddress: entry.btcAddress,
+    ecdsaPublicKey: new Uint8Array(0),
+    ecdsaSignature: new Uint8Array(0),
+    qbtcAddress: qbtcWallet.address,
+    witnessScript: redeemScript,
+    witnessSignatures,
+  }
+
+  const timestamp = Date.now()
+  const inputs = [
+    {
+      txId: CLAIM_TXID,
+      outputIndex: 0,
+      publicKey: new Uint8Array(0),
+      signature: new Uint8Array(0),
+    },
+  ]
+  const outputs: TransactionOutput[] = [
+    { address: qbtcWallet.address, amount: entry.amount },
+  ]
   const id = computeTxId(
     [{ txId: CLAIM_TXID, outputIndex: 0 }],
     outputs,
@@ -136,11 +260,62 @@ export function verifyClaimProof(
 
   const claimMsgHash = serializeClaimMessage(
     claim.btcAddress,
-    claim.qcoinAddress,
+    claim.qbtcAddress,
     snapshot.btcBlockHash
   )
 
-  if (entry.type === 'p2tr') {
+  if (entry.type === 'p2wsh' || entry.type === 'multisig') {
+    // P2WSH / bare multisig: verify script hash matches address, then verify signatures
+    // Both use SHA256(script) as address and same m-of-n CHECKMULTISIG verification
+    const typeLabel = entry.type === 'multisig' ? 'Bare multisig' : 'P2WSH'
+    if (!claim.witnessScript || claim.witnessScript.length === 0) {
+      return { valid: false, error: `${typeLabel} claim missing witness script` }
+    }
+    const derivedAddress = deriveP2wshAddress(claim.witnessScript)
+    if (derivedAddress !== claim.btcAddress) {
+      return { valid: false, error: `Script does not match ${typeLabel} address in snapshot` }
+    }
+
+    let parsed: ReturnType<typeof parseWitnessScript>
+    try {
+      parsed = parseWitnessScript(claim.witnessScript)
+    } catch {
+      return { valid: false, error: 'Failed to parse witness script' }
+    }
+
+    if (parsed.type === 'single-key') {
+      // Single-key P2WSH: PUSH33 <pubkey> OP_CHECKSIG
+      if (!claim.witnessSignatures || claim.witnessSignatures.length !== 64) {
+        return { valid: false, error: 'P2WSH single-key claim requires exactly one 64-byte signature' }
+      }
+      if (!verifyEcdsaSignature(claim.witnessSignatures, claimMsgHash, parsed.pubkey)) {
+        return { valid: false, error: 'Invalid ECDSA signature for P2WSH single-key' }
+      }
+    } else {
+      // Multisig: verify m-of-n CHECKMULTISIG-style ordered signatures
+      const { m, pubkeys } = parsed
+      if (!claim.witnessSignatures || claim.witnessSignatures.length !== m * 64) {
+        return { valid: false, error: `P2WSH ${m}-of-${pubkeys.length} claim requires exactly ${m} signatures (${m * 64} bytes)` }
+      }
+
+      // Extract individual signatures
+      const sigs: Uint8Array[] = []
+      for (let i = 0; i < m; i++) {
+        sigs.push(claim.witnessSignatures.slice(i * 64, (i + 1) * 64))
+      }
+
+      // CHECKMULTISIG ordering: walk pubkeys in order, match signatures in order
+      let sigIdx = 0
+      for (let pkIdx = 0; pkIdx < pubkeys.length && sigIdx < m; pkIdx++) {
+        if (verifyEcdsaSignature(sigs[sigIdx], claimMsgHash, pubkeys[pkIdx])) {
+          sigIdx++
+        }
+      }
+      if (sigIdx < m) {
+        return { valid: false, error: `Only ${sigIdx} of ${m} required signatures verified` }
+      }
+    }
+  } else if (entry.type === 'p2tr') {
     // P2TR: verify Schnorr signature against internal key, check tweaked key matches address
     if (!claim.schnorrPublicKey || claim.schnorrPublicKey.length !== 32) {
       return { valid: false, error: 'P2TR claim missing 32-byte Schnorr public key' }
@@ -163,17 +338,61 @@ export function verifyClaimProof(
       return { valid: false, error: 'Invalid Schnorr signature' }
     }
   } else if (entry.type === 'p2sh') {
-    // P2SH-P2WPKH: HASH160(0x0014 || HASH160(pubkey)) === btcAddress
-    const derivedAddress = deriveP2shP2wpkhAddress(claim.ecdsaPublicKey)
-    if (derivedAddress !== claim.btcAddress) {
-      return {
-        valid: false,
-        error: 'ECDSA public key does not match P2SH-P2WPKH address in snapshot',
+    if (claim.witnessScript && claim.witnessScript.length > 0) {
+      // P2SH multisig: HASH160(redeemScript) === btcAddress
+      const derivedAddress = deriveP2shMultisigAddress(claim.witnessScript)
+      if (derivedAddress !== claim.btcAddress) {
+        return { valid: false, error: 'Redeem script does not match P2SH address in snapshot' }
       }
-    }
 
-    if (!verifyEcdsaSignature(claim.ecdsaSignature, claimMsgHash, claim.ecdsaPublicKey)) {
-      return { valid: false, error: 'Invalid ECDSA signature' }
+      let parsed: ReturnType<typeof parseWitnessScript>
+      try {
+        parsed = parseWitnessScript(claim.witnessScript)
+      } catch {
+        return { valid: false, error: 'Failed to parse redeem script' }
+      }
+
+      if (parsed.type === 'single-key') {
+        if (!claim.witnessSignatures || claim.witnessSignatures.length !== 64) {
+          return { valid: false, error: 'P2SH single-key claim requires exactly one 64-byte signature' }
+        }
+        if (!verifyEcdsaSignature(claim.witnessSignatures, claimMsgHash, parsed.pubkey)) {
+          return { valid: false, error: 'Invalid ECDSA signature for P2SH single-key' }
+        }
+      } else {
+        const { m, pubkeys } = parsed
+        if (!claim.witnessSignatures || claim.witnessSignatures.length !== m * 64) {
+          return { valid: false, error: `P2SH ${m}-of-${pubkeys.length} claim requires exactly ${m} signatures (${m * 64} bytes)` }
+        }
+
+        const sigs: Uint8Array[] = []
+        for (let i = 0; i < m; i++) {
+          sigs.push(claim.witnessSignatures.slice(i * 64, (i + 1) * 64))
+        }
+
+        let sigIdx = 0
+        for (let pkIdx = 0; pkIdx < pubkeys.length && sigIdx < m; pkIdx++) {
+          if (verifyEcdsaSignature(sigs[sigIdx], claimMsgHash, pubkeys[pkIdx])) {
+            sigIdx++
+          }
+        }
+        if (sigIdx < m) {
+          return { valid: false, error: `Only ${sigIdx} of ${m} required signatures verified` }
+        }
+      }
+    } else {
+      // P2SH-P2WPKH: HASH160(0x0014 || HASH160(pubkey)) === btcAddress
+      const derivedAddress = deriveP2shP2wpkhAddress(claim.ecdsaPublicKey)
+      if (derivedAddress !== claim.btcAddress) {
+        return {
+          valid: false,
+          error: 'ECDSA public key does not match P2SH-P2WPKH address in snapshot',
+        }
+      }
+
+      if (!verifyEcdsaSignature(claim.ecdsaSignature, claimMsgHash, claim.ecdsaPublicKey)) {
+        return { valid: false, error: 'Invalid ECDSA signature' }
+      }
     }
   } else {
     // P2PKH/P2WPKH: HASH160(pubkey) === btcAddress
@@ -199,7 +418,7 @@ export function verifyClaimProof(
   }
 
   // Verify output goes to the claimed address
-  if (tx.outputs[0].address !== claim.qcoinAddress) {
+  if (tx.outputs[0].address !== claim.qbtcAddress) {
     return {
       valid: false,
       error: 'Output address does not match claim destination',

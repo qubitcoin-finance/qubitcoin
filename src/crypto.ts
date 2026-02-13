@@ -1,5 +1,5 @@
 /**
- * Cryptographic primitives for qcoin
+ * Cryptographic primitives for qbtc
  * Uses ML-DSA-65 (Dilithium) instead of ECDSA secp256k1
  * Uses SHA-256 (double) for hashing, same as Bitcoin
  */
@@ -141,6 +141,77 @@ export function computeTaprootOutputKey(internalPubkey: Uint8Array): Uint8Array 
 /** Derive P2TR address: hex of tweaked output key Q */
 export function deriveP2trAddress(internalPubkey: Uint8Array): string {
   return bytesToHex(computeTaprootOutputKey(internalPubkey))
+}
+
+/**
+ * Build a standard m-of-n multisig witness script.
+ * Format: OP_m [PUSH33 <compressed-pubkey>]×n OP_n OP_CHECKMULTISIG
+ */
+export function buildMultisigScript(m: number, pubkeys: Uint8Array[]): Uint8Array {
+  const n = pubkeys.length
+  if (m < 1 || m > n || n > 16) throw new Error(`Invalid multisig params: ${m}-of-${n}`)
+  for (const pk of pubkeys) {
+    if (pk.length !== 33) throw new Error(`Pubkey must be 33 bytes, got ${pk.length}`)
+  }
+  // OP_m (0x51..0x60 for 1..16), then each pubkey with PUSH33 prefix, OP_n, OP_CHECKMULTISIG
+  const parts: Uint8Array[] = [new Uint8Array([0x50 + m])]
+  for (const pk of pubkeys) {
+    parts.push(new Uint8Array([0x21])) // PUSH33
+    parts.push(pk)
+  }
+  parts.push(new Uint8Array([0x50 + n, 0xae])) // OP_n + OP_CHECKMULTISIG
+  return concatBytes(...parts)
+}
+
+/**
+ * Parse a witness script into its constituent parts.
+ * Supports multisig: OP_m [PUSH33 <pk>]×n OP_n OP_CHECKMULTISIG
+ * Supports single-key: PUSH33 <pk> OP_CHECKSIG (35 bytes)
+ */
+export function parseWitnessScript(
+  script: Uint8Array
+): { type: 'multisig'; m: number; n: number; pubkeys: Uint8Array[] } | { type: 'single-key'; pubkey: Uint8Array } {
+  // Single-key: 0x21 <33-byte-pubkey> 0xac (total 35 bytes)
+  if (script.length === 35 && script[0] === 0x21 && script[34] === 0xac) {
+    return { type: 'single-key', pubkey: script.slice(1, 34) }
+  }
+
+  // Multisig: OP_m [0x21 <33-byte-pk>]×n OP_n 0xae
+  if (script.length < 3) throw new Error('Script too short')
+  const opM = script[0]
+  if (opM < 0x51 || opM > 0x60) throw new Error('Invalid witness script: expected OP_1..OP_16 at start')
+  const m = opM - 0x50
+
+  const pubkeys: Uint8Array[] = []
+  let pos = 1
+  while (pos < script.length - 2) {
+    if (script[pos] !== 0x21) break
+    pos++
+    if (pos + 33 > script.length) throw new Error('Truncated pubkey in witness script')
+    pubkeys.push(script.slice(pos, pos + 33))
+    pos += 33
+  }
+
+  if (pubkeys.length === 0) throw new Error('No pubkeys found in witness script')
+  if (pos + 2 !== script.length) throw new Error('Unexpected trailing data in witness script')
+  const opN = script[pos]
+  if (opN < 0x51 || opN > 0x60) throw new Error('Invalid witness script: expected OP_n')
+  const n = opN - 0x50
+  if (script[pos + 1] !== 0xae) throw new Error('Invalid witness script: expected OP_CHECKMULTISIG')
+  if (pubkeys.length !== n) throw new Error(`Pubkey count mismatch: found ${pubkeys.length}, expected ${n}`)
+  if (m > n) throw new Error(`Invalid m-of-n: ${m} > ${n}`)
+
+  return { type: 'multisig', m, n, pubkeys }
+}
+
+/** Derive P2WSH address: hex of SHA256(witnessScript) */
+export function deriveP2wshAddress(witnessScript: Uint8Array): string {
+  return bytesToHex(sha256(witnessScript))
+}
+
+/** Derive P2SH multisig address: hex of HASH160(redeemScript) */
+export function deriveP2shMultisigAddress(redeemScript: Uint8Array): string {
+  return bytesToHex(hash160(redeemScript))
 }
 
 export { bytesToHex, concatBytes }

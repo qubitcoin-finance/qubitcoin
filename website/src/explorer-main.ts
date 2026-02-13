@@ -37,7 +37,7 @@ interface ClaimData {
   btcAddress: string;
   ecdsaPublicKey: string;
   ecdsaSignature: string;
-  qcoinAddress: string;
+  qbtcAddress: string;
 }
 
 interface Transaction {
@@ -381,12 +381,12 @@ async function renderDashboard(): Promise<void> {
     card('Avg Block Time', formatDuration(status.avgBlockTime)),
     card('Next Block', blockEta(status.lastBlockTime, avgBlockInterval(blocks, status.targetBlockTime))),
     card('Peers', status.peers),
-    card('Block Reward', status.blockReward + ' QTC'),
+    card('Block Reward', status.blockReward + ' QBTC'),
     card('Total Txs', status.totalTxs),
   ];
   if (claimStats && claimStats.totalEntries > 0) {
     cards.push(card('BTC Fork Block', claimStats.btcBlockHeight.toLocaleString()));
-    cards.push(card('Claimed BTC', claimStats.claimedAmount.toLocaleString() + ' QTC'));
+    cards.push(card('Claimed BTC', claimStats.claimedAmount.toLocaleString() + ' QBTC'));
   }
   html += `<div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">${cards.join('')}</div>`;
 
@@ -438,7 +438,7 @@ async function renderDashboard(): Promise<void> {
           ${txTypeBadge(tx)}
           ${hashLink(tx.id, 'tx')}
         </div>
-        <span class="text-text-muted text-xs font-mono">${amount} QTC</span>
+        <span class="text-text-muted text-xs font-mono">${amount} QBTC</span>
       </div>`;
     }
     html += `</div>`;
@@ -540,7 +540,7 @@ async function renderBlock(hash: string): Promise<void> {
         ${txTypeBadge(tx)}
         ${hashLink(tx.id, 'tx')}
       </div>
-      <span class="text-text-muted text-sm font-mono">${amount} QTC</span>
+      <span class="text-text-muted text-sm font-mono">${amount} QBTC</span>
     </div>`;
   }
   html += `</div>`;
@@ -578,7 +578,7 @@ async function renderTx(txid: string): Promise<void> {
       </div>
       <div>
         <p class="text-text-muted mb-1">Amount</p>
-        <p class="font-mono">${amount} QTC</p>
+        <p class="font-mono">${amount} QBTC</p>
       </div>
       <div>
         <p class="text-text-muted mb-1">Type</p>
@@ -602,8 +602,8 @@ async function renderTx(txid: string): Promise<void> {
           <p class="font-mono text-xs break-all">${cd.ecdsaPublicKey}</p>
         </div>
         <div>
-          <p class="text-text-muted mb-1">Destination QTC Address</p>
-          <p>${hashLink(cd.qcoinAddress, 'address', cd.qcoinAddress)}</p>
+          <p class="text-text-muted mb-1">Destination QBTC Address</p>
+          <p>${hashLink(cd.qbtcAddress, 'address', cd.qbtcAddress)}</p>
         </div>
       </div>
     </div>`;
@@ -640,7 +640,7 @@ async function renderTx(txid: string): Promise<void> {
         <p class="text-text-muted text-xs mb-1">To</p>
         <p>${hashLink(out.address, 'address')}</p>
       </div>
-      <span class="font-mono text-qubit-300">${out.amount} QTC</span>
+      <span class="font-mono text-qubit-300">${out.amount} QBTC</span>
     </div>`;
   }
   html += `</div></div>`;
@@ -669,7 +669,7 @@ async function renderAddress(addr: string): Promise<void> {
       </div>
       <div>
         <p class="text-text-muted mb-1">Balance</p>
-        <p class="text-2xl font-bold">${balanceRes?.balance ?? 0} QTC</p>
+        <p class="text-2xl font-bold">${balanceRes?.balance ?? 0} QBTC</p>
       </div>
     </div>
   </div>`;
@@ -682,7 +682,7 @@ async function renderAddress(addr: string): Promise<void> {
         <div>
           ${hashLink(u.txId, 'tx')}<span class="text-text-muted">:${u.outputIndex}</span>
         </div>
-        <span class="font-mono text-qubit-300">${u.amount} QTC</span>
+        <span class="font-mono text-qubit-300">${u.amount} QBTC</span>
       </div>`;
     }
     html += `</div>`;
@@ -716,7 +716,7 @@ async function renderMempool(): Promise<void> {
         ${hashLink(tx.id, 'tx')}
       </div>
       <div class="text-right">
-        <span class="text-text-muted text-sm font-mono">${amount} QTC</span>
+        <span class="text-text-muted text-sm font-mono">${amount} QBTC</span>
         <span class="text-text-muted text-xs ml-2">${timeAgo(tx.timestamp)}</span>
       </div>
     </div>`;
@@ -730,12 +730,15 @@ async function renderMempool(): Promise<void> {
 
 const DOC_SECTIONS: { id: string; title: string; icon: string; render: () => string }[] = [
   { id: 'overview', title: 'Overview', icon: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/>', render: renderDocsOverview },
+  { id: 'security', title: 'Security', icon: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>', render: renderDocsSecurity },
   { id: 'getting-started', title: 'Getting Started', icon: '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>', render: renderDocsGettingStarted },
   { id: 'architecture', title: 'Architecture', icon: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>', render: renderDocsArchitecture },
   { id: 'btc-claims', title: 'BTC Claims', icon: '<path d="M11.5 3v2m0 14v2m3-18v2m0 14v2"/><path d="M9 7h5.5a2.5 2.5 0 010 5H9V7zm0 5h6.5a2.5 2.5 0 010 5H9v-5z"/>', render: renderDocsClaims },
+  { id: 'wallet', title: 'Wallet Guide', icon: '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M22 10h-4a2 2 0 100 4h4"/>', render: renderDocsWallet },
   { id: 'consensus', title: 'Consensus', icon: '<path d="M9 12l2 2 4-4"/><path d="M12 3a9 9 0 11-9 9 9 9 0 019-9z"/><path d="M12 7v1m0 8v1m4-5h1M6 12h1"/>', render: renderDocsConsensus },
   { id: 'api', title: 'API Reference', icon: '<path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/>', render: renderDocsApi },
   { id: 'p2p', title: 'P2P Protocol', icon: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/>', render: renderDocsP2p },
+  { id: 'faq', title: 'FAQ', icon: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>', render: renderDocsFaq },
 ];
 
 function docCode(code: string): string {
@@ -779,8 +782,8 @@ function docP(text: string): string {
 
 function renderDocsOverview(): string {
   return `<h1 class="text-2xl font-bold mb-6">Overview</h1>
-${docP('QubitCoin (QTC) is a post-quantum fork of Bitcoin. It replaces ECDSA secp256k1 with <span class="text-qubit-400 font-mono text-xs">ML-DSA-65</span> (Dilithium) — a NIST-standardized lattice-based digital signature algorithm that resists both classical and quantum attacks.')}
-${docP('Bitcoin holders can claim their QTC by proving ECDSA ownership of a BTC address. The claimed balance is bound to a new ML-DSA-65 public key, creating quantum-safe UTXOs. No trust or intermediaries required.')}
+${docP('QubitCoin (QBTC) is a post-quantum fork of Bitcoin. It replaces ECDSA secp256k1 with <span class="text-qubit-400 font-mono text-xs">ML-DSA-65</span> (Dilithium) — a NIST-standardized lattice-based digital signature algorithm that resists both classical and quantum attacks.')}
+${docP('Bitcoin holders can claim their QBTC by proving ECDSA ownership of a BTC address. The claimed balance is bound to a new ML-DSA-65 public key, creating quantum-safe UTXOs. No trust or intermediaries required.')}
 
 ${docH2('The Quantum Threat')}
 ${docP('Every Bitcoin transaction today is secured by ECDSA on the secp256k1 curve. The security of this scheme relies on the discrete logarithm problem, which Shor\'s algorithm can solve in polynomial time on a sufficiently large quantum computer. When that day comes, every exposed public key — including every address that has ever sent a transaction — becomes vulnerable.')}
@@ -791,8 +794,8 @@ ${docH2('Key Properties')}
   <li><span class="text-text-primary font-medium">Quantum-safe signatures</span> — ML-DSA-65 (FIPS 204), NIST security level 3. Based on the Module-LWE problem, resistant to both classical and quantum attacks.</li>
   <li><span class="text-text-primary font-medium">Bitcoin UTXO model</span> — same unspent transaction output design. Transactions consume UTXOs as inputs and create new UTXOs as outputs.</li>
   <li><span class="text-text-primary font-medium">SHA-256 proof-of-work</span> — quantum computers can only achieve a quadratic speedup via Grover\'s algorithm, reducing SHA-256 to 128-bit quantum security — still practically unbreakable.</li>
-  <li><span class="text-text-primary font-medium">Real BTC snapshot</span> — genesis commits to a merkle root of 54,399,607 aggregated address balances from BTC block 935,941.</li>
-  <li><span class="text-text-primary font-medium">One-time ECDSA claims</span> — prove BTC ownership with a secp256k1 signature, receive your full address balance as quantum-safe QTC. 1:1 ratio.</li>
+  <li><span class="text-text-primary font-medium">Real BTC snapshot</span> — genesis commits to a merkle root of 55,526,180 aggregated address balances from BTC block 935,941.</li>
+  <li><span class="text-text-primary font-medium">One-time ECDSA claims</span> — prove BTC ownership with a secp256k1 signature, receive your full address balance as quantum-safe QBTC. 1:1 ratio.</li>
   <li><span class="text-text-primary font-medium">Open source</span> — TypeScript / Node.js. Run a node, mine blocks, and verify the chain yourself.</li>
 </ul>
 
@@ -818,7 +821,7 @@ ${docH2('How It Differs from Bitcoin')}
 </div>
 
 ${docH2('Supply')}
-${docP('QubitCoin has no premine. The genesis block commits to the BTC snapshot but mints zero coins. All initial supply comes from BTC holders claiming their balances (18,617,734.62 QTC claimable). New supply enters circulation through mining rewards at 3.125 QTC per block, halving every 210,000 blocks.')}`;
+${docP('QubitCoin has no premine. The genesis block commits to the BTC snapshot but mints zero coins. All initial supply comes from BTC holders claiming their balances (19,984,341.32 QBTC claimable). New supply enters circulation through mining rewards at 3.125 QBTC per block, halving every 210,000 blocks.')}`;
 }
 
 function renderDocsGettingStarted(): string {
@@ -838,10 +841,10 @@ pnpm install`)}
 
 ${docH2('Quick Start — Join the Network')}
 ${docP('The fastest way to get started. The <span class="font-mono text-xs text-qubit-400">--full</span> flag auto-downloads the BTC snapshot (~2.4 GB) from the seed node and starts mining immediately:')}
-${docCode(`pnpm run qtcd -- --mine --full`)}
+${docCode(`pnpm run qbtcd -- --mine --full`)}
 ${docP('This will:')}
 <ol class="text-text-secondary text-sm leading-relaxed mb-3 list-decimal list-inside space-y-1">
-  <li>Download the BTC snapshot from <span class="font-mono text-xs text-qubit-400">qubitcoin.finance/snapshot/qtc-snapshot.jsonl</span></li>
+  <li>Download the BTC snapshot from <span class="font-mono text-xs text-qubit-400">qubitcoin.finance/snapshot/qbtc-snapshot.jsonl</span></li>
   <li>Connect to the seed node at <span class="font-mono text-xs text-qubit-400">qubitcoin.finance:6001</span></li>
   <li>Sync the blockchain via Initial Block Download (IBD)</li>
   <li>Generate a mining wallet and start mining blocks</li>
@@ -850,11 +853,11 @@ ${docP('Your node\'s RPC API will be available at <span class="font-mono text-xs
 
 ${docH2('Manual Snapshot')}
 ${docP('If you already have a snapshot file, provide it directly:')}
-${docCode(`pnpm run qtcd -- --mine --snapshot ~/qtc-snapshot.jsonl`)}
+${docCode(`pnpm run qbtcd -- --mine --snapshot ~/qbtc-snapshot.jsonl`)}
 
 ${docH2('Local Development')}
 ${docP('Run an isolated local chain with easy difficulty and simulated transactions — useful for development and testing:')}
-${docCode(`pnpm run qtcd -- --mine --local --simulate`)}
+${docCode(`pnpm run qbtcd -- --mine --local --simulate`)}
 
 ${docH3('Multi-Node Local Network')}
 ${docP('Spin up a local 3-node network to test P2P, IBD, and block relay:')}
@@ -869,9 +872,9 @@ pnpm run node:charlie`)}
 ${docP('Alice mines on port 3001/6001, Bob on 3002/6002, Charlie on 3003/6003. Bob and Charlie connect to Alice as a seed and sync automatically.')}
 
 ${docH2('Claiming BTC')}
-${docP('If you hold BTC in a supported address type (P2PKH, P2PK, P2WPKH, P2SH-P2WPKH, or P2TR) included in the snapshot, you can claim your balance as QTC:')}
+${docP('If you hold BTC in a supported address type (P2PKH, P2PK, P2WPKH, P2SH-P2WPKH, P2TR, or P2WSH) included in the snapshot, you can claim your balance as QBTC:')}
 ${docCode(`pnpm run claim`)}
-${docP('The interactive claim tool walks you through generating a QTC wallet, signing a claim message, and broadcasting the transaction. Accepts seed phrases, WIF keys, or hex keys. See the <a href="#/docs/btc-claims" class="text-qubit-400 hover:text-qubit-300">BTC Claims</a> section for details.')}
+${docP('The interactive claim tool walks you through generating a QBTC wallet, signing a claim message, and broadcasting the transaction. Accepts seed phrases, WIF keys, or hex keys. See the <a href="#/docs/btc-claims" class="text-qubit-400 hover:text-qubit-300">BTC Claims</a> section for details.')}
 ${docP('For air-gapped workflows, you can split the process: <span class="font-mono text-xs text-qubit-400">pnpm run claim:generate</span> creates the signed transaction offline, and <span class="font-mono text-xs text-qubit-400">pnpm run claim:send</span> broadcasts it from an online machine.')}
 
 ${docH2('CLI Reference')}
@@ -934,7 +937,7 @@ TxInput {
 
 TxOutput {
   address: string             // 64-char hex — SHA-256(publicKey)
-  amount:  number             // QTC amount
+  amount:  number             // QBTC amount
 }`)}
 ${docH3('Transaction Validation')}
 <ol class="text-text-secondary text-sm leading-relaxed mb-3 list-decimal list-inside space-y-1">
@@ -994,10 +997,10 @@ ${docP('Every block goes through strict validation before being accepted into th
 ${docH2('Fork Genesis')}
 ${docP('QubitCoin uses a special version-2 genesis block that commits to the BTC UTXO snapshot. No coins are minted at genesis — all initial supply comes from claims.')}
 ${docCode(`Genesis coinbase publicKey field:
-  "QCOIN_FORK:{btcBlockHeight}:{btcBlockHash}:{snapshotMerkleRoot}"
+  "QBTC_FORK:{btcBlockHeight}:{btcBlockHash}:{snapshotMerkleRoot}"
 
 Example:
-  "QCOIN_FORK:935941:00000...abc:a2c2ddc7...c61af1"`)}
+  "QBTC_FORK:935941:00000...abc:a2c2ddc7...c61af1"`)}
 ${docP('Any node can independently verify that the snapshot data matches the committed merkle root, ensuring the fork is trustless.')}
 
 ${docH2('Persistence & Replay')}
@@ -1012,12 +1015,12 @@ ${docP('Each applied block produces an undo record capturing spent UTXOs, create
 
 function renderDocsClaims(): string {
   return `<h1 class="text-2xl font-bold mb-6">BTC Claims</h1>
-${docP('BTC holders migrate to QubitCoin by submitting a claim transaction that proves ownership of a Bitcoin address. Your full aggregated BTC balance becomes quantum-safe QTC — no trust, no intermediaries.')}
+${docP('BTC holders migrate to QubitCoin by submitting a claim transaction that proves ownership of a Bitcoin address. Your full aggregated BTC balance becomes quantum-safe QBTC — no trust, no intermediaries.')}
 
 ${docH2('Quick Start')}
 ${docP('The easiest way to claim is with the interactive CLI tool:')}
 ${docCode(`pnpm run claim`)}
-${docP('This walks you through every step: generating a QTC wallet, signing the claim message, and broadcasting the transaction to the network. You\'ll need one of the following for a BTC address included in the snapshot:')}
+${docP('This walks you through every step: generating a QBTC wallet, signing the claim message, and broadcasting the transaction to the network. You\'ll need one of the following for a BTC address included in the snapshot:')}
 <ul class="text-text-secondary text-sm leading-relaxed mb-3 list-disc list-inside space-y-1">
   <li><span class="text-text-primary font-medium">Seed phrase</span> — 12 or 24 word BIP39 mnemonic (the tool derives addresses from BIP44/BIP84 paths and lets you pick)</li>
   <li><span class="text-text-primary font-medium">WIF key</span> — Bitcoin private key in Wallet Import Format (starts with 5, K, or L)</li>
@@ -1036,18 +1039,18 @@ pnpm run claim:generate
 pnpm run claim:send claim-abc12345-1707000000.json`)}
 
 ${docH2('How It Works')}
-${docH3('Step 1 — Generate a QTC Wallet')}
-${docP('Create a new ML-DSA-65 keypair. This gives you a quantum-safe public key (1,952 bytes) and a QTC address (SHA-256 hash of the public key, 64-char hex).')}
+${docH3('Step 1 — Generate a QBTC Wallet')}
+${docP('Create a new ML-DSA-65 keypair. This gives you a quantum-safe public key (1,952 bytes) and a QBTC address (SHA-256 hash of the public key, 64-char hex).')}
 
 ${docH3('Step 2 — Sign the Claim Message')}
 ${docP('Construct a claim message and sign it with your Bitcoin private key (ECDSA secp256k1):')}
-${docCode(`message = "QTC_CLAIM:{btcAddress}:{qtcAddress}:{snapshotBlockHash}"
+${docCode(`message = "QBTC_CLAIM:{btcAddress}:{qbtcAddress}:{snapshotBlockHash}"
 msgHash = doubleSha256(message)
 signature = secp256k1.sign(msgHash, btcPrivateKey)`)}
 ${docP('The snapshot block hash acts as replay protection — the claim is bound to a specific snapshot and cannot be reused on a different fork.')}
 
 ${docH3('Step 3 — Broadcast the Claim Transaction')}
-${docP('Submit a claim transaction containing your ECDSA signature, compressed BTC public key (33 bytes), and destination QTC address. The transaction uses a special sentinel input (<span class="font-mono text-xs text-qubit-400">cccc...cccc</span>) to identify it as a claim.')}
+${docP('Submit a claim transaction containing your ECDSA signature, compressed BTC public key (33 bytes), and destination QBTC address. The transaction uses a special sentinel input (<span class="font-mono text-xs text-qubit-400">cccc...cccc</span>) to identify it as a claim.')}
 
 ${docH3('Step 4 — Network Verification')}
 ${docP('Every node independently verifies:')}
@@ -1057,19 +1060,19 @@ ${docP('Every node independently verifies:')}
   <li>ECDSA signature is valid for the claim message</li>
   <li>Address has not been previously claimed</li>
   <li>Output amount matches the snapshot balance exactly</li>
-  <li>Output address matches the qcoinAddress in the claim data</li>
+  <li>Output address matches the qbtcAddress in the claim data</li>
 </ol>
 
-${docH3('Step 5 — QTC Credited')}
-${docP('Once the claim transaction is mined into a block, your full aggregated BTC balance appears as a quantum-safe UTXO at your QTC address. From here, all future transactions use ML-DSA-65 signatures.')}
+${docH3('Step 5 — QBTC Credited')}
+${docP('Once the claim transaction is mined into a block, your full aggregated BTC balance appears as a quantum-safe UTXO at your QBTC address. From here, all future transactions use ML-DSA-65 signatures.')}
 
 ${docH2('Rules')}
 <div class="bg-surface rounded-lg glow-border p-4 mb-4">
 <ul class="text-text-secondary text-sm leading-relaxed list-disc list-inside space-y-2">
-  <li><span class="text-text-primary font-medium">One claim per address</span> — once a BTC address is claimed, it\'s marked permanently. The same address cannot be claimed again, even with a different QTC destination.</li>
+  <li><span class="text-text-primary font-medium">One claim per address</span> — once a BTC address is claimed, it\'s marked permanently. The same address cannot be claimed again, even with a different QBTC destination.</li>
   <li><span class="text-text-primary font-medium">Aggregated balance</span> — claims are per-address, not per-UTXO. All UTXOs belonging to a BTC address are summed into a single balance. You get everything in one claim.</li>
-  <li><span class="text-text-primary font-medium">Supported address types</span> — P2PKH, P2WPKH, P2SH-P2WPKH, P2TR, and P2PK addresses can be claimed. P2WSH, bare multisig, and other exotic types are not yet supported.</li>
-  <li><span class="text-text-primary font-medium">1:1 ratio</span> — 1 BTC = 1 QTC. No conversion rate, no fees, no slippage.</li>
+  <li><span class="text-text-primary font-medium">Supported address types</span> — P2PKH, P2WPKH, P2SH-P2WPKH, P2SH multisig, P2TR, P2PK, and P2WSH addresses can be claimed. P2SH and P2WSH multisig require m-of-n signers to provide signatures in pubkey order. Only bare multisig (raw OP_CHECKMULTISIG without P2SH/P2WSH wrapping) is not supported.</li>
+  <li><span class="text-text-primary font-medium">1:1 ratio</span> — 1 BTC = 1 QBTC. No conversion rate, no fees, no slippage.</li>
   <li><span class="text-text-primary font-medium">Double-claim prevention</span> — the mempool also rejects claim transactions for addresses that already have a pending claim, preventing double-claims before mining.</li>
 </ul>
 </div>
@@ -1078,7 +1081,7 @@ ${docH2('Snapshot')}
 ${docP('The current snapshot is derived from a Bitcoin Core <span class="font-mono text-xs text-entropy-cyan">dumptxoutset</span> at block 935,941. The full pipeline:')}
 <ol class="text-text-secondary text-sm leading-relaxed mb-3 list-decimal list-inside space-y-1">
   <li>Dump the UTXO set from Bitcoin Core (8.8 GB binary, ~164M coins)</li>
-  <li>Parse and filter to P2PKH + P2WPKH outputs only (~92M coins)</li>
+  <li>Parse and filter to supported types: P2PKH, P2PK, P2WPKH, P2SH, P2TR, P2WSH (~162M coins)</li>
   <li>Aggregate by address using external sort + streaming merge (constant memory)</li>
   <li>Compute merkle root and write final NDJSON snapshot</li>
 </ol>
@@ -1087,23 +1090,42 @@ ${docP('The current snapshot is derived from a Bitcoin Core <span class="font-mo
   <tbody>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">BTC block height</td><td class="py-2 font-mono text-qubit-300">935,941</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Raw UTXOs parsed</td><td class="py-2 font-mono">164,352,533</td></tr>
-    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">After filtering</td><td class="py-2 font-mono">159,227,478 (P2PKH + P2PK + P2WPKH + P2SH + P2TR)</td></tr>
-    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Unique addresses</td><td class="py-2 font-mono text-entropy-cyan">54,399,607</td></tr>
-    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Total claimable</td><td class="py-2 font-mono text-qubit-300">18,617,734.62 QTC</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">After filtering</td><td class="py-2 font-mono">161,717,359 (P2PKH + P2PK + P2WPKH + P2SH + P2TR + P2WSH)</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Unique addresses</td><td class="py-2 font-mono text-entropy-cyan">55,526,180</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Total claimable</td><td class="py-2 font-mono text-qubit-300">19,984,341.32 QBTC</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">P2PKH coins</td><td class="py-2 font-mono">45,115,135</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">P2PK coins</td><td class="py-2 font-mono">44,617</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">P2WPKH coins</td><td class="py-2 font-mono">46,947,641</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">P2SH coins</td><td class="py-2 font-mono">12,451,522</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">P2TR coins</td><td class="py-2 font-mono">54,668,563</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">P2WSH coins</td><td class="py-2 font-mono">2,489,881</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Snapshot size</td><td class="py-2 font-mono">~3.5 GB (NDJSON)</td></tr>
-    <tr class="border-b border-border last:border-0"><td class="py-2 pr-4 text-text-muted">Merkle root</td><td class="py-2 font-mono text-xs break-all">d2ad73b5366e648d0254fb20fd49ea9543b3d7782b17f5b95b20b638acf67938</td></tr>
+    <tr class="border-b border-border last:border-0"><td class="py-2 pr-4 text-text-muted">Merkle root</td><td class="py-2 font-mono text-xs break-all">a973530da264b7c8a0e054552c6dc0b62e25d6887807f72672e51428cad130c7</td></tr>
   </tbody>
 </table>
 </div>
 
 ${docH2('Why Not All BTC?')}
-${docP('The snapshot contains ~18.6M BTC out of ~19.8M circulating supply across 54.4M addresses. The ~1.2M BTC gap comes from address types we don\'t yet support: P2WSH (SegWit multisig), bare multisig, and other exotic script types. These require multiple signers to coordinate, making trustless claims significantly more complex.')}
-${docP('Supported claim types: P2PKH (legacy), P2PK (raw pubkey), P2WPKH (native SegWit), P2SH-P2WPKH (wrapped SegWit), and P2TR (Taproot) — covering the vast majority of Bitcoin holdings.')}`;
+${docP('The snapshot covers <span class="text-text-primary font-medium">99.99% of all BTC by value</span>. The remaining 2,688 BTC across 2.6M coins falls into two categories:')}
+<div class="overflow-x-auto">
+<table class="w-full text-sm mb-4">
+  <thead><tr class="text-xs text-text-muted border-b border-border">
+    <th class="text-left font-normal pb-2 pr-4">Category</th>
+    <th class="text-left font-normal pb-2 pr-4">Coins</th>
+    <th class="text-left font-normal pb-2 pr-4">BTC</th>
+    <th class="text-left font-normal pb-2">Why not claimable</th>
+  </tr></thead>
+  <tbody>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Bare multisig</td><td class="py-2 pr-4 font-mono text-xs">2,556,676</td><td class="py-2 pr-4 font-mono text-xs">70</td><td class="py-2 text-xs">No standard address format. Raw <span class="font-mono text-qubit-300">OP_CHECKMULTISIG</span> scripts embedded directly in outputs — cannot be mapped to a claimable address.</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Burned P2PKH</td><td class="py-2 pr-4 font-mono text-xs">23</td><td class="py-2 pr-4 font-mono text-xs text-red-400">2,609</td><td class="py-2 text-xs">P2PKH outputs with <span class="font-mono text-qubit-300">OP_0</span> instead of a 20-byte hash. <span class="font-mono text-xs">HASH160(pubkey)</span> can never equal an empty byte array — <span class="text-text-primary font-medium">permanently unspendable</span> by anyone, on any chain. All from block 150,951 (2011).</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">SegWit v12+</td><td class="py-2 pr-4 font-mono text-xs">~65,000</td><td class="py-2 pr-4 font-mono text-xs">0.40</td><td class="py-2 text-xs">Runes/Ordinals dust carriers (546 sats each). Future SegWit versions with no defined spending rules.</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Merged mining</td><td class="py-2 pr-4 font-mono text-xs">~53</td><td class="py-2 pr-4 font-mono text-xs">0.00</td><td class="py-2 text-xs">RSK sidechain commitment markers (<span class="font-mono text-qubit-300">0xfabe6d6d</span>). Data embedding, not spendable outputs.</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Hash puzzles</td><td class="py-2 pr-4 font-mono text-xs">4</td><td class="py-2 pr-4 font-mono text-xs">1.00</td><td class="py-2 text-xs"><span class="font-mono text-qubit-300">OP_HASH256 &lt;hash&gt; OP_EQUAL</span> — no key ownership. Requires a hash preimage to spend, not a signature.</td></tr>
+    <tr class="border-b border-border last:border-0"><td class="py-2 pr-4 text-text-muted">Other exotic</td><td class="py-2 pr-4 font-mono text-xs">~12,000</td><td class="py-2 pr-4 font-mono text-xs">7.15</td><td class="py-2 text-xs">Malformed scripts, data embedding, ASCII art, padded outputs. No standard key ownership to verify.</td></tr>
+  </tbody>
+</table>
+</div>
+${docP('In short: the vast majority of the gap is <span class="text-text-primary font-medium">2,609 BTC that was burned in 2011</span> — permanently lost regardless of chain. The rest is dust, data embedding, and scripts with no key-based ownership that could be verified through a claim.')}`;
 }
 
 function renderDocsConsensus(): string {
@@ -1123,7 +1145,7 @@ ${docH2('Core Parameters')}
     <tr class="border-b border-border"><td class="py-2 pr-4 font-mono text-xs text-qubit-300">TARGET_BLOCK_TIME_MS</td><td class="py-2 pr-4">30 minutes</td><td class="py-2 text-text-muted">Target time between blocks (1,800,000 ms)</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 font-mono text-xs text-qubit-300">DIFFICULTY_ADJUSTMENT_INTERVAL</td><td class="py-2 pr-4">10 blocks</td><td class="py-2 text-text-muted">Blocks between difficulty recalculations</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 font-mono text-xs text-qubit-300">MAX_BLOCK_SIZE</td><td class="py-2 pr-4">1,000,000 bytes</td><td class="py-2 text-text-muted">Maximum serialized block size (1 MB)</td></tr>
-    <tr class="border-b border-border"><td class="py-2 pr-4 font-mono text-xs text-qubit-300">INITIAL_SUBSIDY</td><td class="py-2 pr-4">3.125 QTC</td><td class="py-2 text-text-muted">Block reward at launch</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 font-mono text-xs text-qubit-300">INITIAL_SUBSIDY</td><td class="py-2 pr-4">3.125 QBTC</td><td class="py-2 text-text-muted">Block reward at launch</td></tr>
     <tr class="border-b border-border last:border-0"><td class="py-2 pr-4 font-mono text-xs text-qubit-300">HALVING_INTERVAL</td><td class="py-2 pr-4">210,000 blocks</td><td class="py-2 text-text-muted">Blocks between reward halvings</td></tr>
   </tbody>
 </table>
@@ -1147,22 +1169,22 @@ ${docP('If blocks come too fast (ratio &lt; 1), the target decreases, making min
 
 ${docH2('Block Reward & Supply')}
 ${docH3('Coinbase Reward')}
-${docP('Every block includes a coinbase transaction that mints new QTC. The reward starts at <span class="font-mono text-xs text-qubit-400">3.125 QTC</span> per block — matching Bitcoin\'s post-4th-halving reward schedule.')}
+${docP('Every block includes a coinbase transaction that mints new QBTC. The reward starts at <span class="font-mono text-xs text-qubit-400">3.125 QBTC</span> per block — matching Bitcoin\'s post-4th-halving reward schedule.')}
 ${docCode(`blockSubsidy(height) = INITIAL_SUBSIDY / 2^(height / HALVING_INTERVAL)
                      = 3.125 / 2^(height / 210,000)
 
-Height 0–209,999:       3.125 QTC
-Height 210,000–419,999: 1.5625 QTC
-Height 420,000–629,999: 0.78125 QTC
+Height 0–209,999:       3.125 QBTC
+Height 210,000–419,999: 1.5625 QBTC
+Height 420,000–629,999: 0.78125 QBTC
 ...
-After 26 halvings:      0 QTC (all subsidy exhausted)`)}
+After 26 halvings:      0 QBTC (all subsidy exhausted)`)}
 ${docP('Miners also collect transaction fees — the difference between total inputs and total outputs for non-coinbase transactions in the block.')}
 
 ${docH3('Supply Schedule')}
-${docP('New QTC enters circulation from two sources:')}
+${docP('New QBTC enters circulation from two sources:')}
 <ul class="text-text-secondary text-sm leading-relaxed mb-3 list-disc list-inside space-y-1">
-  <li><span class="text-text-primary font-medium">BTC claims</span> — 18,617,734.62 QTC claimable from the snapshot (P2PKH, P2PK, P2WPKH, P2SH-P2WPKH, P2TR; ~1.2M BTC in unsupported address types is excluded)</li>
-  <li><span class="text-text-primary font-medium">Mining rewards</span> — 3.125 QTC per block, halving every 210,000 blocks</li>
+  <li><span class="text-text-primary font-medium">BTC claims</span> — QBTC claimable from the snapshot (P2PKH, P2PK, P2WPKH, P2SH-P2WPKH, P2TR, P2WSH)</li>
+  <li><span class="text-text-primary font-medium">Mining rewards</span> — 3.125 QBTC per block, halving every 210,000 blocks</li>
 </ul>
 ${docP('There is no premine, no ICO, and no team allocation. All coins come from either BTC claims or mining.')}
 
@@ -1529,6 +1551,284 @@ ${docP('Banned peers are persisted to <span class="font-mono text-xs text-qubit-
 </div>`;
 }
 
+function renderDocsSecurity(): string {
+  return `<h1 class="text-2xl font-bold mb-6">Security</h1>
+${docP('QubitCoin exists because of a single, inevitable threat: sufficiently large quantum computers will break every elliptic-curve and RSA-based signature scheme in use today. This section explains the threat model, the design choices, and why QBTC is safe.')}
+
+${docH2('The Quantum Threat Model')}
+${docP('Shor\'s algorithm, running on a cryptographically relevant quantum computer (CRQC), solves the discrete logarithm and integer factorization problems in polynomial time. This breaks:')}
+<ul class="text-text-secondary text-sm leading-relaxed mb-3 list-disc list-inside space-y-1">
+  <li><span class="text-red-400 font-medium">ECDSA secp256k1</span> — Bitcoin signatures</li>
+  <li><span class="text-red-400 font-medium">RSA</span> — TLS certificates, PGP</li>
+  <li><span class="text-red-400 font-medium">Ed25519 / EdDSA</span> — Solana, Cardano, SSH keys</li>
+</ul>
+${docP('Grover\'s algorithm provides only a <span class="text-text-primary font-medium">quadratic</span> speedup for brute-force search, reducing SHA-256 from 256-bit to 128-bit quantum security — still practically unbreakable.')}
+${docP('Timeline estimates for a CRQC vary widely: <span class="text-text-primary font-medium">10-30+ years</span>. But the "harvest now, decrypt later" threat is real today — an adversary can record public keys from the blockchain now and derive private keys once quantum hardware matures. Every BTC address that has ever broadcast a transaction has its public key exposed on-chain.')}
+
+${docH2('Why ML-DSA-65')}
+${docP('ML-DSA-65 (formerly Dilithium, standardized as <span class="text-qubit-400 font-mono text-xs">FIPS 204</span>) is a lattice-based digital signature algorithm selected by NIST after a multi-year post-quantum standardization process. Its security relies on the Module Learning With Errors (MLWE) problem — no known quantum algorithm can efficiently solve it.')}
+<div class="overflow-x-auto">
+<table class="w-full text-sm mb-4">
+  <thead><tr class="text-xs text-text-muted border-b border-border">
+    <th class="text-left font-normal pb-2 pr-4">Scheme</th>
+    <th class="text-left font-normal pb-2 pr-4">Type</th>
+    <th class="text-left font-normal pb-2 pr-4">PK size</th>
+    <th class="text-left font-normal pb-2 pr-4">Sig size</th>
+    <th class="text-left font-normal pb-2 pr-4">Standardized</th>
+    <th class="text-left font-normal pb-2">Notes</th>
+  </tr></thead>
+  <tbody>
+    <tr class="border-b border-border text-qubit-400"><td class="py-2 pr-4 font-medium">ML-DSA-65</td><td class="py-2 pr-4">Lattice</td><td class="py-2 pr-4 font-mono text-xs">1,952 B</td><td class="py-2 pr-4 font-mono text-xs">3,309 B</td><td class="py-2 pr-4 text-green-400">FIPS 204</td><td class="py-2 text-xs">NIST Level 3. Balanced size/speed.</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4">Falcon-512</td><td class="py-2 pr-4">Lattice</td><td class="py-2 pr-4 font-mono text-xs">897 B</td><td class="py-2 pr-4 font-mono text-xs">666 B</td><td class="py-2 pr-4 text-green-400">FIPS 206</td><td class="py-2 text-xs">Smallest sigs, but complex sampling (timing side-channels).</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4">SLH-DSA-128s</td><td class="py-2 pr-4">Hash</td><td class="py-2 pr-4 font-mono text-xs">32 B</td><td class="py-2 pr-4 font-mono text-xs">7,856 B</td><td class="py-2 pr-4 text-green-400">FIPS 205</td><td class="py-2 text-xs">Conservative (hash-only), but large sigs and slow signing.</td></tr>
+    <tr class="border-b border-border last:border-0"><td class="py-2 pr-4">ECDSA secp256k1</td><td class="py-2 pr-4">Elliptic curve</td><td class="py-2 pr-4 font-mono text-xs">33 B</td><td class="py-2 pr-4 font-mono text-xs">~72 B</td><td class="py-2 pr-4 text-red-400">Quantum-broken</td><td class="py-2 text-xs">Current Bitcoin. Broken by Shor\'s algorithm.</td></tr>
+  </tbody>
+</table>
+</div>
+${docP('ML-DSA-65 was chosen for its balance of properties: NIST-standardized, straightforward constant-time implementation, fast verification, and no complex sampling logic that could introduce side-channel vulnerabilities.')}
+
+${docH2('Key Size Tradeoffs')}
+${docP('Post-quantum signatures are significantly larger than classical ones. This is the fundamental tradeoff for quantum resistance:')}
+<div class="overflow-x-auto">
+<table class="w-full text-sm mb-4">
+  <thead><tr class="text-xs text-text-muted border-b border-border">
+    <th class="text-left font-normal pb-2 pr-4">Metric</th>
+    <th class="text-left font-normal pb-2 pr-4">ECDSA (Bitcoin)</th>
+    <th class="text-left font-normal pb-2">ML-DSA-65 (QBTC)</th>
+  </tr></thead>
+  <tbody>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Public key</td><td class="py-2 pr-4 font-mono text-xs">33 bytes</td><td class="py-2 font-mono text-xs text-qubit-300">1,952 bytes</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Signature</td><td class="py-2 pr-4 font-mono text-xs">~72 bytes</td><td class="py-2 font-mono text-xs text-qubit-300">3,309 bytes</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Secret key</td><td class="py-2 pr-4 font-mono text-xs">32 bytes</td><td class="py-2 font-mono text-xs text-qubit-300">4,032 bytes</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Minimal 1-in/1-out tx</td><td class="py-2 pr-4 font-mono text-xs">~226 bytes</td><td class="py-2 font-mono text-xs text-qubit-300">~5,400 bytes</td></tr>
+    <tr class="border-b border-border last:border-0"><td class="py-2 pr-4 text-text-muted">Txs per 1 MB block</td><td class="py-2 pr-4 font-mono text-xs">~4,400</td><td class="py-2 font-mono text-xs text-qubit-300">~180</td></tr>
+  </tbody>
+</table>
+</div>
+${docP('The 30-minute block time compensates for the reduced per-block throughput, and the fee market ensures miners prioritize high-value transactions.')}
+
+${docH2('SHA-256 PoW Security')}
+${docP('QubitCoin uses the same double-SHA-256 proof-of-work as Bitcoin. Unlike signature schemes, hash functions are <span class="text-text-primary font-medium">not broken</span> by quantum computers.')}
+${docP('Grover\'s algorithm gives a quadratic speedup: SHA-256\'s 2<sup>256</sup> preimage resistance becomes 2<sup>128</sup> quantum operations. For context, 2<sup>128</sup> operations is still astronomically large — roughly the same security level as AES-128, which is considered safe for decades to come.')}
+${docP('Crucially, PoW has no "break once, steal forever" property. Even if a quantum computer could mine faster, it would only gain a proportional hashrate advantage — similar to a more efficient ASIC. It cannot retroactively steal funds or forge signatures.')}
+
+${docH2('Claim Safety')}
+${docP('The BTC claim process involves a one-time ECDSA signature to prove Bitcoin ownership. This is the only moment classical cryptography is used, and several safeguards protect it:')}
+<div class="overflow-x-auto">
+<table class="w-full text-sm mb-4">
+  <thead><tr class="text-xs text-text-muted border-b border-border">
+    <th class="text-left font-normal pb-2 pr-4">Protection</th>
+    <th class="text-left font-normal pb-2">How</th>
+  </tr></thead>
+  <tbody>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-primary font-medium">One-time exposure</td><td class="py-2 text-xs">ECDSA key is used once during the claim. After that, all QBTC operations use ML-DSA-65.</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-primary font-medium">Snapshot binding</td><td class="py-2 text-xs">The claim message includes the BTC snapshot merkle root, binding the signature to a specific chain state. Cannot be replayed on a different fork.</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-primary font-medium">Double-claim prevention</td><td class="py-2 text-xs">Each BTC address can only be claimed once. The chain tracks claimed addresses permanently.</td></tr>
+    <tr class="border-b border-border last:border-0"><td class="py-2 pr-4 text-text-primary font-medium">Address-type verification</td><td class="py-2 text-xs">Each address type uses its native verification: ECDSA for P2PKH/P2WPKH/P2SH-P2WPKH/P2WSH, Schnorr for P2TR.</td></tr>
+  </tbody>
+</table>
+</div>
+
+${docH2('Address Security')}
+${docP('QubitCoin addresses are derived as <span class="font-mono text-xs text-qubit-400">SHA-256(publicKey)</span> — a 64-character hex string. This follows the same principle as Bitcoin\'s HASH160: the public key is hidden until a transaction is broadcast.')}
+${docP('An address that has received QBTC but never sent a transaction has its public key completely concealed. Even with a quantum computer, an attacker would need to break SHA-256 preimage resistance (2<sup>128</sup> quantum ops) to recover the public key from the address — which is infeasible.')}
+
+${docH2('No Premine, No Trust')}
+${docP('QubitCoin has <span class="text-text-primary font-medium">zero premine</span>. The genesis block commits to the BTC snapshot merkle root but mints no coins. All initial supply comes exclusively from BTC holders claiming their balances.')}
+<ul class="text-text-secondary text-sm leading-relaxed mb-3 list-disc list-inside space-y-1">
+  <li><span class="text-text-primary font-medium">Verifiable snapshot</span> — the merkle root in genesis is computed deterministically from Bitcoin Core\'s <span class="font-mono text-xs text-qubit-400">dumptxoutset</span> output. Anyone can reproduce it.</li>
+  <li><span class="text-text-primary font-medium">Open source</span> — all code is public. The snapshot pipeline, claim verification, and consensus rules can be audited independently.</li>
+  <li><span class="text-text-primary font-medium">No admin keys</span> — there are no special keys, backdoors, or governance multisigs. The chain runs by consensus rules alone.</li>
+</ul>`;
+}
+
+function renderDocsWallet(): string {
+  return `<h1 class="text-2xl font-bold mb-6">Wallet Guide</h1>
+${docP('Once you\'ve claimed your BTC or received QBTC from another user, you need to understand how wallets, balances, and transactions work in QubitCoin.')}
+
+${docH2('Wallet Basics')}
+${docP('A QubitCoin wallet is an ML-DSA-65 keypair — a public key and a secret key. The address is derived as <span class="font-mono text-xs text-qubit-400">SHA-256(publicKey)</span>, producing a 64-character hex string.')}
+<div class="overflow-x-auto">
+<table class="w-full text-sm mb-4">
+  <tbody>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Public key</td><td class="py-2 font-mono text-qubit-300">1,952 bytes (3,904 hex chars)</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Secret key</td><td class="py-2 font-mono text-qubit-300">4,032 bytes (8,064 hex chars)</td></tr>
+    <tr class="border-b border-border last:border-0"><td class="py-2 pr-4 text-text-muted">Address</td><td class="py-2 font-mono text-qubit-300">32 bytes (64 hex chars)</td></tr>
+  </tbody>
+</table>
+</div>
+${docH3('Generating a Wallet')}
+${docCode(`import { generateWallet } from './crypto.js';
+
+const wallet = generateWallet();
+console.log('Address:', wallet.address);    // 64-char hex
+console.log('PK size:', wallet.publicKey.length);  // 1952 bytes
+console.log('SK size:', wallet.secretKey.length);  // 4032 bytes`)}
+${docP('The node daemon generates an ephemeral wallet on startup when <span class="font-mono text-xs text-qubit-400">--mine</span> is enabled. This wallet receives mining rewards but exists only in memory — it is not persisted to disk.')}
+
+${docH2('Checking Your Balance')}
+${docP('Query the RPC API to check the balance and UTXOs for any address:')}
+${docH3('Get Balance')}
+${docCode(`curl -s http://127.0.0.1:3001/api/v1/address/<address>/balance | jq`)}
+${docJson(`{
+  "balance": 6.25  // total QBTC across all UTXOs
+}`)}
+${docH3('List UTXOs')}
+${docCode(`curl -s http://127.0.0.1:3001/api/v1/address/<address>/utxos | jq`)}
+${docJson(`[
+  {
+    "txId": "a1b2c3...64hex",
+    "outputIndex": 0,
+    "address": "deadbeef...64hex",
+    "amount": 3.125
+  },
+  {
+    "txId": "d4e5f6...64hex",
+    "outputIndex": 1,
+    "address": "deadbeef...64hex",
+    "amount": 3.125
+  }
+]`)}
+${docP('You can also use the <a href="#/docs/api" class="text-qubit-400 hover:text-qubit-300">block explorer</a> to look up any address visually.')}
+
+${docH2('Sending QBTC')}
+${docP('Transactions follow the UTXO model: you select unspent outputs as inputs, specify new outputs (recipients + change), and sign with your ML-DSA-65 secret key.')}
+${docH3('Step by Step')}
+${docSteps([
+  '<span class="text-text-primary font-medium">Select UTXOs</span> — choose inputs whose total value covers the amount + fee',
+  '<span class="text-text-primary font-medium">Define outputs</span> — recipient address(es) and amounts. Send change back to yourself.',
+  '<span class="text-text-primary font-medium">Calculate fee</span> — fee = total inputs &minus; total outputs. The difference goes to the miner.',
+  '<span class="text-text-primary font-medium">Sign &amp; build</span> — <span class="font-mono text-xs text-qubit-400">createTransaction(wallet, utxos, recipients, fee)</span> signs and returns the full tx.',
+  '<span class="text-text-primary font-medium">Broadcast</span> — POST the transaction to any node\'s RPC endpoint.',
+])}
+${docH3('Code Example')}
+${docCode(`import { generateWallet } from './crypto.js';
+import { createTransaction } from './transaction.js';
+
+const wallet = generateWallet();
+const utxos = [{ txId: 'abc...', outputIndex: 0, address: wallet.address, amount: 10 }];
+const recipients = [{ address: 'recipient_address_64hex', amount: 9.5 }];
+const fee = 0.5;
+
+const tx = createTransaction(wallet, utxos, recipients, fee);
+// tx.id is the transaction hash`)}
+${docH3('Broadcasting')}
+${docCode(`curl -X POST http://127.0.0.1:3001/api/v1/tx \\
+  -H "Content-Type: application/json" \\
+  -d '{"transaction": <full tx JSON>}'`)}
+
+${docH2('Transaction Fees')}
+${docP('The transaction fee is implicit: <span class="font-mono text-xs text-qubit-400">fee = sum(inputs) - sum(outputs)</span>. The miner who includes your transaction in a block collects the fee.')}
+<ul class="text-text-secondary text-sm leading-relaxed mb-3 list-disc list-inside space-y-1">
+  <li><span class="text-text-primary font-medium">No minimum fee</span> — consensus does not enforce a minimum, but miners may ignore zero-fee transactions.</li>
+  <li><span class="text-text-primary font-medium">Miner prioritization</span> — miners are free to order transactions by fee density (fee per byte) or any other policy.</li>
+  <li><span class="text-text-primary font-medium">Larger transactions</span> — ML-DSA-65 signatures are ~3.3 KB each, so multi-input transactions are large. Plan fees accordingly.</li>
+</ul>
+
+${docH2('UTXO Management')}
+${docP('Over time, your address will accumulate multiple UTXOs — from mining rewards, claims, and received payments. Each UTXO can only be spent as a whole (you create change outputs for the remainder).')}
+${docH3('Consolidation')}
+${docP('If you have many small UTXOs, spending them all at once requires one ML-DSA-65 signature per input (~5.3 KB each). To avoid creating very large transactions, periodically consolidate by sending your full balance to yourself in a single transaction:')}
+${docCode(`// Consolidate all UTXOs into one
+const allUtxos = await fetchUtxos(wallet.address);
+const total = allUtxos.reduce((s, u) => s + u.amount, 0);
+const fee = 0.1;
+const tx = createTransaction(wallet, allUtxos, [{ address: wallet.address, amount: total - fee }], fee);`)}
+${docH3('Dust Threshold')}
+${docP('Because ML-DSA-65 signatures are ~3.3 KB, spending a tiny UTXO can cost more in fees than the UTXO is worth. Avoid creating outputs smaller than <span class="font-mono text-xs text-qubit-400">~0.01 QBTC</span> — they\'re effectively unspendable dust.')}
+
+${docH2('Key Management')}
+<ul class="text-text-secondary text-sm leading-relaxed mb-3 list-disc list-inside space-y-1">
+  <li><span class="text-text-primary font-medium">Secret key is 4,032 bytes</span> — back it up as an 8,064-character hex string. There is no mnemonic/BIP39 support yet.</li>
+  <li><span class="text-text-primary font-medium">No HD wallet</span> — each wallet is a single keypair. Hierarchical deterministic derivation (BIP32) is not yet implemented.</li>
+  <li><span class="text-text-primary font-medium">Node wallet is ephemeral</span> — the mining wallet generated by <span class="font-mono text-xs text-qubit-400">qbtcd --mine</span> exists only in memory. If the node restarts, a new wallet is generated and mining rewards go to the new address.</li>
+  <li><span class="text-text-primary font-medium">Offline signing</span> — you can construct and sign transactions on an air-gapped machine, then broadcast the signed JSON from any online node.</li>
+</ul>`;
+}
+
+function docFaqItem(q: string, a: string): string {
+  return `<div class="border-b border-border py-4">
+<h3 class="text-sm font-semibold text-text-primary mb-2">${q}</h3>
+<p class="text-text-secondary text-sm leading-relaxed">${a}</p>
+</div>`;
+}
+
+function renderDocsFaq(): string {
+  return `<h1 class="text-2xl font-bold mb-6">FAQ</h1>
+
+${docH2('General')}
+<div class="bg-surface rounded-xl glow-border p-5 mb-6">
+${docFaqItem('What is QubitCoin?',
+  'QubitCoin (QBTC) is a post-quantum fork of Bitcoin. It replaces ECDSA secp256k1 with ML-DSA-65 (FIPS 204), a lattice-based signature scheme that resists quantum attacks. BTC holders can claim their balance as quantum-safe QBTC.')}
+${docFaqItem('Is this a fork of Bitcoin\'s codebase?',
+  'No. QubitCoin is a clean-room implementation in TypeScript. It preserves Bitcoin\'s <span class="text-text-primary font-medium">UTXO model</span> and <span class="text-text-primary font-medium">SHA-256 PoW</span> but uses an entirely new codebase. The "fork" refers to the economic state — the BTC UTXO snapshot — not the code.')}
+${docFaqItem('Do I need to run a Bitcoin node?',
+  'No. The BTC snapshot is pre-computed and distributed as a single file. You only need a QubitCoin node. Run <span class="font-mono text-xs text-qubit-400">pnpm run qbtcd -- --mine --full</span> to auto-download the snapshot and start.')}
+${docFaqItem('What happens to my BTC?',
+  'Nothing. Claiming QBTC does not move, lock, or affect your BTC in any way. You sign a message with your BTC private key to prove ownership — no BTC transaction is broadcast. Your BTC remains exactly where it is.')}
+${docFaqItem('Is this production-ready?',
+  'QubitCoin is a <span class="text-text-primary font-medium">proof of concept</span>. It demonstrates a working post-quantum blockchain with real BTC balance migration. It is not audited, does not have formal security proofs, and should not be used for high-value transactions.')}
+</div>
+
+${docH2('Claims')}
+<div class="bg-surface rounded-xl glow-border p-5 mb-6">
+${docFaqItem('Is my BTC safe during the claim process?',
+  'Yes. The claim process only requires you to <span class="text-text-primary font-medium">sign a message</span> with your BTC private key — it does not create or broadcast any Bitcoin transaction. Your BTC never moves.')}
+${docFaqItem('My address isn\'t in the snapshot — what do I do?',
+  'The snapshot was taken at BTC block 935,941. Only addresses with a balance at that height are included. If you received BTC after that block, or if your address type isn\'t supported yet, it won\'t appear in the snapshot.')}
+${docFaqItem('Can I claim from multiple BTC addresses?',
+  'Yes. Each BTC address is claimed independently. You can claim from as many addresses as you own — each one creates a separate claim transaction on the QBTC chain.')}
+${docFaqItem('Which BTC address types are supported?',
+  'Currently supported: <span class="text-text-primary font-medium">P2PKH</span> (1...), <span class="text-text-primary font-medium">P2PK</span> (raw pubkey), <span class="text-text-primary font-medium">P2WPKH</span> (bc1q...), <span class="text-text-primary font-medium">P2SH-P2WPKH</span> (3...), <span class="text-text-primary font-medium">P2TR</span> (bc1p...), and <span class="text-text-primary font-medium">P2WSH</span> (bc1q... long). See <a href="#/docs/btc-claims" class="text-qubit-400 hover:text-qubit-300">BTC Claims</a> for details.')}
+${docFaqItem('Is there a deadline to claim?',
+  'No. There is no expiration. The snapshot is permanently committed in the genesis block. You can claim at any time — even years from now.')}
+${docFaqItem('What if I lose my QBTC private key after claiming?',
+  'Your QBTC is gone. There is no recovery mechanism. The BTC address is marked as claimed permanently and cannot be claimed again. Always back up your ML-DSA-65 secret key (8,064 hex characters) before claiming.')}
+</div>
+
+${docH2('Security')}
+<div class="bg-surface rounded-xl glow-border p-5 mb-6">
+${docFaqItem('When will quantum computers break Bitcoin?',
+  'Estimates range from 10 to 30+ years for a cryptographically relevant quantum computer. The exact timeline is uncertain, but the "harvest now, decrypt later" threat means exposed public keys are at risk <span class="text-text-primary font-medium">today</span> — an adversary can record them now and crack them later.')}
+${docFaqItem('Is QBTC already safe from quantum attacks?',
+  'Yes. All ongoing QBTC transactions use ML-DSA-65 (FIPS 204), whose security relies on the Module-LWE problem — no known quantum algorithm can solve it efficiently. The one-time ECDSA claim is the only classical cryptography exposure.')}
+${docFaqItem('What about 51% attacks?',
+  'QubitCoin uses SHA-256 PoW, same as Bitcoin. A quantum computer using Grover\'s algorithm could achieve a quadratic speedup in mining, but this is equivalent to having better hardware — not a fundamental break. The difficulty adjustment compensates for hashrate changes.')}
+${docFaqItem('What if ML-DSA-65 is broken in the future?',
+  'If a vulnerability is found in ML-DSA-65, the network would need to migrate to a different post-quantum scheme via a hard fork. This is an inherent risk of any cryptographic system. NIST\'s multi-year standardization process and ongoing cryptanalysis provide confidence in ML-DSA-65\'s security.')}
+</div>
+
+${docH2('Technical')}
+<div class="bg-surface rounded-xl glow-border p-5 mb-6">
+${docFaqItem('Why 30-minute block times instead of 10 minutes?',
+  'ML-DSA-65 signatures are ~3.3 KB vs ECDSA\'s ~72 bytes. With a 1 MB block size limit, each block fits ~180 transactions. The 30-minute block time gives the fee market more time to accumulate transactions, improving block utilization.')}
+${docFaqItem('Why NIST Security Level 3 instead of Level 5?',
+  'Level 3 (ML-DSA-65) provides 128-bit quantum security, matching AES-128. Level 5 (ML-DSA-87) would increase key sizes by ~50% and signature sizes by ~40% for 192-bit quantum security — diminishing returns given that 128-bit quantum security is already considered infeasible to break.')}
+${docFaqItem('Why are transactions so large?',
+  'Each input requires a full ML-DSA-65 public key (1,952 bytes) and signature (3,309 bytes) — about 5.3 KB per input. A single-input transaction is ~5.4 KB. This is the fundamental cost of post-quantum security. See <a href="#/docs/security" class="text-qubit-400 hover:text-qubit-300">Security</a> for the tradeoff analysis.')}
+${docFaqItem('Why NDJSON for storage instead of a binary format?',
+  'NDJSON (newline-delimited JSON) is human-readable, append-only, and trivially streamable. It\'s ideal for a proof of concept — easy to inspect and debug. A production system would likely use a more compact binary format.')}
+${docFaqItem('Why no scripting language (like Bitcoin Script)?',
+  'QubitCoin is a proof of concept focused on demonstrating post-quantum signatures. Adding a scripting language would add complexity without advancing the core goal. Transactions support simple pay-to-address outputs and claim transactions.')}
+${docFaqItem('How does the snapshot merkle root work?',
+  'The merkle root is a SHA-256 hash tree over all 55.5M address-balance pairs, sorted by address. It\'s committed in the genesis block\'s coinbase. Any node can independently recompute it from the snapshot file and verify it matches genesis — ensuring the snapshot hasn\'t been tampered with.')}
+</div>
+
+${docH2('Troubleshooting')}
+<div class="bg-surface rounded-xl glow-border p-5 mb-6">
+${docFaqItem('My node won\'t sync',
+  'Check that you can reach the seed node: <span class="font-mono text-xs text-qubit-400">curl -s https://qubitcoin.finance/api/v1/status | jq</span>. Ensure port <span class="font-mono text-xs text-qubit-400">6001</span> (P2P) is not blocked by a firewall. Check logs for "genesis hash mismatch" — this means your snapshot doesn\'t match the network\'s genesis block.')}
+${docFaqItem('My claim was rejected',
+  'Common causes: <span class="text-text-primary font-medium">(1)</span> Address not in snapshot — check the snapshot was loaded. <span class="text-text-primary font-medium">(2)</span> Already claimed — each address can only be claimed once. <span class="text-text-primary font-medium">(3)</span> Invalid signature — wrong private key or key type mismatch. <span class="text-text-primary font-medium">(4)</span> Address type mismatch — e.g. using a P2PKH claim for a P2SH address.')}
+${docFaqItem('Snapshot download fails or is slow',
+  'The snapshot is ~2.4 GB. Download it manually with <span class="font-mono text-xs text-qubit-400">curl -L -o ~/qbtc-snapshot.jsonl https://qubitcoin.finance/snapshot/qbtc-snapshot.jsonl</span> and pass it with <span class="font-mono text-xs text-qubit-400">--snapshot ~/qbtc-snapshot.jsonl</span>.')}
+${docFaqItem('Node uses too much memory',
+  'The snapshot loads into memory (~4-6 GB for 54M entries). Use <span class="font-mono text-xs text-qubit-400">--max-old-space-size=12288</span> with Node.js if you have enough RAM. Without a snapshot (local dev mode), memory usage is minimal.')}
+${docFaqItem('"Blocks failed replay" on startup',
+  'This means stored blocks don\'t validate against current consensus rules. Usually caused by changing consensus parameters (<span class="font-mono text-xs text-qubit-400">STARTING_DIFFICULTY</span>, <span class="font-mono text-xs text-qubit-400">TARGET_BLOCK_TIME_MS</span>, <span class="font-mono text-xs text-qubit-400">DIFFICULTY_ADJUSTMENT_INTERVAL</span>) or using a different snapshot. Delete <span class="font-mono text-xs text-qubit-400">{datadir}/blocks.jsonl</span> and <span class="font-mono text-xs text-qubit-400">metadata.json</span> to start fresh.')}
+</div>`;
+}
+
 function docIcon(paths: string, cls: string): string {
   return `<svg class="w-4 h-4 ${cls} shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">${paths}</svg>`;
 }
@@ -1632,6 +1932,7 @@ async function dispatch(): Promise<void> {
   switch (route.view) {
     case 'mempool':
       await renderDashboard();
+      refreshTimer = setInterval(() => renderDashboard(), 15_000);
       break;
     case 'dashboard':
       // #/ alone → show landing

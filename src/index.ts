@@ -1,5 +1,5 @@
 /**
- * qcoin - Post-Quantum Cryptography Proof of Concept
+ * qbtc - Post-Quantum Cryptography Proof of Concept
  *
  * Demonstrates all NIST FIPS 203/204/205 algorithms:
  *   - ML-KEM (Kyber)     - Key encapsulation
@@ -14,7 +14,7 @@ import { runHybridDemo } from './hybrid-demo.js'
 import { runBenchmark } from './benchmark.js'
 
 console.log('╔══════════════════════════════════════════════════════════╗')
-console.log('║   qcoin: Post-Quantum Cryptography Proof of Concept   ║')
+console.log('║   qbtc: Post-Quantum Cryptography Proof of Concept   ║')
 console.log('║   NIST FIPS 203 / 204 / 205                            ║')
 console.log('╚══════════════════════════════════════════════════════════╝')
 

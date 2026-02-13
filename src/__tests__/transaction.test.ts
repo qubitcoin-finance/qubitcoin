@@ -184,7 +184,7 @@ describe('validateTransaction', () => {
         btcAddress: 'b'.repeat(40),
         ecdsaPublicKey: new Uint8Array(33),
         ecdsaSignature: new Uint8Array(64),
-        qcoinAddress: 'a'.repeat(64),
+        qbtcAddress: 'a'.repeat(64),
       },
     }
 
@@ -204,7 +204,7 @@ describe('isClaimTransaction', () => {
         btcAddress: 'a'.repeat(40),
         ecdsaPublicKey: new Uint8Array(33),
         ecdsaSignature: new Uint8Array(64),
-        qcoinAddress: 'b'.repeat(64),
+        qbtcAddress: 'b'.repeat(64),
       },
     }
     expect(isClaimTransaction(tx)).toBe(true)
@@ -242,7 +242,7 @@ describe('calculateFee', () => {
         btcAddress: 'a'.repeat(40),
         ecdsaPublicKey: new Uint8Array(33),
         ecdsaSignature: new Uint8Array(64),
-        qcoinAddress: 'a'.repeat(64),
+        qbtcAddress: 'a'.repeat(64),
       },
     }
     expect(calculateFee(tx, new Map())).toBe(0)

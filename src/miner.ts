@@ -1,5 +1,5 @@
 /**
- * Proof-of-Work miner for qcoin
+ * Proof-of-Work miner for qbtc
  *
  * Uses SHA-256 double-hash (same as Bitcoin).
  * SHA-256 is already quantum-resistant for mining

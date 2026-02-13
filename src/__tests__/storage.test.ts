@@ -50,7 +50,7 @@ describe('FileBlockStorage', () => {
   let tmpDir: string
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qtc-storage-'))
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-storage-'))
   })
 
   afterEach(() => {

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>QubitCoin (QTC) — Post-Quantum Digital Currency</title>
+  <title>QubitCoin (QBTC) — Post-Quantum Digital Currency</title>
   <meta name="description" content="QubitCoin is a post-quantum Bitcoin fork using ML-DSA-65 (Dilithium) signatures. Quantum-safe digital currency for the future." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -108,7 +108,7 @@
           <h3 class="text-lg font-semibold mb-3 text-text-primary">Seamless Migration</h3>
           <p class="text-text-muted text-sm leading-relaxed">
             BTC holders prove ownership with a one-time ECDSA signature to claim their full aggregated address balance
-            as quantum-safe QTC. No trust, no intermediaries.
+            as quantum-safe QBTC. No trust, no intermediaries.
           </p>
         </div>
         <div class="reveal feature-card rounded-2xl bg-surface p-8 glow-border" style="transition-delay: 0.2s">
@@ -287,7 +287,7 @@
             <div class="rounded-xl bg-surface p-4 font-mono text-xs text-text-muted glow-border ml-auto max-w-xs">
               <span class="text-entropy-blue">ecdsa</span>.sign(claimMsg, btcPrivKey)<br/>
               → verify HASH160(pubKey) == address<br/>
-              → <span class="text-entropy-cyan">proof</span> + qtcPubKey
+              → <span class="text-entropy-cyan">proof</span> + qbtcPubKey
             </div>
           </div>
           <div class="relative z-10 w-12 h-12 rounded-full bg-entropy-blue border-4 border-bg flex items-center justify-center shrink-0 glow-box">
@@ -307,7 +307,7 @@
           <div class="hidden md:block md:w-1/2 md:text-right md:pr-12">
             <h3 class="text-lg font-semibold mb-2">Transact Quantum-Safe</h3>
             <p class="text-text-muted text-sm leading-relaxed">
-              Once claimed, your QTC coins live in quantum-resistant UTXOs. All future transactions use
+              Once claimed, your QBTC coins live in quantum-resistant UTXOs. All future transactions use
               ML-DSA-65 signatures — safe from both classical and quantum adversaries.
             </p>
           </div>
@@ -318,12 +318,12 @@
             <div class="md:hidden">
               <h3 class="text-lg font-semibold mb-2">Transact Quantum-Safe</h3>
               <p class="text-text-muted text-sm leading-relaxed">
-                Once claimed, your QTC coins live in quantum-resistant UTXOs. All future transactions use
+                Once claimed, your QBTC coins live in quantum-resistant UTXOs. All future transactions use
                 ML-DSA-65 signatures — safe from both classical and quantum adversaries.
               </p>
             </div>
             <div class="hidden md:block rounded-xl bg-surface p-4 font-mono text-xs text-text-muted glow-border">
-              <span class="text-qubit-400">mldsa65</span>.sign(txHash, qtcPrivKey)<br/>
+              <span class="text-qubit-400">mldsa65</span>.sign(txHash, qbtcPrivKey)<br/>
               → quantum-safe <span class="text-green-400">&#10003;</span>
             </div>
           </div>
@@ -375,7 +375,7 @@
     <div class="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
       <div class="flex items-center gap-2">
         <img src="/logo.svg" alt="QubitCoin" class="w-6 h-6 rounded-md" />
-        <span class="text-text-muted text-sm">QubitCoin (QTC) — Post-Quantum Digital Currency</span>
+        <span class="text-text-muted text-sm">QubitCoin (QBTC) — Post-Quantum Digital Currency</span>
       </div>
       <p class="text-text-muted/50 text-xs font-mono">
         Built with ML-DSA-65 &middot; Open Source

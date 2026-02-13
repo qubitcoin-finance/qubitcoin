@@ -72,6 +72,7 @@ dist/
 artifacts/
 cache/
 html/
+md/
 
 # Test reports
 playwright-report/
@@ -90,3 +91,4 @@ scripts/logs/
 logs/
 .next-prod
 apps/netrunner/instance-state.json
+

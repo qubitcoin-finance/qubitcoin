@@ -36,6 +36,7 @@ export interface ParsedCoin {
   amount: bigint          // satoshis (decompressed)
   scriptType: ScriptType
   addressHash?: string    // hex of the 20-byte or 32-byte hash (if extractable)
+  rawScript?: Buffer      // raw script bytes (only for 'other' type)
   isGroupEnd: boolean     // true when this is the last coin in a txid group
 }
 
@@ -238,6 +239,7 @@ function decompressAmount(x: bigint): bigint {
 interface DecompressedScript {
   scriptType: ScriptType
   addressHash?: string // hex of 20-byte or 32-byte hash
+  rawScript?: Buffer   // raw script bytes (only for 'other' type)
 }
 
 async function readCompressedScript(reader: BufferedReader): Promise<DecompressedScript> {
@@ -296,11 +298,13 @@ async function readCompressedScript(reader: BufferedReader): Promise<Decompresse
   }
 
   // Bare multisig: <m> <pubkeys...> <n> OP_CHECKMULTISIG (0xae)
+  // Address = SHA256(script) — same convention as P2WSH
   if (script[scriptLen - 1] === 0xae) {
-    return { scriptType: 'multisig' }
+    const hash = bytesToHex(sha256(script))
+    return { scriptType: 'multisig', addressHash: hash }
   }
 
-  return { scriptType: 'other' }
+  return { scriptType: 'other', rawScript: script }
 }
 
 // --- Main parser ---
@@ -392,6 +396,7 @@ export async function* parseDumptxoutset(
         amount,
         scriptType: script.scriptType,
         addressHash: script.addressHash,
+        rawScript: script.rawScript,
         isGroupEnd,
       }
 

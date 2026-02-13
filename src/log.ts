@@ -1,12 +1,12 @@
 /**
- * Structured logger for qtcd — powered by pino
+ * Structured logger for qbtcd — powered by pino
  *
  * Usage:
  *   import { log } from './log.js'
  *   log.info({ component: 'p2p' }, 'Listening on port 6001')
  *
  * Pipe to pino-pretty for human-readable dev output:
- *   node --loader ts-node/esm src/qtcd.ts | pnpm pino-pretty
+ *   node --loader ts-node/esm src/qbtcd.ts | pnpm pino-pretty
  */
 import pino from 'pino'
 
@@ -15,6 +15,6 @@ const transport = process.stdout.isTTY
   : undefined
 
 export const log = pino(
-  { name: 'qtcd', level: process.env.LOG_LEVEL || 'info' },
+  { name: 'qbtcd', level: process.env.LOG_LEVEL || 'info' },
   transport,
 )

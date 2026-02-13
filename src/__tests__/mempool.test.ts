@@ -149,13 +149,13 @@ describe('Mempool claims', () => {
   it('accepts valid claim', () => {
     const mempool = new Mempool()
     const { snapshot, holders } = createMockSnapshot()
-    const qtcWallet = walletB
+    const qbtcWallet = walletB
 
     const claimTx = createClaimTransaction(
       holders[0].secretKey,
       holders[0].publicKey,
       snapshot.entries[0],
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
 
@@ -166,13 +166,13 @@ describe('Mempool claims', () => {
   it('rejects double-claim in mempool', async () => {
     const mempool = new Mempool()
     const { snapshot, holders } = createMockSnapshot()
-    const qtcWallet = walletB
+    const qbtcWallet = walletB
 
     const claimTx1 = createClaimTransaction(
       holders[0].secretKey,
       holders[0].publicKey,
       snapshot.entries[0],
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
     mempool.addTransaction(claimTx1, new Map())
@@ -180,12 +180,12 @@ describe('Mempool claims', () => {
     // Wait 1ms so timestamp differs → different tx id
     await new Promise((r) => setTimeout(r, 1))
 
-    const qtcWallet2 = walletC
+    const qbtcWallet2 = walletC
     const claimTx2 = createClaimTransaction(
       holders[0].secretKey,
       holders[0].publicKey,
       snapshot.entries[0],
-      qtcWallet2,
+      qbtcWallet2,
       snapshot.btcBlockHash
     )
     const result = mempool.addTransaction(claimTx2, new Map())
@@ -196,7 +196,7 @@ describe('Mempool claims', () => {
   it('rejects claim already on-chain', () => {
     const mempool = new Mempool()
     const { snapshot, holders } = createMockSnapshot()
-    const qtcWallet = walletB
+    const qbtcWallet = walletB
 
     const claimedSet = new Set<string>()
     claimedSet.add(snapshot.entries[0].btcAddress)
@@ -205,7 +205,7 @@ describe('Mempool claims', () => {
       holders[0].secretKey,
       holders[0].publicKey,
       snapshot.entries[0],
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
 
@@ -217,13 +217,13 @@ describe('Mempool claims', () => {
   it('removeTransactions cleans up pending claims', () => {
     const mempool = new Mempool()
     const { snapshot, holders } = createMockSnapshot()
-    const qtcWallet = walletB
+    const qbtcWallet = walletB
 
     const claimTx = createClaimTransaction(
       holders[0].secretKey,
       holders[0].publicKey,
       snapshot.entries[0],
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
     mempool.addTransaction(claimTx, new Map())
@@ -234,7 +234,7 @@ describe('Mempool claims', () => {
       holders[0].secretKey,
       holders[0].publicKey,
       snapshot.entries[0],
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
     const result = mempool.addTransaction(claimTx2, new Map())

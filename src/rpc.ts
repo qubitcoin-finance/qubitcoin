@@ -25,7 +25,7 @@ export function sanitize(obj: unknown): unknown {
 
 /** Known Uint8Array fields in transactions that need deserialization */
 const TX_INPUT_BINARY_FIELDS = ['publicKey', 'signature'] as const;
-const CLAIM_DATA_BINARY_FIELDS = ['ecdsaPublicKey', 'ecdsaSignature', 'schnorrPublicKey', 'schnorrSignature'] as const;
+const CLAIM_DATA_BINARY_FIELDS = ['ecdsaPublicKey', 'ecdsaSignature', 'schnorrPublicKey', 'schnorrSignature', 'witnessScript', 'witnessSignatures'] as const;
 
 function deserializeTransaction(raw: Record<string, unknown>): Transaction {
   const tx = raw as unknown as Transaction;

@@ -1,17 +1,20 @@
 /**
- * Bitcoin address balance snapshot for qcoin claim mechanism
+ * Bitcoin address balance snapshot for qbtc claim mechanism
  *
  * Represents aggregated balances per BTC address at a specific block height.
- * Supports P2PKH, P2WPKH, and P2SH-P2WPKH (wrapped SegWit) addresses.
- * BTC holders prove ownership of their address to claim qcoin equivalents.
+ * Supports P2PKH, P2WPKH, P2SH-P2WPKH (wrapped SegWit), P2TR, and P2WSH addresses.
+ * BTC holders prove ownership of their address to claim qbtc equivalents.
  */
 import { sha256 } from '@noble/hashes/sha2.js'
 import {
   hash160,
   generateBtcKeypair,
   deriveP2shP2wpkhAddress,
+  deriveP2shMultisigAddress,
   getSchnorrPublicKey,
   deriveP2trAddress,
+  buildMultisigScript,
+  deriveP2wshAddress,
   doubleSha256Hex,
   bytesToHex,
   concatBytes,
@@ -19,9 +22,9 @@ import {
 import { secp256k1 } from '@noble/curves/secp256k1.js'
 
 export interface BtcAddressBalance {
-  btcAddress: string  // 40-char hex HASH160(compressed pubkey), HASH160(redeemScript) for P2SH, or 64-char hex tweaked key for P2TR
+  btcAddress: string  // 40-char hex HASH160(compressed pubkey), HASH160(redeemScript) for P2SH, or 64-char hex for P2TR/P2WSH/multisig
   amount: number      // total satoshis for this address
-  type?: 'p2sh' | 'p2tr'  // absent = P2PKH/P2WPKH (keyhash), 'p2sh' = P2SH-P2WPKH, 'p2tr' = Taproot
+  type?: 'p2sh' | 'p2tr' | 'p2wsh' | 'multisig'  // absent = P2PKH/P2WPKH (keyhash), 'p2sh' = P2SH-P2WPKH, 'p2tr' = Taproot, 'p2wsh' = P2WSH, 'multisig' = bare multisig
 }
 
 export interface BtcSnapshot {
@@ -100,20 +103,26 @@ export function getSnapshotIndex(snapshot: BtcSnapshot): ShardedIndex {
  * Create a mock BTC snapshot for demo purposes.
  * Returns the snapshot plus the secret keys (so the demo can sign claims).
  */
+export interface MockHolder {
+  secretKey: Uint8Array
+  publicKey: Uint8Array
+  address: string
+  amount: number
+  type?: 'p2sh' | 'p2tr' | 'p2wsh'
+  witnessScript?: Uint8Array
+  signerKeys?: Array<{ secretKey: Uint8Array; publicKey: Uint8Array }>
+}
+
 export function createMockSnapshot(): {
   snapshot: BtcSnapshot
-  holders: Array<{ secretKey: Uint8Array; publicKey: Uint8Array; address: string; amount: number }>
+  holders: MockHolder[]
 } {
   const holderAmounts = [100, 250, 50, 500, 75] // BTC amounts for 5 P2PKH/P2WPKH holders
   const p2shAmounts = [200] // BTC amounts for P2SH-P2WPKH holders
+  const p2shMultisigAmounts = [350] // BTC amounts for P2SH multisig (2-of-3) holders
   const p2trAmounts = [300] // BTC amounts for P2TR (Taproot) holders
-  const holders: Array<{
-    secretKey: Uint8Array
-    publicKey: Uint8Array
-    address: string
-    amount: number
-    type?: 'p2sh' | 'p2tr'
-  }> = []
+  const p2wshAmounts = [400] // BTC amounts for P2WSH (2-of-3 multisig) holders
+  const holders: MockHolder[] = []
   const entries: BtcAddressBalance[] = []
 
   for (let i = 0; i < holderAmounts.length; i++) {
@@ -151,6 +160,29 @@ export function createMockSnapshot(): {
     })
   }
 
+  // Add P2SH multisig (2-of-3) holders
+  for (let i = 0; i < p2shMultisigAmounts.length; i++) {
+    const signerKeys = [generateBtcKeypair(), generateBtcKeypair(), generateBtcKeypair()]
+    const pubkeys = signerKeys.map(kp => kp.publicKey)
+    const redeemScript = buildMultisigScript(2, pubkeys)
+    const address = deriveP2shMultisigAddress(redeemScript)
+    holders.push({
+      secretKey: signerKeys[0].secretKey,
+      publicKey: signerKeys[0].publicKey,
+      address,
+      amount: p2shMultisigAmounts[i],
+      type: 'p2sh',
+      witnessScript: redeemScript,
+      signerKeys,
+    })
+
+    entries.push({
+      btcAddress: address,
+      amount: p2shMultisigAmounts[i],
+      type: 'p2sh',
+    })
+  }
+
   // Add P2TR (Taproot) holders
   for (let i = 0; i < p2trAmounts.length; i++) {
     const secretKey = secp256k1.utils.randomSecretKey()
@@ -168,6 +200,29 @@ export function createMockSnapshot(): {
       btcAddress: address,
       amount: p2trAmounts[i],
       type: 'p2tr',
+    })
+  }
+
+  // Add P2WSH (2-of-3 multisig) holders
+  for (let i = 0; i < p2wshAmounts.length; i++) {
+    const signerKeys = [generateBtcKeypair(), generateBtcKeypair(), generateBtcKeypair()]
+    const pubkeys = signerKeys.map(kp => kp.publicKey)
+    const witnessScript = buildMultisigScript(2, pubkeys)
+    const address = deriveP2wshAddress(witnessScript)
+    holders.push({
+      secretKey: signerKeys[0].secretKey, // first key as default
+      publicKey: signerKeys[0].publicKey,
+      address,
+      amount: p2wshAmounts[i],
+      type: 'p2wsh',
+      witnessScript,
+      signerKeys,
+    })
+
+    entries.push({
+      btcAddress: address,
+      amount: p2wshAmounts[i],
+      type: 'p2wsh',
     })
   }
 

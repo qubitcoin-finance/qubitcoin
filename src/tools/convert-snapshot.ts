@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Convert Bitcoin Core's dumptxoutset binary → QTC snapshot NDJSON
+ * Convert Bitcoin Core's dumptxoutset binary → QBTC snapshot NDJSON
  *
  * Two-phase pipeline with checkpointed resume:
  *
@@ -16,7 +16,7 @@
  *   pnpm run convert-snapshot
  *
  *   # With custom paths:
- *   pnpm run convert-snapshot -- --input ~/utxos.dat --workdir ~/qtc-work/ --output ~/qtc-snapshot.jsonl
+ *   pnpm run convert-snapshot -- --input ~/utxos.dat --workdir ~/qbtc-work/ --output ~/qbtc-snapshot.jsonl
  *
  *   # Run phases separately (for large dumps — kill extract and re-run to resume):
  *   pnpm run convert-snapshot -- extract
@@ -24,8 +24,8 @@
  *
  * Defaults:
  *   --input   ~/utxos.dat
- *   --workdir ~/qtc-work/
- *   --output  ~/qtc-snapshot.jsonl
+ *   --workdir ~/qbtc-work/
+ *   --output  ~/qbtc-snapshot.jsonl
  */
 import {
   createWriteStream, createReadStream,
@@ -57,12 +57,12 @@ interface Checkpoint {
 
 const HOME = process.env.HOME || '~'
 const DEFAULT_INPUT = join(HOME, 'utxos.dat')
-const DEFAULT_WORKDIR = join(HOME, 'qtc-work')
-const DEFAULT_OUTPUT = join(HOME, `qtc-snapshot-${new Date().toISOString().slice(0, 10)}.jsonl`)
+const DEFAULT_WORKDIR = join(HOME, 'qbtc-work')
+const DEFAULT_OUTPUT = join(HOME, `qbtc-snapshot-${new Date().toISOString().slice(0, 10)}.jsonl`)
 
 interface ExtractArgs { command: 'extract'; input: string; workdir: string }
-interface AggregateArgs { command: 'aggregate'; workdir: string; output: string; gzip: boolean; force: boolean }
-interface FullArgs { command: 'full'; input: string; workdir: string; output: string; gzip: boolean; force: boolean }
+interface AggregateArgs { command: 'aggregate'; workdir: string; output: string; gzip: boolean; force: boolean; postfix: string }
+interface FullArgs { command: 'full'; input: string; workdir: string; output: string; gzip: boolean; force: boolean; postfix: string }
 
 type Args = ExtractArgs | AggregateArgs | FullArgs
 
@@ -74,6 +74,7 @@ function parseArgs(): Args {
   let input = ''
   let output = ''
   let workdir = ''
+  let postfix = ''
   let gzip = false
   let force = false
 
@@ -86,6 +87,7 @@ function parseArgs(): Args {
     if (args[i] === '--input' && args[i + 1]) input = args[++i]
     else if (args[i] === '--output' && args[i + 1]) output = args[++i]
     else if (args[i] === '--workdir' && args[i + 1]) workdir = args[++i]
+    else if (args[i] === '--postfix' && args[i + 1]) postfix = args[++i]
     else if (args[i] === '--gzip') gzip = true
     else if (args[i] === '--force') force = true
   }
@@ -94,7 +96,7 @@ function parseArgs(): Args {
     return { command: 'extract', input: input || DEFAULT_INPUT, workdir: workdir || DEFAULT_WORKDIR }
   }
   if (subcommand === 'aggregate') {
-    return { command: 'aggregate', workdir: workdir || DEFAULT_WORKDIR, output: output || DEFAULT_OUTPUT, gzip, force }
+    return { command: 'aggregate', workdir: workdir || DEFAULT_WORKDIR, output: output || DEFAULT_OUTPUT, gzip, force, postfix }
   }
 
   // Default: full pipeline (extract + aggregate)
@@ -105,6 +107,7 @@ function parseArgs(): Args {
     output: output || DEFAULT_OUTPUT,
     gzip,
     force,
+    postfix,
   }
 }
 
@@ -211,8 +214,8 @@ async function runExtract(input: string, workdir: string) {
       }
     }, resumeFrom)) {
 
-      // Include P2PKH, P2WPKH, P2SH (P2SH-P2WPKH single-signer), P2TR (Taproot), P2PK (raw pubkey)
-      if (coin.scriptType === 'p2pkh' || coin.scriptType === 'p2wpkh' || coin.scriptType === 'p2sh' || coin.scriptType === 'p2tr' || coin.scriptType === 'p2pk') {
+      // Include all claimable types
+      if (coin.scriptType === 'p2pkh' || coin.scriptType === 'p2wpkh' || coin.scriptType === 'p2sh' || coin.scriptType === 'p2tr' || coin.scriptType === 'p2pk' || coin.scriptType === 'p2wsh' || coin.scriptType === 'multisig') {
         const line = JSON.stringify({
           a: coin.addressHash,
           b: coin.amount.toString(),
@@ -299,16 +302,27 @@ async function runExtract(input: string, workdir: string) {
  *
  * Each step skips if its output already exists.
  */
-async function aggregateCoins(workdir: string) {
+async function aggregateCoins(workdir: string, postfix: string) {
+  const suffix = postfix ? `-${postfix}` : ''
   const coinsPath = join(workdir, 'coins.jsonl')
-  const sortedPath = join(workdir, 'sorted-coins.jsonl')
-  const balancesPath = join(workdir, 'balances.jsonl')
-  const balancesMetaPath = join(workdir, 'balances-meta.json')
+  const sortedPath = join(workdir, `sorted-coins${suffix}.jsonl`)
+  const balancesPath = join(workdir, `balances${suffix}.jsonl`)
+  const balancesMetaPath = join(workdir, `balances-meta${suffix}.json`)
 
   // Skip entirely if already completed
   if (existsSync(balancesPath) && existsSync(balancesMetaPath)) {
     const meta = JSON.parse(readFileSync(balancesMetaPath, 'utf8'))
     console.log(`Sub-phase A already complete (${Number(meta.addressCount).toLocaleString()} addresses). Skipping.`)
+    console.log(`  Total coins:        ${Number(meta.totalCoins).toLocaleString()}`)
+    console.log(`  P2PKH coins:        ${Number(meta.p2pkhCoins).toLocaleString()}`)
+    console.log(`  P2PK coins:         ${Number(meta.p2pkCoins || 0).toLocaleString()}`)
+    console.log(`  P2WPKH coins:       ${Number(meta.p2wpkhCoins).toLocaleString()}`)
+    console.log(`  P2SH coins:         ${Number(meta.p2shCoins || 0).toLocaleString()}`)
+    console.log(`  P2TR coins:         ${Number(meta.p2trCoins || 0).toLocaleString()}`)
+    console.log(`  P2WSH coins:        ${Number(meta.p2wshCoins || 0).toLocaleString()}`)
+    console.log(`  Multisig coins:     ${Number(meta.multisigCoins || 0).toLocaleString()}`)
+    console.log(`  Unique addresses:   ${Number(meta.addressCount).toLocaleString()}`)
+    console.log(`  Total claimable:    ${(Number(meta.totalClaimableSats) / 1e8).toFixed(2)} BTC`)
     return
   }
 
@@ -354,6 +368,8 @@ async function aggregateCoins(workdir: string) {
   let p2shCount = 0n
   let p2trCount = 0n
   let p2pkCount = 0n
+  let p2wshCount = 0n
+  let multisigCount = 0n
 
   let currentAddr = ''
   let currentBalance = 0n
@@ -364,6 +380,8 @@ async function aggregateCoins(workdir: string) {
     const obj: Record<string, string> = { a: currentAddr, b: currentBalance.toString() }
     if (currentType === 'p2sh') obj.t = 'p2sh'
     else if (currentType === 'p2tr') obj.t = 'p2tr'
+    else if (currentType === 'p2wsh') obj.t = 'p2wsh'
+    else if (currentType === 'multisig') obj.t = 'multisig'
     const line = JSON.stringify(obj) + '\n'
     writeSync(fd, line)
     addressCount++
@@ -395,6 +413,8 @@ async function aggregateCoins(workdir: string) {
       else if (entry.t === 'p2pk') p2pkCount++
       else if (entry.t === 'p2sh') p2shCount++
       else if (entry.t === 'p2tr') p2trCount++
+      else if (entry.t === 'p2wsh') p2wshCount++
+      else if (entry.t === 'multisig') multisigCount++
       else p2wpkhCount++
 
       if (totalCoins % 5_000_000n === 0n) {
@@ -420,6 +440,8 @@ async function aggregateCoins(workdir: string) {
     p2wpkhCoins: p2wpkhCount.toString(),
     p2shCoins: p2shCount.toString(),
     p2trCoins: p2trCount.toString(),
+    p2wshCoins: p2wshCount.toString(),
+    multisigCoins: multisigCount.toString(),
     totalCoins: totalCoins.toString(),
     totalClaimableSats: totalClaimableValue.toString(),
   }
@@ -433,15 +455,18 @@ async function aggregateCoins(workdir: string) {
   console.log(`  P2WPKH coins:       ${p2wpkhCount.toLocaleString()}`)
   console.log(`  P2SH coins:         ${p2shCount.toLocaleString()}`)
   console.log(`  P2TR coins:         ${p2trCount.toLocaleString()}`)
+  console.log(`  P2WSH coins:        ${p2wshCount.toLocaleString()}`)
+  console.log(`  Multisig coins:     ${multisigCount.toLocaleString()}`)
   console.log(`  Unique addresses:   ${addressCount.toLocaleString()}`)
   console.log(`  Total claimable:    ${(Number(totalClaimableValue) / 1e8).toFixed(2)} BTC`)
   console.log()
 }
 
 /** Sub-phase B: stream balances → merkle root → final snapshot */
-async function finalizeSnapshot(workdir: string, output: string, gzip: boolean) {
-  const balancesPath = join(workdir, 'balances.jsonl')
-  const balancesMetaPath = join(workdir, 'balances-meta.json')
+async function finalizeSnapshot(workdir: string, output: string, gzip: boolean, postfix: string) {
+  const suffix = postfix ? `-${postfix}` : ''
+  const balancesPath = join(workdir, `balances${suffix}.jsonl`)
+  const balancesMetaPath = join(workdir, `balances-meta${suffix}.json`)
   const metaPath = join(workdir, 'header.json')
 
   if (!existsSync(balancesPath)) {
@@ -497,6 +522,8 @@ async function finalizeSnapshot(workdir: string, output: string, gzip: boolean) 
     p2wpkhCoins: Number(balancesMeta.p2wpkhCoins),
     p2shCoins: Number(balancesMeta.p2shCoins || '0'),
     p2trCoins: Number(balancesMeta.p2trCoins || '0'),
+    p2wshCoins: Number(balancesMeta.p2wshCoins || '0'),
+    multisigCoins: Number(balancesMeta.multisigCoins || '0'),
     totalClaimableSats: balancesMeta.totalClaimableSats,
   })
 
@@ -526,7 +553,7 @@ async function finalizeSnapshot(workdir: string, output: string, gzip: boolean) 
   console.log(`  Sub-phase B done in ${elapsed}s\n`)
 }
 
-async function runAggregate(workdir: string, output: string, gzip: boolean) {
+async function runAggregate(workdir: string, output: string, gzip: boolean, postfix: string) {
   const startTime = Date.now()
 
   const coinsPath = join(workdir, 'coins.jsonl')
@@ -536,10 +563,10 @@ async function runAggregate(workdir: string, output: string, gzip: boolean) {
   }
 
   // Sub-phase A: aggregate coins → sorted balances.jsonl
-  await aggregateCoins(workdir)
+  await aggregateCoins(workdir, postfix)
 
   // Sub-phase B: stream balances → merkle root → final snapshot
-  await finalizeSnapshot(workdir, output, gzip)
+  await finalizeSnapshot(workdir, output, gzip, postfix)
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
   console.log(`Done in ${elapsed}s`)
@@ -570,7 +597,7 @@ async function main() {
       break
     case 'aggregate':
       guardOutputExists(args.output, args.force)
-      await runAggregate(args.workdir, args.output, args.gzip)
+      await runAggregate(args.workdir, args.output, args.gzip, args.postfix)
       break
     case 'full': {
       guardOutputExists(args.output, args.force)
@@ -578,10 +605,11 @@ async function main() {
       console.log(`  Input:   ${args.input}`)
       console.log(`  Workdir: ${args.workdir}`)
       console.log(`  Output:  ${args.output}`)
+      if (args.postfix) console.log(`  Postfix: ${args.postfix}`)
       console.log()
       await runExtract(args.input, args.workdir)
       console.log()
-      await runAggregate(args.workdir, args.output, args.gzip)
+      await runAggregate(args.workdir, args.output, args.gzip, args.postfix)
       break
     }
   }

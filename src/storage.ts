@@ -41,7 +41,7 @@ export function sanitizeForStorage(obj: unknown): unknown {
 
 /** Known Uint8Array fields in transactions that need deserialization */
 const TX_INPUT_BINARY_FIELDS = ['publicKey', 'signature'] as const
-const CLAIM_DATA_BINARY_FIELDS = ['ecdsaPublicKey', 'ecdsaSignature', 'schnorrPublicKey', 'schnorrSignature'] as const
+const CLAIM_DATA_BINARY_FIELDS = ['ecdsaPublicKey', 'ecdsaSignature', 'schnorrPublicKey', 'schnorrSignature', 'witnessScript', 'witnessSignatures'] as const
 
 /** Restore hex strings back to Uint8Array for known binary fields */
 function deserializeTransaction(raw: Record<string, unknown>): Transaction {

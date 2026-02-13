@@ -447,33 +447,33 @@ describe('Blockchain undo data', () => {
   it('undo reverses claim transactions', () => {
     const { snapshot, holders } = createMockSnapshot()
     const chain = new Blockchain(snapshot)
-    const qtcWallet = walletB
+    const qbtcWallet = walletB
 
     // Mine a block with a claim
     const claimTx = createClaimTransaction(
       holders[0].secretKey,
       holders[0].publicKey,
       snapshot.entries[0],
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
     const block = mineOnChain(chain, 'f'.repeat(64), [claimTx])
     chain.addBlock(block)
 
     expect(chain.isClaimed(holders[0].address)).toBe(true)
-    expect(chain.getBalance(qtcWallet.address)).toBe(holders[0].amount)
+    expect(chain.getBalance(qbtcWallet.address)).toBe(holders[0].amount)
 
     // Disconnect
     chain.resetToHeight(0)
     expect(chain.isClaimed(holders[0].address)).toBe(false)
-    expect(chain.getBalance(qtcWallet.address)).toBe(0)
+    expect(chain.getBalance(qbtcWallet.address)).toBe(0)
 
     // Should be able to re-claim after undo
     const claimTx2 = createClaimTransaction(
       holders[0].secretKey,
       holders[0].publicKey,
       snapshot.entries[0],
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
     const block2 = mineOnChain(chain, 'f'.repeat(64), [claimTx2])
@@ -512,33 +512,33 @@ describe('Blockchain with snapshot', () => {
   it('processes claim transactions', () => {
     const { snapshot, holders } = createMockSnapshot()
     const chain = new Blockchain(snapshot)
-    const qtcWallet = walletB
+    const qbtcWallet = walletB
 
     // Create and include claim in a block
     const claimTx = createClaimTransaction(
       holders[0].secretKey,
       holders[0].publicKey,
       snapshot.entries[0],
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
 
     const block = mineOnChain(chain, 'f'.repeat(64), [claimTx])
     const result = chain.addBlock(block)
     expect(result.success).toBe(true)
-    expect(chain.getBalance(qtcWallet.address)).toBe(holders[0].amount)
+    expect(chain.getBalance(qbtcWallet.address)).toBe(holders[0].amount)
   })
 
   it('rejects double-claim', () => {
     const { snapshot, holders } = createMockSnapshot()
     const chain = new Blockchain(snapshot)
-    const qtcWallet = walletB
+    const qbtcWallet = walletB
 
     const claimTx = createClaimTransaction(
       holders[0].secretKey,
       holders[0].publicKey,
       snapshot.entries[0],
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
 
@@ -550,7 +550,7 @@ describe('Blockchain with snapshot', () => {
       holders[0].secretKey,
       holders[0].publicKey,
       snapshot.entries[0],
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
 
@@ -565,15 +565,15 @@ describe('Blockchain with snapshot', () => {
     const chain = new Blockchain(snapshot)
 
     let stats = chain.getClaimStats()
-    expect(stats.totalEntries).toBe(7) // 5 P2PKH/P2WPKH + 1 P2SH-P2WPKH + 1 P2TR
+    expect(stats.totalEntries).toBe(9) // 5 P2PKH/P2WPKH + 1 P2SH-P2WPKH + 1 P2SH multisig + 1 P2TR + 1 P2WSH
     expect(stats.claimed).toBe(0)
 
-    const qtcWallet = walletB
+    const qbtcWallet = walletB
     const claimTx = createClaimTransaction(
       holders[0].secretKey,
       holders[0].publicKey,
       snapshot.entries[0],
-      qtcWallet,
+      qbtcWallet,
       snapshot.btcBlockHash
     )
     const block = mineOnChain(chain, 'f'.repeat(64), [claimTx])
@@ -582,6 +582,6 @@ describe('Blockchain with snapshot', () => {
     stats = chain.getClaimStats()
     expect(stats.claimed).toBe(1)
     expect(stats.claimedAmount).toBe(holders[0].amount)
-    expect(stats.unclaimed).toBe(6)
+    expect(stats.unclaimed).toBe(8)
   })
 })
