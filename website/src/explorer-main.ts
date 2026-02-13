@@ -794,7 +794,7 @@ ${docH2('Key Properties')}
   <li><span class="text-text-primary font-medium">Quantum-safe signatures</span> — ML-DSA-65 (FIPS 204), NIST security level 3. Based on the Module-LWE problem, resistant to both classical and quantum attacks.</li>
   <li><span class="text-text-primary font-medium">Bitcoin UTXO model</span> — same unspent transaction output design. Transactions consume UTXOs as inputs and create new UTXOs as outputs.</li>
   <li><span class="text-text-primary font-medium">SHA-256 proof-of-work</span> — quantum computers can only achieve a quadratic speedup via Grover\'s algorithm, reducing SHA-256 to 128-bit quantum security — still practically unbreakable.</li>
-  <li><span class="text-text-primary font-medium">Real BTC snapshot</span> — genesis commits to a merkle root of 55,526,180 aggregated address balances from BTC block 935,941.</li>
+  <li><span class="text-text-primary font-medium">Real BTC snapshot</span> — genesis commits to a merkle root of 58,001,652 aggregated address balances from BTC block 935,941.</li>
   <li><span class="text-text-primary font-medium">One-time ECDSA claims</span> — prove BTC ownership with a secp256k1 signature, receive your full address balance as quantum-safe QBTC. 1:1 ratio.</li>
   <li><span class="text-text-primary font-medium">Open source</span> — TypeScript / Node.js. Run a node, mine blocks, and verify the chain yourself.</li>
 </ul>
@@ -821,7 +821,7 @@ ${docH2('How It Differs from Bitcoin')}
 </div>
 
 ${docH2('Supply')}
-${docP('QubitCoin has no premine. The genesis block commits to the BTC snapshot but mints zero coins. All initial supply comes from BTC holders claiming their balances (19,984,341.32 QBTC claimable). New supply enters circulation through mining rewards at 3.125 QBTC per block, halving every 210,000 blocks.')}`;
+${docP('QubitCoin has no premine. The genesis block commits to the BTC snapshot but mints zero coins. All initial supply comes from BTC holders claiming their balances (19,984,411.38 QBTC claimable from 58M addresses). New supply enters circulation through mining rewards at 3.125 QBTC per block, halving every 210,000 blocks.')}`;
 }
 
 function renderDocsGettingStarted(): string {
@@ -840,7 +840,7 @@ cd qubitcoin
 pnpm install`)}
 
 ${docH2('Quick Start — Join the Network')}
-${docP('The fastest way to get started. The <span class="font-mono text-xs text-qubit-400">--full</span> flag auto-downloads the BTC snapshot (~2.4 GB) from the seed node and starts mining immediately:')}
+${docP('The fastest way to get started. The <span class="font-mono text-xs text-qubit-400">--full</span> flag auto-downloads the BTC snapshot (~3.6 GB) from the seed node and starts mining immediately:')}
 ${docCode(`pnpm run qbtcd -- --mine --full`)}
 ${docP('This will:')}
 <ol class="text-text-secondary text-sm leading-relaxed mb-3 list-decimal list-inside space-y-1">
@@ -872,7 +872,7 @@ pnpm run node:charlie`)}
 ${docP('Alice mines on port 3001/6001, Bob on 3002/6002, Charlie on 3003/6003. Bob and Charlie connect to Alice as a seed and sync automatically.')}
 
 ${docH2('Claiming BTC')}
-${docP('If you hold BTC in a supported address type (P2PKH, P2PK, P2WPKH, P2SH-P2WPKH, P2TR, or P2WSH) included in the snapshot, you can claim your balance as QBTC:')}
+${docP('If you hold BTC in any standard address type (P2PKH, P2PK, P2WPKH, P2SH-P2WPKH, P2TR, P2WSH, or multisig) included in the snapshot, you can claim your balance as QBTC:')}
 ${docCode(`pnpm run claim`)}
 ${docP('The interactive claim tool walks you through generating a QBTC wallet, signing a claim message, and broadcasting the transaction. Accepts seed phrases, WIF keys, or hex keys. See the <a href="#/docs/btc-claims" class="text-qubit-400 hover:text-qubit-300">BTC Claims</a> section for details.')}
 ${docP('For air-gapped workflows, you can split the process: <span class="font-mono text-xs text-qubit-400">pnpm run claim:generate</span> creates the signed transaction offline, and <span class="font-mono text-xs text-qubit-400">pnpm run claim:send</span> broadcasts it from an online machine.')}
@@ -1066,12 +1066,46 @@ ${docP('Every node independently verifies:')}
 ${docH3('Step 5 — QBTC Credited')}
 ${docP('Once the claim transaction is mined into a block, your full aggregated BTC balance appears as a quantum-safe UTXO at your QBTC address. From here, all future transactions use ML-DSA-65 signatures.')}
 
+${docH2('Multisig Claims')}
+${docP('For multisig addresses (P2SH multisig, P2WSH, bare multisig), claiming requires m-of-n signers to participate. The process is the same as single-key claims, but multiple private keys sign the claim message.')}
+
+${docH3('How It Works')}
+<ol class="text-text-secondary text-sm leading-relaxed mb-3 list-decimal list-inside space-y-1">
+  <li>Reconstruct the multisig script — you need the m, n, and all public keys in the original order</li>
+  <li>Verify the script hashes to your address: <span class="font-mono text-xs text-entropy-cyan">HASH160(script)</span> for P2SH, <span class="font-mono text-xs text-entropy-cyan">SHA256(script)</span> for P2WSH and bare multisig</li>
+  <li>Collect m signatures — each signer signs the same claim message with their private key</li>
+  <li>Submit all m signatures in pubkey order (same as Bitcoin's <span class="font-mono text-xs text-qubit-400">OP_CHECKMULTISIG</span>)</li>
+</ol>
+
+${docH3('Claim Message')}
+${docP('Each signer signs the same message as single-key claims:')}
+${docCode('message = "QBTC_CLAIM:{btcAddress}:{qbtcAddress}:{snapshotBlockHash}"\nmsgHash = doubleSha256(message)\n\n// Each of the m signers produces:\nsig_i = secp256k1.sign(msgHash, signerPrivateKey_i)')}
+
+${docH3('Verification')}
+${docP('The network verifies multisig claims using CHECKMULTISIG ordering: signatures are matched against public keys in order. Signature 1 must correspond to a pubkey at or after the position of the previous match. This is the same ordering rule Bitcoin uses.')}
+
+${docH3('Address Types')}
+<div class="overflow-x-auto">
+<table class="w-full text-sm mb-4">
+  <thead><tr class="text-xs text-text-muted border-b border-border">
+    <th class="text-left font-normal pb-2 pr-4">Type</th>
+    <th class="text-left font-normal pb-2 pr-4">Address derivation</th>
+    <th class="text-left font-normal pb-2">Notes</th>
+  </tr></thead>
+  <tbody>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">P2SH multisig</td><td class="py-2 pr-4 font-mono text-xs text-qubit-300">HASH160(redeemScript)</td><td class="py-2 text-xs">BIP16 wrapped. <span class="font-mono text-qubit-300">3...</span> addresses shared with P2SH-P2WPKH.</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">P2WSH</td><td class="py-2 pr-4 font-mono text-xs text-qubit-300">SHA256(witnessScript)</td><td class="py-2 text-xs">Native SegWit multisig. Long <span class="font-mono text-qubit-300">bc1q...</span> addresses (32-byte hash).</td></tr>
+    <tr class="border-b border-border last:border-0"><td class="py-2 pr-4 text-text-muted">Bare multisig</td><td class="py-2 pr-4 font-mono text-xs text-qubit-300">SHA256(script)</td><td class="py-2 text-xs">Raw <span class="font-mono text-qubit-300">OP_CHECKMULTISIG</span> in output. No standard Bitcoin address — identified by script hash in snapshot.</td></tr>
+  </tbody>
+</table>
+</div>
+
 ${docH2('Rules')}
 <div class="bg-surface rounded-lg glow-border p-4 mb-4">
 <ul class="text-text-secondary text-sm leading-relaxed list-disc list-inside space-y-2">
   <li><span class="text-text-primary font-medium">One claim per address</span> — once a BTC address is claimed, it\'s marked permanently. The same address cannot be claimed again, even with a different QBTC destination.</li>
   <li><span class="text-text-primary font-medium">Aggregated balance</span> — claims are per-address, not per-UTXO. All UTXOs belonging to a BTC address are summed into a single balance. You get everything in one claim.</li>
-  <li><span class="text-text-primary font-medium">Supported address types</span> — P2PKH, P2WPKH, P2SH-P2WPKH, P2SH multisig, P2TR, P2PK, and P2WSH addresses can be claimed. P2SH and P2WSH multisig require m-of-n signers to provide signatures in pubkey order. Only bare multisig (raw OP_CHECKMULTISIG without P2SH/P2WSH wrapping) is not supported.</li>
+  <li><span class="text-text-primary font-medium">Supported address types</span> — all standard Bitcoin address types can be claimed: P2PKH, P2WPKH, P2SH-P2WPKH, P2SH multisig, P2TR, P2PK, P2WSH, and bare multisig. Multisig types (P2SH, P2WSH, bare) require m-of-n signers to provide signatures in pubkey order.</li>
   <li><span class="text-text-primary font-medium">1:1 ratio</span> — 1 BTC = 1 QBTC. No conversion rate, no fees, no slippage.</li>
   <li><span class="text-text-primary font-medium">Double-claim prevention</span> — the mempool also rejects claim transactions for addresses that already have a pending claim, preventing double-claims before mining.</li>
 </ul>
@@ -1081,7 +1115,7 @@ ${docH2('Snapshot')}
 ${docP('The current snapshot is derived from a Bitcoin Core <span class="font-mono text-xs text-entropy-cyan">dumptxoutset</span> at block 935,941. The full pipeline:')}
 <ol class="text-text-secondary text-sm leading-relaxed mb-3 list-decimal list-inside space-y-1">
   <li>Dump the UTXO set from Bitcoin Core (8.8 GB binary, ~164M coins)</li>
-  <li>Parse and filter to supported types: P2PKH, P2PK, P2WPKH, P2SH, P2TR, P2WSH (~162M coins)</li>
+  <li>Parse and filter to supported types: P2PKH, P2PK, P2WPKH, P2SH, P2TR, P2WSH, bare multisig (~164M coins)</li>
   <li>Aggregate by address using external sort + streaming merge (constant memory)</li>
   <li>Compute merkle root and write final NDJSON snapshot</li>
 </ol>
@@ -1090,23 +1124,24 @@ ${docP('The current snapshot is derived from a Bitcoin Core <span class="font-mo
   <tbody>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">BTC block height</td><td class="py-2 font-mono text-qubit-300">935,941</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Raw UTXOs parsed</td><td class="py-2 font-mono">164,352,533</td></tr>
-    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">After filtering</td><td class="py-2 font-mono">161,717,359 (P2PKH + P2PK + P2WPKH + P2SH + P2TR + P2WSH)</td></tr>
-    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Unique addresses</td><td class="py-2 font-mono text-entropy-cyan">55,526,180</td></tr>
-    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Total claimable</td><td class="py-2 font-mono text-qubit-300">19,984,341.32 QBTC</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">After filtering</td><td class="py-2 font-mono">164,274,035 (P2PKH + P2PK + P2WPKH + P2SH + P2TR + P2WSH + multisig)</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Unique addresses</td><td class="py-2 font-mono text-entropy-cyan">58,001,652</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Total claimable</td><td class="py-2 font-mono text-qubit-300">19,984,411.38 QBTC</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">P2PKH coins</td><td class="py-2 font-mono">45,115,135</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">P2PK coins</td><td class="py-2 font-mono">44,617</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">P2WPKH coins</td><td class="py-2 font-mono">46,947,641</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">P2SH coins</td><td class="py-2 font-mono">12,451,522</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">P2TR coins</td><td class="py-2 font-mono">54,668,563</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">P2WSH coins</td><td class="py-2 font-mono">2,489,881</td></tr>
-    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Snapshot size</td><td class="py-2 font-mono">~3.5 GB (NDJSON)</td></tr>
-    <tr class="border-b border-border last:border-0"><td class="py-2 pr-4 text-text-muted">Merkle root</td><td class="py-2 font-mono text-xs break-all">a973530da264b7c8a0e054552c6dc0b62e25d6887807f72672e51428cad130c7</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Bare multisig coins</td><td class="py-2 font-mono">2,556,676</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Snapshot size</td><td class="py-2 font-mono">~3.6 GB (NDJSON)</td></tr>
+    <tr class="border-b border-border last:border-0"><td class="py-2 pr-4 text-text-muted">Merkle root</td><td class="py-2 font-mono text-xs break-all">bb0b8c553aa5457e7680baebb35e00ab26d978e05a52c6840ec0b475f5bbdd08</td></tr>
   </tbody>
 </table>
 </div>
 
 ${docH2('Why Not All BTC?')}
-${docP('The snapshot covers <span class="text-text-primary font-medium">99.99% of all BTC by value</span>. The remaining 2,688 BTC across 2.6M coins falls into two categories:')}
+${docP('The snapshot covers <span class="text-text-primary font-medium">99.987% of all BTC by value</span>. The remaining 2,618 BTC across 78,498 coins is almost entirely provably burned:')}
 <div class="overflow-x-auto">
 <table class="w-full text-sm mb-4">
   <thead><tr class="text-xs text-text-muted border-b border-border">
@@ -1116,11 +1151,10 @@ ${docP('The snapshot covers <span class="text-text-primary font-medium">99.99% o
     <th class="text-left font-normal pb-2">Why not claimable</th>
   </tr></thead>
   <tbody>
-    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Bare multisig</td><td class="py-2 pr-4 font-mono text-xs">2,556,676</td><td class="py-2 pr-4 font-mono text-xs">70</td><td class="py-2 text-xs">No standard address format. Raw <span class="font-mono text-qubit-300">OP_CHECKMULTISIG</span> scripts embedded directly in outputs — cannot be mapped to a claimable address.</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Burned P2PKH</td><td class="py-2 pr-4 font-mono text-xs">23</td><td class="py-2 pr-4 font-mono text-xs text-red-400">2,609</td><td class="py-2 text-xs">P2PKH outputs with <span class="font-mono text-qubit-300">OP_0</span> instead of a 20-byte hash. <span class="font-mono text-xs">HASH160(pubkey)</span> can never equal an empty byte array — <span class="text-text-primary font-medium">permanently unspendable</span> by anyone, on any chain. All from block 150,951 (2011).</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">SegWit v12+</td><td class="py-2 pr-4 font-mono text-xs">~65,000</td><td class="py-2 pr-4 font-mono text-xs">0.40</td><td class="py-2 text-xs">Runes/Ordinals dust carriers (546 sats each). Future SegWit versions with no defined spending rules.</td></tr>
-    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Merged mining</td><td class="py-2 pr-4 font-mono text-xs">~53</td><td class="py-2 pr-4 font-mono text-xs">0.00</td><td class="py-2 text-xs">RSK sidechain commitment markers (<span class="font-mono text-qubit-300">0xfabe6d6d</span>). Data embedding, not spendable outputs.</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Hash puzzles</td><td class="py-2 pr-4 font-mono text-xs">4</td><td class="py-2 pr-4 font-mono text-xs">1.00</td><td class="py-2 text-xs"><span class="font-mono text-qubit-300">OP_HASH256 &lt;hash&gt; OP_EQUAL</span> — no key ownership. Requires a hash preimage to spend, not a signature.</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Merged mining</td><td class="py-2 pr-4 font-mono text-xs">~53</td><td class="py-2 pr-4 font-mono text-xs">0.00</td><td class="py-2 text-xs">RSK sidechain commitment markers (<span class="font-mono text-qubit-300">0xfabe6d6d</span>). Data embedding, not spendable outputs.</td></tr>
     <tr class="border-b border-border last:border-0"><td class="py-2 pr-4 text-text-muted">Other exotic</td><td class="py-2 pr-4 font-mono text-xs">~12,000</td><td class="py-2 pr-4 font-mono text-xs">7.15</td><td class="py-2 text-xs">Malformed scripts, data embedding, ASCII art, padded outputs. No standard key ownership to verify.</td></tr>
   </tbody>
 </table>
@@ -1821,7 +1855,7 @@ ${docFaqItem('My node won\'t sync',
 ${docFaqItem('My claim was rejected',
   'Common causes: <span class="text-text-primary font-medium">(1)</span> Address not in snapshot — check the snapshot was loaded. <span class="text-text-primary font-medium">(2)</span> Already claimed — each address can only be claimed once. <span class="text-text-primary font-medium">(3)</span> Invalid signature — wrong private key or key type mismatch. <span class="text-text-primary font-medium">(4)</span> Address type mismatch — e.g. using a P2PKH claim for a P2SH address.')}
 ${docFaqItem('Snapshot download fails or is slow',
-  'The snapshot is ~2.4 GB. Download it manually with <span class="font-mono text-xs text-qubit-400">curl -L -o ~/qbtc-snapshot.jsonl https://qubitcoin.finance/snapshot/qbtc-snapshot.jsonl</span> and pass it with <span class="font-mono text-xs text-qubit-400">--snapshot ~/qbtc-snapshot.jsonl</span>.')}
+  'The snapshot is ~3.6 GB. Download it manually with <span class="font-mono text-xs text-qubit-400">curl -L -o ~/qbtc-snapshot.jsonl https://qubitcoin.finance/snapshot/qbtc-snapshot.jsonl</span> and pass it with <span class="font-mono text-xs text-qubit-400">--snapshot ~/qbtc-snapshot.jsonl</span>.')}
 ${docFaqItem('Node uses too much memory',
   'The snapshot loads into memory (~4-6 GB for 54M entries). Use <span class="font-mono text-xs text-qubit-400">--max-old-space-size=12288</span> with Node.js if you have enough RAM. Without a snapshot (local dev mode), memory usage is minimal.')}
 ${docFaqItem('"Blocks failed replay" on startup',
