@@ -12,6 +12,7 @@ import {
   computeMerkleRoot,
   hashMeetsTarget,
   transactionSize,
+  medianTimestamp,
   MAX_BLOCK_SIZE,
 } from './block.js'
 import { type Blockchain } from './chain.js'
@@ -34,7 +35,7 @@ export function assembleCandidateBlock(
   const height = chain.getHeight() + 1
 
   // Get transactions from mempool, respecting 1MB block size limit
-  const pendingTxs = mempool.getTransactionsForBlock()
+  const pendingTxs = mempool.getTransactionsForBlock(chain.utxoSet)
 
   // Reserve space for header + coinbase
   const HEADER_SIZE = 112
@@ -60,11 +61,16 @@ export function assembleCandidateBlock(
   // Merkle root
   const merkleRoot = computeMerkleRoot(transactions.map((tx) => tx.id))
 
+  // Timestamp must be > median time past of last 11 blocks
+  const tipIndex = chain.blocks.length - 1
+  const mtp = chain.blocks.length > 1 ? medianTimestamp(chain.blocks, tipIndex) : 0
+  const timestamp = Math.max(Date.now(), mtp + 1)
+
   const header: BlockHeader = {
     version: 1,
     previousHash: tip.hash,
     merkleRoot,
-    timestamp: Date.now(),
+    timestamp,
     target: chain.getDifficulty(),
     nonce: 0,
   }
@@ -127,7 +133,7 @@ export function mineBlock(block: Block, verbose = true): Block {
 export function mineBlockAsync(
   block: Block,
   signal?: AbortSignal,
-  batchSize = 5_000
+  batchSize = 200_000
 ): Promise<Block | null> {
   return new Promise((resolve) => {
     let nonce = 0

@@ -367,7 +367,7 @@ async function renderDashboard(): Promise<void> {
   ]);
 
   if (!status) {
-    root.innerHTML = '<p class="text-red-500">Could not connect to the QubitCoin node.</p>';
+    renderLoading();
     return;
   }
 
@@ -562,6 +562,18 @@ async function renderTx(txid: string): Promise<void> {
   const amount = transferAmount(tx, sender);
   const totalOut = tx.outputs.reduce((s, o) => s + o.amount, 0);
 
+  // Look up input amounts for regular transfers (fee + display)
+  let fee: number | null = null;
+  let inputAmounts: number[] = [];
+  if (!isCoinbase(tx) && !isClaim(tx)) {
+    inputAmounts = await Promise.all(tx.inputs.map(async (inp) => {
+      const srcTx = await fetchTx(inp.txId);
+      return srcTx?.outputs[inp.outputIndex]?.amount ?? 0;
+    }));
+    const totalIn = inputAmounts.reduce((s, a) => s + a, 0);
+    fee = Math.round((totalIn - totalOut) * 1e8) / 1e8;
+  }
+
   let html = ``;
   html += `<h1 class="text-2xl font-bold mb-6">Transaction</h1>`;
 
@@ -583,7 +595,11 @@ async function renderTx(txid: string): Promise<void> {
       <div>
         <p class="text-text-muted mb-1">Type</p>
         <p>${txTypeBadge(tx)}</p>
-      </div>
+      </div>${fee !== null ? `
+      <div>
+        <p class="text-text-muted mb-1">Fee</p>
+        <p class="font-mono">${fee} QBTC</p>
+      </div>` : ''}
     </div>
   </div>`;
 
@@ -616,15 +632,20 @@ async function renderTx(txid: string): Promise<void> {
   html += `<div>
     <h2 class="text-lg font-semibold mb-3">Inputs (${tx.inputs.length})</h2>
     <div class="space-y-2">`;
-  for (const inp of tx.inputs) {
+  for (let i = 0; i < tx.inputs.length; i++) {
+    const inp = tx.inputs[i];
     if (inp.txId === COINBASE_TXID) {
       html += `<div class="bg-surface rounded-lg glow-border p-3 text-sm">
         <p class="text-entropy-cyan font-mono text-xs">Coinbase (new coins)</p>
       </div>`;
     } else {
-      html += `<div class="bg-surface rounded-lg glow-border p-3 text-sm">
-        <p class="text-text-muted text-xs mb-1">From tx</p>
-        <p>${hashLink(inp.txId, 'tx')}<span class="text-text-muted">:${inp.outputIndex}</span></p>
+      const inAmt = inputAmounts[i];
+      html += `<div class="bg-surface rounded-lg glow-border p-3 text-sm flex items-center justify-between">
+        <div>
+          <p class="text-text-muted text-xs mb-1">From tx</p>
+          <p>${hashLink(inp.txId, 'tx')}<span class="text-text-muted">:${inp.outputIndex}</span></p>
+        </div>${inAmt !== undefined ? `
+        <span class="font-mono text-qubit-300">${inAmt} QBTC</span>` : ''}
       </div>`;
     }
   }
@@ -1803,7 +1824,7 @@ const total = allUtxos.reduce((s, u) => s + u.amount, 0);
 const fee = 0.1;
 const tx = createTransaction(wallet, allUtxos, [{ address: wallet.address, amount: total - fee }], fee);`)}
 ${docH3('Dust Threshold')}
-${docP('Because ML-DSA-65 signatures are ~3.3 KB, spending a tiny UTXO can cost more in fees than the UTXO is worth. Avoid creating outputs smaller than <span class="font-mono text-xs text-qubit-400">~0.01 QBTC</span> — they\'re effectively unspendable dust.')}
+${docP('Because ML-DSA-65 signatures are ~3.3 KB, spending a tiny UTXO can cost more in fees than the UTXO is worth. There is no consensus-enforced minimum fee — miners choose which transactions to include. With typical fees around <span class="font-mono text-xs text-qubit-400">0.00001 QBTC</span>, outputs below that threshold are effectively unspendable dust.')}
 
 ${docH2('Key Management')}
 <ul class="text-text-secondary text-sm leading-relaxed mb-3 list-disc list-inside space-y-1">

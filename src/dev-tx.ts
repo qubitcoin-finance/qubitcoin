@@ -55,8 +55,8 @@ async function main() {
   console.log(`RPC:    ${RPC}`)
   console.log(`Sending transactions every ${INTERVAL_MS / 1000}s...\n`)
 
-  // Generate a few recipient wallets
-  const recipients = Array.from({ length: 5 }, () => generateWallet())
+  // Generate recipient wallets
+  const recipients = Array.from({ length: 10 }, () => generateWallet())
   let recipientIdx = 0
 
   // Track UTXOs we've already spent in the mempool
@@ -75,32 +75,33 @@ async function main() {
         return
       }
 
-      const recipient = recipients[recipientIdx % recipients.length]
-      recipientIdx++
-
-      const amount = Math.round((Math.random() * 0.00009 + 0.00001) * 100000) / 100000
-      const fee = 0.00001
-      const needed = amount + fee
-
-      let accumulated = 0
-      const selected: UTXO[] = []
-      for (const utxo of utxos) {
-        selected.push(utxo)
-        accumulated += utxo.amount
-        if (accumulated >= needed) break
-      }
-
-      if (accumulated < needed) {
-        console.log(`Insufficient balance (${accumulated.toFixed(4)} < ${needed}) — waiting...`)
+      // Pick one UTXO to spend
+      const utxo = utxos[0]
+      // Random fee: 0.00001 – 0.001 QBTC (varying by 100x)
+      const fee = Math.round((Math.random() * 0.00099 + 0.00001) * 100000) / 100000
+      const available = utxo.amount - fee
+      if (available <= 0) {
+        pendingSpent.add(`${utxo.txId}:${utxo.outputIndex}`)
         return
       }
 
-      const tx = createTransaction(
-        wallet,
-        selected,
-        [{ address: recipient.address, amount }],
-        fee,
-      )
+      // Split into multiple small outputs to random recipients
+      const numOutputs = Math.min(Math.floor(available / 0.00001), 5)
+      if (numOutputs < 1) {
+        pendingSpent.add(`${utxo.txId}:${utxo.outputIndex}`)
+        return
+      }
+
+      const outputs: Array<{ address: string; amount: number }> = []
+      for (let i = 0; i < numOutputs; i++) {
+        const recipient = recipients[recipientIdx % recipients.length]
+        recipientIdx++
+        // Random amount: 0.00001 – 0.5 QBTC
+        const amount = Math.round((Math.random() * 0.49999 + 0.00001) * 100000) / 100000
+        outputs.push({ address: recipient.address, amount })
+      }
+
+      const tx = createTransaction(wallet, [utxo], outputs, fee)
 
       const result = await api<{ txid: string }>('/tx', {
         method: 'POST',
@@ -108,14 +109,10 @@ async function main() {
         body: JSON.stringify(sanitizeTx(tx)),
       })
 
-      // Mark spent UTXOs
-      for (const u of selected) {
-        pendingSpent.add(`${u.txId}:${u.outputIndex}`)
-      }
+      pendingSpent.add(`${utxo.txId}:${utxo.outputIndex}`)
 
-      console.log(`TX ${result.txid.slice(0, 16)}... → ${recipient.address.slice(0, 8)}... (${amount} QBTC)`)
+      console.log(`TX ${result.txid.slice(0, 16)}... → ${numOutputs} outputs (${outputs.reduce((s, o) => s + o.amount, 0).toFixed(5)} QBTC, fee ${fee} QBTC)`)
     } catch (err: any) {
-      // Mark selected UTXOs as spent even on error (likely already in mempool)
       if (err.message?.includes('already claimed')) {
         const match = err.message.match(/UTXO ([0-9a-f]+:\d+)/)
         if (match) pendingSpent.add(match[1])
@@ -125,7 +122,7 @@ async function main() {
     }
   }
 
-  // Send one immediately, then on interval
+  // Send one per UTXO immediately, then on interval
   await sendTx()
   setInterval(sendTx, INTERVAL_MS)
 }

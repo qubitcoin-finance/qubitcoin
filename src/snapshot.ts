@@ -231,7 +231,7 @@ export function createMockSnapshot(): {
   const snapshot: BtcSnapshot = {
     btcBlockHeight: 850_000,
     btcBlockHash: doubleSha256Hex(new TextEncoder().encode('mock-btc-block-850000')),
-    btcTimestamp: Math.floor(Date.now() / 1000),
+    btcTimestamp: 1739482182, // fixed for deterministic test genesis
     entries,
     merkleRoot,
   }

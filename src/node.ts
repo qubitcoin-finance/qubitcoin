@@ -39,7 +39,8 @@ export class Node {
     const result = this.mempool.addTransaction(
       tx,
       this.chain.utxoSet,
-      this.chain.claimedBtcAddresses
+      this.chain.claimedBtcAddresses,
+      this.chain.getHeight() + 1
     )
     if (result.success) {
       log.info({ component: 'mempool', txid: tx.id.slice(0, 16) }, 'Accepted tx')
@@ -124,11 +125,11 @@ export class Node {
     }
   }
 
-  /** Reset node to a target height: rollback chain, clear mempool, abort mining */
+  /** Reset node to a target height: rollback chain, revalidate mempool, abort mining */
   resetToHeight(height: number): void {
     log.warn({ component: 'node', from: this.chain.getHeight(), to: height }, 'Resetting to height')
     this.chain.resetToHeight(height)
-    this.mempool.clear()
+    this.mempool.revalidate(this.chain.utxoSet, this.chain.claimedBtcAddresses, this.chain.getHeight() + 1)
     this.miningAbort?.abort()
   }
 

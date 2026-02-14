@@ -8,13 +8,9 @@ import {
   type Transaction,
   CLAIM_TXID,
 } from '../transaction.js'
-import { generateWallet } from '../crypto.js'
 import { createMockSnapshot } from '../snapshot.js'
 import { createClaimTransaction } from '../claim.js'
-
-const walletA = generateWallet()
-const walletB = generateWallet()
-const walletC = generateWallet()
+import { walletA, walletB, walletC } from './fixtures.js'
 
 function makeUtxoSet(wallet: ReturnType<typeof generateWallet>, amount = 100): Map<string, UTXO> {
   const utxoSet = new Map<string, UTXO>()
@@ -88,7 +84,7 @@ describe('Mempool', () => {
     expect(result.error).toContain('already claimed')
   })
 
-  it('getTransactionsForBlock respects maxCount', () => {
+  it('getTransactionsForBlock returns all transactions', () => {
     const mempool = new Mempool()
     const wallet = walletA
 
@@ -112,8 +108,7 @@ describe('Mempool', () => {
       mempool.addTransaction(tx, utxoSet)
     }
 
-    expect(mempool.getTransactionsForBlock(2).length).toBe(2)
-    expect(mempool.getTransactionsForBlock(10).length).toBe(3)
+    expect(mempool.getTransactionsForBlock().length).toBe(3)
   })
 
   it('removeTransactions cleans up claimed UTXOs', () => {

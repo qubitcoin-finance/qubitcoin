@@ -5,10 +5,7 @@ import os from 'node:os'
 import { Node } from '../node.js'
 import { P2PServer } from '../p2p/server.js'
 import { FileBlockStorage } from '../storage.js'
-import { generateWallet } from '../crypto.js'
-
-const walletA = generateWallet()
-const walletB = generateWallet()
+import { walletA, walletB } from './fixtures.js'
 
 import {
   encodeMessage,
@@ -166,31 +163,53 @@ describe('P2P server integration', () => {
   })
 
   it('should relay transactions between peers', async () => {
-    const wallet = walletA
+    // Use snapshot-based nodes so we can relay a claim tx (no coinbase maturity needed)
+    const { createMockSnapshot } = await import('../snapshot.js')
+    const { createClaimTransaction } = await import('../claim.js')
+    const { snapshot, holders } = createMockSnapshot()
 
-    // Mine a block on node1 to create a coinbase UTXO
-    node1.chain.difficulty = TEST_TARGET
-    node1.mine(wallet.address, false)
+    // Replace nodes with snapshot-aware ones
+    await p2p1.stop()
+    await p2p2.stop()
 
-    // Connect
-    const addr = (p2p1 as any).server.address()
-    const port = typeof addr === 'object' ? addr.port : 0
-    p2p2.connectOutbound('127.0.0.1', port)
+    const storage1b = new FileBlockStorage(tmpDir1)
+    const storage2b = new FileBlockStorage(tmpDir2)
+    const sNode1 = new Node('alice', snapshot, storage1b)
+    const sNode2 = new Node('bob', snapshot, storage2b)
+    sNode1.chain.difficulty = TEST_TARGET
+    sNode2.chain.difficulty = TEST_TARGET
 
-    // Wait for sync
-    await waitFor(() => node2.chain.getHeight() >= 1, 10_000)
+    const sp2p1 = new P2PServer(sNode1, 0, tmpDir1)
+    const sp2p2 = new P2PServer(sNode2, 0, tmpDir2)
+    await sp2p1.start()
+    await sp2p2.start()
 
-    // Create a transaction on node1
-    const { createTransaction } = await import('../transaction.js')
-    const wallet2 = walletB
-    const utxos = node1.chain.findUTXOs(wallet.address, 1)
-    const tx = createTransaction(wallet, utxos, [{ address: wallet2.address, amount: 1 }], 0.125)
+    try {
+      // Connect
+      const addr = (sp2p1 as any).server.address()
+      const port = typeof addr === 'object' ? addr.port : 0
+      sp2p2.connectOutbound('127.0.0.1', port)
 
-    node1.receiveTransaction(tx)
+      await waitFor(() => sp2p1.getPeers().length > 0 && sp2p2.getPeers().length > 0)
 
-    // Wait for it to appear in node2's mempool
-    await waitFor(() => node2.mempool.size() > 0, 10_000)
-    expect(node2.mempool.getTransaction(tx.id)).toBeDefined()
+      // Create a claim transaction on node1
+      const claimTx = createClaimTransaction(
+        holders[0].secretKey,
+        holders[0].publicKey,
+        snapshot.entries[0],
+        walletA,
+        snapshot.btcBlockHash
+      )
+
+      sNode1.receiveTransaction(claimTx)
+
+      // Wait for it to appear in node2's mempool
+      await waitFor(() => sNode2.mempool.size() > 0, 10_000)
+      expect(sNode2.mempool.getTransaction(claimTx.id)).toBeDefined()
+    } finally {
+      await sp2p1.stop()
+      await sp2p2.stop()
+    }
   })
 
   it('waitForSync resolves after IBD completes', async () => {

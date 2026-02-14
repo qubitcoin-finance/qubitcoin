@@ -22,6 +22,7 @@
       <a href="/" class="flex items-center gap-2 group">
         <img src="/logo.svg" alt="QubitCoin" class="w-8 h-8 rounded-lg" />
         <span class="font-semibold text-text-primary tracking-tight">QubitCoin</span>
+        <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-amber-500/20 text-amber-400 border border-amber-500/30 leading-none">testnet</span>
       </a>
       <div class="hidden md:flex items-center gap-8 text-sm">
         <a href="#about" class="text-text-muted hover:text-qubit-400 transition-colors nav-landing">About</a>
@@ -179,7 +180,7 @@
           </div>
           <p class="text-text-muted text-sm leading-relaxed mb-6">
             QubitCoin forks from a real Bitcoin Core <span class="text-entropy-cyan font-mono">dumptxoutset</span> — the complete
-            ledger state at a specific block height. Every P2PKH and P2WPKH balance is aggregated per address
+            ledger state at a specific block height. Every supported address balance is aggregated per address
             and committed in the genesis block.
           </p>
           <div class="space-y-3 font-mono text-xs">
@@ -193,11 +194,11 @@
             </div>
             <div class="flex justify-between items-center py-2 border-b border-border">
               <span class="text-text-muted">Aggregated addresses</span>
-              <span class="text-entropy-cyan">~50M balances</span>
+              <span class="text-entropy-cyan">~58M balances</span>
             </div>
             <div class="flex justify-between items-center py-2">
               <span class="text-text-muted">Claimable types</span>
-              <span class="text-green-400">P2PKH + P2WPKH</span>
+              <span class="text-green-400">All standard types</span>
             </div>
           </div>
         </div>
@@ -258,7 +259,7 @@
             <h3 class="text-lg font-semibold mb-2">Snapshot Bitcoin</h3>
             <p class="text-text-muted text-sm leading-relaxed">
               A Bitcoin full node dumps the complete UTXO set via <span class="text-entropy-cyan font-mono text-xs">dumptxoutset</span>.
-              ~160M UTXOs are parsed, filtered to P2PKH + P2WPKH, and aggregated into ~50M address balances.
+              ~164M UTXOs are parsed, filtered to all standard types, and aggregated into ~58M address balances.
               The genesis block commits to a merkle root of this snapshot.
             </p>
           </div>
@@ -270,12 +271,12 @@
               <h3 class="text-lg font-semibold mb-2">Snapshot Bitcoin</h3>
               <p class="text-text-muted text-sm leading-relaxed">
                 A Bitcoin full node dumps the complete UTXO set via <span class="text-entropy-cyan font-mono text-xs">dumptxoutset</span>.
-                ~160M UTXOs are parsed, filtered to P2PKH + P2WPKH, and aggregated into ~50M address balances.
+                ~164M UTXOs are parsed, filtered to all standard types, and aggregated into ~58M address balances.
               </p>
             </div>
             <div class="hidden md:block rounded-xl bg-surface p-4 font-mono text-xs text-text-muted glow-border">
               <span class="text-entropy-blue">bitcoin-cli</span> dumptxoutset utxos.dat<br/>
-              <span class="text-qubit-400">parse</span> → filter P2PKH|P2WPKH → aggregate<br/>
+              <span class="text-qubit-400">parse</span> → filter all standard types → aggregate<br/>
               <span class="text-qubit-400">genesis</span>.merkleRoot = merkle(balances)
             </div>
           </div>
@@ -285,8 +286,8 @@
         <div class="reveal relative flex items-start gap-8 mb-16">
           <div class="hidden md:block md:w-1/2 md:text-right md:pr-12">
             <div class="rounded-xl bg-surface p-4 font-mono text-xs text-text-muted glow-border ml-auto max-w-xs">
-              <span class="text-entropy-blue">ecdsa</span>.sign(claimMsg, btcPrivKey)<br/>
-              → verify HASH160(pubKey) == address<br/>
+              <span class="text-entropy-blue">sign</span>(claimMsg, btcPrivKey)<br/>
+              → verify pubKey matches address<br/>
               → <span class="text-entropy-cyan">proof</span> + qbtcPubKey
             </div>
           </div>
@@ -296,7 +297,7 @@
           <div class="md:w-1/2 md:pl-4">
             <h3 class="text-lg font-semibold mb-2">Claim Your Balance</h3>
             <p class="text-text-muted text-sm leading-relaxed">
-              Sign a claim message with your Bitcoin private key. The network verifies your HASH160 matches
+              Sign a claim message with your Bitcoin private key. The network verifies your key matches
               a snapshot address and binds your full aggregated balance to a new ML-DSA-65 public key. One claim per address.
             </p>
           </div>

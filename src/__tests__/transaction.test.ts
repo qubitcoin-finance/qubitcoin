@@ -14,10 +14,8 @@ import {
   type Transaction,
   type UTXO,
 } from '../transaction.js'
-import { generateWallet, deriveAddress } from '../crypto.js'
-
-const walletA = generateWallet()
-const walletB = generateWallet()
+import { deriveAddress } from '../crypto.js'
+import { walletA, walletB } from './fixtures.js'
 
 describe('blockSubsidy', () => {
   it('returns 3.125 at height 0', () => {

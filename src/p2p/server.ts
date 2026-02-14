@@ -20,6 +20,7 @@ import {
   type GetDataPayload,
   type GetHeadersPayload,
   type HeadersPayload,
+  type AddrPayload,
   PROTOCOL_VERSION,
   encodeMessage,
 } from './protocol.js'
@@ -38,6 +39,9 @@ const BAN_DURATION_MS = 24 * 60 * 60 * 1000 // 24h
 const MAX_REORG_DEPTH = 100
 const MAX_HEADERS_RESPONSE = 500
 const SEED_RECONNECT_DELAY_MS = 5_000
+const MAX_ADDR_BOOK = 1_000
+const MAX_ADDR_RESPONSE = 100
+const DISCOVERY_INTERVAL_MS = 60_000
 
 /** Known Uint8Array fields that need deserialization from P2P messages */
 const TX_INPUT_BINARY_FIELDS = ['publicKey', 'signature'] as const
@@ -92,7 +96,9 @@ export class P2PServer {
   private syncResolvers: Array<() => void> = []
   private seeds: Array<{ host: string; port: number }> = []
   private reconnectTimer: ReturnType<typeof setInterval> | null = null
+  private discoveryTimer: ReturnType<typeof setInterval> | null = null
   private forkResolutionInProgress = false
+  private knownAddresses: Map<string, { host: string; port: number; lastSeen: number }> = new Map()
 
   constructor(node: Node, port: number, dataDir?: string) {
     this.node = node
@@ -123,6 +129,10 @@ export class P2PServer {
       clearInterval(this.reconnectTimer)
       this.reconnectTimer = null
     }
+    if (this.discoveryTimer) {
+      clearInterval(this.discoveryTimer)
+      this.discoveryTimer = null
+    }
     return new Promise((resolve) => {
       for (const peer of this.peers.values()) {
         peer.disconnect('server shutdown')
@@ -140,6 +150,9 @@ export class P2PServer {
       this.seeds.push({ host, port })
       this.connectOutbound(host, port)
     }
+
+    // Start peer discovery
+    this.startDiscovery()
 
     // Reconnect to disconnected seeds every 30s
     if (!this.reconnectTimer && this.seeds.length > 0) {
@@ -305,6 +318,12 @@ export class P2PServer {
         case 'headers':
           this.handleHeaders(peer, msg.payload as HeadersPayload)
           break
+        case 'addr':
+          this.handleAddr(peer, msg.payload as AddrPayload)
+          break
+        case 'getaddr':
+          this.handleGetAddr(peer)
+          break
         case 'ping':
           peer.send({ type: 'pong' })
           break
@@ -326,6 +345,7 @@ export class P2PServer {
       height: this.node.chain.getHeight(),
       genesisHash: this.node.chain.blocks[0].hash,
       userAgent: `qubitcoin/${PROTOCOL_VERSION}`,
+      listenPort: this.port,
     }
     peer.send({ type: 'version', payload })
   }
@@ -354,6 +374,9 @@ export class P2PServer {
 
     peer.remoteHeight = payload.height
     peer.remoteGenesisHash = payload.genesisHash
+    if (payload.listenPort) {
+      peer.remoteListenPort = payload.listenPort
+    }
 
     // If inbound, send our version back
     if (peer.inbound) {
@@ -372,17 +395,53 @@ export class P2PServer {
     peer.completeHandshake()
     log.debug({ component: 'p2p', peer: peer.id, remoteHeight: peer.remoteHeight }, 'Handshake complete')
 
+    // Add peer to address book
+    if (peer.remoteListenPort && peer.address !== 'unknown') {
+      this.addKnownAddress(peer.address, peer.remoteListenPort)
+    }
+
     // IBD: if peer is ahead, request blocks
     const ourHeight = this.node.chain.getHeight()
     const needsGenesis = ourHeight === 0 && peer.remoteGenesisHash !== this.node.chain.blocks[0].hash
     if (peer.remoteHeight > ourHeight || needsGenesis) {
-      peer.send({
-        type: 'getblocks',
-        payload: { fromHeight: needsGenesis ? 0 : ourHeight + 1 } as GetBlocksPayload,
-      })
+      this.sendGetBlocks(peer, needsGenesis ? 0 : ourHeight + 1)
     } else {
       // Already caught up with this peer
       this.notifySynced()
+    }
+
+    // Request peer addresses for discovery
+    peer.send({ type: 'getaddr' })
+  }
+
+  /** Send getblocks with IBD timeout */
+  private sendGetBlocks(peer: Peer, fromHeight: number): void {
+    peer.send({
+      type: 'getblocks',
+      payload: { fromHeight } as GetBlocksPayload,
+    })
+    peer.startIBDTimer(() => {
+      log.warn({ component: 'p2p', peer: peer.id }, 'IBD timeout — disconnecting')
+      peer.disconnect('IBD timeout')
+      // Try another connected peer with higher height
+      this.tryIBDWithAnotherPeer()
+    })
+  }
+
+  /** Find another connected peer with a higher chain and request blocks */
+  private tryIBDWithAnotherPeer(): void {
+    const ourHeight = this.node.chain.getHeight()
+    let bestPeer: Peer | null = null
+    let bestHeight = ourHeight
+    for (const peer of this.peers.values()) {
+      if (peer.handshakeComplete && !peer.ibdPending && peer.remoteHeight > bestHeight) {
+        bestPeer = peer
+        bestHeight = peer.remoteHeight
+      }
+    }
+    if (bestPeer) {
+      log.info({ component: 'p2p', peer: bestPeer.id, height: bestHeight }, 'Trying IBD with another peer')
+      this.sendGetBlocks(bestPeer, ourHeight + 1)
     }
   }
 
@@ -415,6 +474,9 @@ export class P2PServer {
       peer.addMisbehavior(10)
       return
     }
+
+    // Clear IBD timeout — we got a response
+    peer.clearIBDTimer()
 
     let added = 0
     let forkDetected = false
@@ -460,10 +522,7 @@ export class P2PServer {
 
     // Request more if we got a full batch and peer is still ahead
     if (added > 0 && payload.blocks.length === IBD_BATCH_SIZE) {
-      peer.send({
-        type: 'getblocks',
-        payload: { fromHeight: this.node.chain.getHeight() + 1 } as GetBlocksPayload,
-      })
+      this.sendGetBlocks(peer, this.node.chain.getHeight() + 1)
     } else if (added > 0) {
       // Got a partial batch — IBD complete
       log.info({ component: 'p2p', height: this.node.chain.getHeight() }, 'Sync complete')
@@ -689,10 +748,7 @@ export class P2PServer {
     this.forkResolutionInProgress = false
 
     // Request blocks from the fork point
-    peer.send({
-      type: 'getblocks',
-      payload: { fromHeight: forkPoint + 1 } as GetBlocksPayload,
-    })
+    this.sendGetBlocks(peer, forkPoint + 1)
   }
 
   /** Check if we have an active connection to a specific seed */
@@ -779,6 +835,83 @@ export class P2PServer {
     } catch {
       // Ignore corrupt ban list
     }
+  }
+
+  private handleGetAddr(peer: Peer): void {
+    if (!peer.handshakeComplete) {
+      peer.addMisbehavior(10)
+      return
+    }
+
+    // Respond with up to MAX_ADDR_RESPONSE random known addresses
+    const all = Array.from(this.knownAddresses.values())
+    // Shuffle and take up to limit
+    for (let i = all.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[all[i], all[j]] = [all[j], all[i]]
+    }
+    const addresses = all.slice(0, MAX_ADDR_RESPONSE)
+    peer.send({ type: 'addr', payload: { addresses } as AddrPayload })
+  }
+
+  private handleAddr(peer: Peer, payload: AddrPayload): void {
+    if (!peer.handshakeComplete) {
+      peer.addMisbehavior(10)
+      return
+    }
+    if (!payload || !Array.isArray(payload.addresses)) {
+      peer.addMisbehavior(10)
+      return
+    }
+
+    for (const entry of payload.addresses) {
+      if (!entry.host || typeof entry.port !== 'number' || entry.port <= 0 || entry.port > 65535) continue
+      this.addKnownAddress(entry.host, entry.port, entry.lastSeen)
+    }
+  }
+
+  private addKnownAddress(host: string, port: number, lastSeen?: number): void {
+    const key = `${host}:${port}`
+    const existing = this.knownAddresses.get(key)
+    const now = lastSeen ?? Date.now()
+    if (existing && existing.lastSeen >= now) return
+    this.knownAddresses.set(key, { host, port, lastSeen: now })
+
+    // Cap address book size — evict oldest
+    if (this.knownAddresses.size > MAX_ADDR_BOOK) {
+      let oldestKey = ''
+      let oldestTime = Infinity
+      for (const [k, v] of this.knownAddresses) {
+        if (v.lastSeen < oldestTime) {
+          oldestTime = v.lastSeen
+          oldestKey = k
+        }
+      }
+      if (oldestKey) this.knownAddresses.delete(oldestKey)
+    }
+  }
+
+  /** Start periodic peer discovery — connect to random known addresses */
+  startDiscovery(): void {
+    if (this.discoveryTimer) return
+    this.discoveryTimer = setInterval(() => {
+      if (this.outboundCount >= MAX_OUTBOUND) return
+
+      // Pick a random known address we're not already connected to
+      const candidates = Array.from(this.knownAddresses.values()).filter(
+        (a) => !this.isConnectedToSeed(a.host, a.port) && !this.isBanned(a.host)
+      )
+      if (candidates.length === 0) return
+
+      const pick = candidates[Math.floor(Math.random() * candidates.length)]
+      log.debug({ component: 'p2p', addr: `${pick.host}:${pick.port}` }, 'Discovering peer')
+      this.connectOutbound(pick.host, pick.port)
+    }, DISCOVERY_INTERVAL_MS)
+  }
+
+  /** Get the known address book (for testing) */
+  getKnownAddresses(): Map<string, { host: string; port: number; lastSeen: number }> {
+    return this.knownAddresses
   }
 
   private saveBanList(): void {

@@ -14,9 +14,7 @@ import {
   verifyEcdsaSignature,
   bytesToHex,
 } from '../crypto.js'
-
-const walletA = generateWallet()
-const walletB = generateWallet()
+import { walletA, walletB } from './fixtures.js'
 
 describe('doubleSha256', () => {
   it('returns 32 bytes', () => {

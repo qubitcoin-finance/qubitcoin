@@ -512,9 +512,17 @@ async function finalizeSnapshot(workdir: string, output: string, gzip: boolean, 
   // Write final snapshot
   console.log(`  Writing ${output}${gzip ? ' (gzipped)' : ''}...`)
 
+  // Read block timestamp from header metadata if available
+  let blockTimestamp = 0
+  if (existsSync(metaPath)) {
+    const headerMeta = JSON.parse(await readFile(metaPath, 'utf8'))
+    blockTimestamp = headerMeta.blockTimestamp || 0
+  }
+
   const headerLine = JSON.stringify({
     height: 0,
     hash: blockHash,
+    ...(blockTimestamp ? { timestamp: blockTimestamp } : {}),
     count: Number(balancesMeta.addressCount),
     merkleRoot,
     p2pkhCoins: Number(balancesMeta.p2pkhCoins),

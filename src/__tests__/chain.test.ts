@@ -1,14 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { Blockchain } from '../chain.js'
-import { createCoinbaseTransaction, createTransaction } from '../transaction.js'
-import { generateWallet } from '../crypto.js'
-import { computeMerkleRoot, computeBlockHash, hashMeetsTarget, type Block, type BlockHeader, DIFFICULTY_ADJUSTMENT_INTERVAL, TARGET_BLOCK_TIME_MS, STARTING_DIFFICULTY } from '../block.js'
+import { createCoinbaseTransaction, createTransaction, COINBASE_MATURITY, validateTransaction, utxoKey, type UTXO } from '../transaction.js'
+import { computeMerkleRoot, computeBlockHash, hashMeetsTarget, medianTimestamp, MAX_FUTURE_BLOCK_TIME_MS, type Block, type BlockHeader, DIFFICULTY_ADJUSTMENT_INTERVAL, TARGET_BLOCK_TIME_MS, STARTING_DIFFICULTY } from '../block.js'
 import { createMockSnapshot } from '../snapshot.js'
 import { createClaimTransaction } from '../claim.js'
-
-// Pre-generate wallets once to avoid repeated ML-DSA-65 keygen in each test
-const walletA = generateWallet()
-const walletB = generateWallet()
+import { walletA, walletB } from './fixtures.js'
 
 // Easy target for tests: ~16 attempts to find valid hash
 const TEST_TARGET = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
@@ -26,7 +22,7 @@ function mineOnChain(chain: Blockchain, minerAddress: string, extraTxs: any[] = 
     version: 1,
     previousHash: tip.hash,
     merkleRoot,
-    timestamp: Date.now(),
+    timestamp: tip.header.timestamp + 1, // always increasing for MTP validation
     target,
     nonce: 0,
   }
@@ -380,8 +376,9 @@ describe('Blockchain undo data', () => {
   it('resetToHeight uses fast disconnect path and preserves state', () => {
     const chain = new Blockchain()
     const wallets = [walletA, walletB]
+    const numBlocks = 5
 
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < numBlocks; i++) {
       const block = mineOnChain(chain, wallets[i % 2].address)
       chain.addBlock(block)
     }
@@ -394,7 +391,7 @@ describe('Blockchain undo data', () => {
     }
 
     // Reset using undo data (fast path — undoData.length === currentHeight)
-    expect(chain.undoData.length).toBe(5) // confirms fast path eligibility
+    expect(chain.undoData.length).toBe(numBlocks) // confirms fast path eligibility
     chain.resetToHeight(2)
 
     expect(chain.getHeight()).toBe(2)
@@ -424,10 +421,16 @@ describe('Blockchain undo data', () => {
     const block1 = mineOnChain(chain, walletA.address)
     chain.addBlock(block1)
 
+    // Mine 100 more blocks to mature the coinbase
+    for (let i = 0; i < COINBASE_MATURITY; i++) {
+      chain.addBlock(mineOnChain(chain, 'f'.repeat(64)))
+    }
+
     const utxosBefore = chain.findUTXOs(walletA.address)
     expect(utxosBefore.length).toBe(1)
 
     // Spend walletA's UTXO → walletB
+    const spendHeight = chain.getHeight() + 1
     const tx = createTransaction(walletA, utxosBefore, [{ address: walletB.address, amount: 2 }], 0.125)
     const block2 = mineOnChain(chain, walletB.address, [tx])
     chain.addBlock(block2)
@@ -436,8 +439,8 @@ describe('Blockchain undo data', () => {
     expect(chain.getBalance(walletA.address)).toBe(1) // 3.125 - 2 - 0.125 = 1
     expect(chain.getBalance(walletB.address)).toBe(3.125 + 2) // coinbase + transfer
 
-    // Disconnect block 2 via resetToHeight
-    chain.resetToHeight(1)
+    // Disconnect the spending block via resetToHeight
+    chain.resetToHeight(spendHeight - 1)
 
     // walletA's original UTXO should be restored
     expect(chain.getBalance(walletA.address)).toBe(3.125)
@@ -583,5 +586,191 @@ describe('Blockchain with snapshot', () => {
     expect(stats.claimed).toBe(1)
     expect(stats.claimedAmount).toBe(holders[0].amount)
     expect(stats.unclaimed).toBe(8)
+  })
+})
+
+describe('Coinbase maturity', () => {
+  it('rejects spending immature coinbase UTXO', () => {
+    const chain = new Blockchain()
+
+    // Mine block 1 to get a coinbase UTXO for walletA
+    const block1 = mineOnChain(chain, walletA.address)
+    chain.addBlock(block1)
+
+    // Mine only 50 more blocks (not enough for maturity)
+    for (let i = 0; i < 50; i++) {
+      chain.addBlock(mineOnChain(chain, 'f'.repeat(64)))
+    }
+    expect(chain.getHeight()).toBe(51)
+
+    // Try to spend walletA's coinbase — should fail (age=50 < 100)
+    const utxos = chain.findUTXOs(walletA.address)
+    expect(utxos.length).toBe(1)
+    const tx = createTransaction(walletA, utxos, [{ address: walletB.address, amount: 2 }], 0.125)
+    const spendBlock = mineOnChain(chain, 'f'.repeat(64), [tx])
+    const result = chain.addBlock(spendBlock)
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('not mature')
+  })
+
+  it('allows spending coinbase UTXO after 100 blocks', () => {
+    const chain = new Blockchain()
+
+    // Mine block 1 for walletA
+    const block1 = mineOnChain(chain, walletA.address)
+    chain.addBlock(block1)
+
+    // Mine exactly 100 more blocks to reach maturity
+    for (let i = 0; i < COINBASE_MATURITY; i++) {
+      chain.addBlock(mineOnChain(chain, 'f'.repeat(64)))
+    }
+    expect(chain.getHeight()).toBe(101)
+
+    // Spend walletA's coinbase — should succeed (age=100 >= 100)
+    const utxos = chain.findUTXOs(walletA.address)
+    expect(utxos.length).toBe(1)
+    expect(utxos[0].isCoinbase).toBe(true)
+    expect(utxos[0].height).toBe(1)
+    const tx = createTransaction(walletA, utxos, [{ address: walletB.address, amount: 2 }], 0.125)
+    const spendBlock = mineOnChain(chain, 'f'.repeat(64), [tx])
+    const result = chain.addBlock(spendBlock)
+    expect(result.success).toBe(true)
+  })
+
+  it('non-coinbase UTXOs are not affected by maturity', () => {
+    const chain = new Blockchain()
+
+    // Mine block 1 for walletA and mature it
+    chain.addBlock(mineOnChain(chain, walletA.address))
+    for (let i = 0; i < COINBASE_MATURITY; i++) {
+      chain.addBlock(mineOnChain(chain, 'f'.repeat(64)))
+    }
+
+    // Spend walletA's coinbase → walletB (creates non-coinbase UTXO)
+    const utxos = chain.findUTXOs(walletA.address)
+    const tx = createTransaction(walletA, utxos, [{ address: walletB.address, amount: 2 }], 0.125)
+    chain.addBlock(mineOnChain(chain, 'f'.repeat(64), [tx]))
+
+    // walletB can spend immediately (non-coinbase, no maturity required)
+    const utxosB = chain.findUTXOs(walletB.address)
+    expect(utxosB.length).toBe(1)
+    expect(utxosB[0].isCoinbase).toBeUndefined() // not a coinbase
+    const tx2 = createTransaction(walletB, utxosB, [{ address: walletA.address, amount: 1 }], 0.5)
+    const spendBlock = mineOnChain(chain, 'f'.repeat(64), [tx2])
+    const result = chain.addBlock(spendBlock)
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects immature coinbase at height boundary (age=99)', () => {
+    const chain = new Blockchain()
+
+    // Mine block 1 for walletA
+    chain.addBlock(mineOnChain(chain, walletA.address))
+
+    // Mine 98 more blocks (total height 99, coinbase age = 98)
+    for (let i = 0; i < 98; i++) {
+      chain.addBlock(mineOnChain(chain, 'f'.repeat(64)))
+    }
+    expect(chain.getHeight()).toBe(99)
+
+    // Spending at height 100 → age = 99, still immature
+    const utxos = chain.findUTXOs(walletA.address)
+    const tx = createTransaction(walletA, utxos, [{ address: walletB.address, amount: 2 }], 0.125)
+    const spendBlock = mineOnChain(chain, 'f'.repeat(64), [tx])
+    const result = chain.addBlock(spendBlock)
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('not mature')
+  })
+})
+
+describe('Block timestamp validation', () => {
+  it('rejects block with timestamp in the past (below MTP)', () => {
+    const chain = new Blockchain()
+
+    // Mine 12 blocks with increasing timestamps
+    for (let i = 0; i < 12; i++) {
+      chain.addBlock(mineOnChain(chain, 'f'.repeat(64)))
+    }
+
+    // Try to add a block with a timestamp equal to the MTP (should fail — must be strictly greater)
+    const tip = chain.getChainTip()
+    const mtp = medianTimestamp(chain.blocks, chain.blocks.length - 1)
+    const coinbase = createCoinbaseTransaction('f'.repeat(64), chain.getHeight() + 1, 0)
+    const txs = [coinbase]
+    const merkleRoot = computeMerkleRoot(txs.map(t => t.id))
+    const header: BlockHeader = {
+      version: 1,
+      previousHash: tip.hash,
+      merkleRoot,
+      timestamp: mtp, // exactly MTP — invalid (must be > MTP)
+      target: chain.getDifficulty(),
+      nonce: 0,
+    }
+    let hash = computeBlockHash(header)
+    while (!hashMeetsTarget(hash, header.target)) {
+      header.nonce++
+      hash = computeBlockHash(header)
+    }
+    const block: Block = { header, hash, transactions: txs, height: chain.getHeight() + 1 }
+    const result = chain.addBlock(block)
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('median time past')
+  })
+
+  it('rejects block with timestamp too far in the future', () => {
+    const chain = new Blockchain()
+    chain.addBlock(mineOnChain(chain, 'f'.repeat(64)))
+
+    const tip = chain.getChainTip()
+    const coinbase = createCoinbaseTransaction('f'.repeat(64), chain.getHeight() + 1, 0)
+    const txs = [coinbase]
+    const merkleRoot = computeMerkleRoot(txs.map(t => t.id))
+    const header: BlockHeader = {
+      version: 1,
+      previousHash: tip.hash,
+      merkleRoot,
+      timestamp: Date.now() + MAX_FUTURE_BLOCK_TIME_MS + 60_000, // 2h1m in the future
+      target: chain.getDifficulty(),
+      nonce: 0,
+    }
+    let hash = computeBlockHash(header)
+    while (!hashMeetsTarget(hash, header.target)) {
+      header.nonce++
+      hash = computeBlockHash(header)
+    }
+    const block: Block = { header, hash, transactions: txs, height: chain.getHeight() + 1 }
+    const result = chain.addBlock(block)
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('too far in the future')
+  })
+
+  it('accepts block with valid timestamp', () => {
+    const chain = new Blockchain()
+
+    // Mine several blocks — all should succeed with proper timestamps
+    for (let i = 0; i < 15; i++) {
+      const block = mineOnChain(chain, 'f'.repeat(64))
+      const result = chain.addBlock(block)
+      expect(result.success).toBe(true)
+    }
+    expect(chain.getHeight()).toBe(15)
+  })
+
+  it('medianTimestamp computes correctly', () => {
+    // Build a fake chain with known timestamps
+    const blocks: Block[] = []
+    for (let i = 0; i <= 11; i++) {
+      blocks.push({
+        header: { version: 1, previousHash: '', merkleRoot: '', timestamp: (i + 1) * 1000, target: '', nonce: 0 },
+        hash: '', transactions: [], height: i,
+      })
+    }
+    // Timestamps: 1000,2000,...,12000 — median of last 11 (indices 1-11) = 7000
+    expect(medianTimestamp(blocks, 11)).toBe(7000)
+    // Median of all 12 (indices 0-11) with count=12 = (6000+7000)/2... no, it's floor(12/2)=6th = 7000
+    // Actually: sorted [1000..12000], floor(12/2) = index 6 = 7000
+    expect(medianTimestamp(blocks, 11, 12)).toBe(7000)
+    // Median of first 3 (indices 0-2): [1000,2000,3000], floor(3/2)=1 → 2000
+    expect(medianTimestamp(blocks, 2, 3)).toBe(2000)
   })
 })

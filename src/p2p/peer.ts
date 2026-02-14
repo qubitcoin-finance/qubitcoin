@@ -22,6 +22,7 @@ const HANDSHAKE_TIMEOUT_MS = 10_000
 const IDLE_TIMEOUT_MS = 120_000
 const PONG_TIMEOUT_MS = 30_000
 const MISBEHAVIOR_THRESHOLD = 100
+const IBD_TIMEOUT_MS = 30_000
 
 export type PeerEventHandler = (peer: Peer, msg: Message) => void
 export type PeerDisconnectHandler = (peer: Peer, reason: string) => void
@@ -38,6 +39,7 @@ export class Peer {
   handshakeComplete = false
   remoteHeight = 0
   remoteGenesisHash = ''
+  remoteListenPort = 0
 
   private misbehaviorScore = 0
   private tokens: number = RATE_LIMIT_MAX
@@ -45,6 +47,8 @@ export class Peer {
   private handshakeTimer: ReturnType<typeof setTimeout> | null = null
   private idleTimer: ReturnType<typeof setTimeout> | null = null
   private pongTimer: ReturnType<typeof setTimeout> | null = null
+  private ibdTimer: ReturnType<typeof setTimeout> | null = null
+  ibdPending = false
   private destroyed = false
 
   constructor(
@@ -171,12 +175,34 @@ export class Peer {
     this.resetIdleTimer()
   }
 
+  /** Start IBD timeout — fires onIBDTimeout callback if no blocks arrive */
+  startIBDTimer(onTimeout: () => void): void {
+    this.clearIBDTimer()
+    this.ibdPending = true
+    this.ibdTimer = setTimeout(() => {
+      this.ibdPending = false
+      this.ibdTimer = null
+      onTimeout()
+    }, IBD_TIMEOUT_MS)
+  }
+
+  /** Clear IBD timeout (blocks arrived) */
+  clearIBDTimer(): void {
+    this.ibdPending = false
+    if (this.ibdTimer) {
+      clearTimeout(this.ibdTimer)
+      this.ibdTimer = null
+    }
+  }
+
   private clearTimers(): void {
     if (this.handshakeTimer) clearTimeout(this.handshakeTimer)
     if (this.idleTimer) clearTimeout(this.idleTimer)
     if (this.pongTimer) clearTimeout(this.pongTimer)
+    if (this.ibdTimer) clearTimeout(this.ibdTimer)
     this.handshakeTimer = null
     this.idleTimer = null
     this.pongTimer = null
+    this.ibdTimer = null
   }
 }

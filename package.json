@@ -22,7 +22,7 @@
     "node:bob": "node --loader ts-node/esm src/qbtcd.ts --port 3002 --p2p-port 6002 --datadir data/bob --seeds 127.0.0.1:6001",
     "node:charlie": "node --loader ts-node/esm src/qbtcd.ts --port 3003 --p2p-port 6003 --datadir data/charlie --seeds 127.0.0.1:6001,127.0.0.1:6002",
     "convert-snapshot": "node --loader ts-node/esm src/tools/convert-snapshot.ts",
-    "test": "vitest run",
+    "test": "vitest run --reporter=verbose",
     "test:watch": "vitest",
     "website": "cd website && pnpm run dev",
     "website:build": "cd website && pnpm run build",

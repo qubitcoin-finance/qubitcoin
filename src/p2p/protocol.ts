@@ -21,12 +21,19 @@ export type MessageType =
   | 'headers'
   | 'ping'
   | 'pong'
+  | 'addr'
+  | 'getaddr'
 
 export interface VersionPayload {
   version: number
   height: number
   genesisHash: string
   userAgent: string
+  listenPort?: number // P2P listen port so peers know how to connect back
+}
+
+export interface AddrPayload {
+  addresses: Array<{ host: string; port: number; lastSeen: number }>
 }
 
 export interface GetBlocksPayload {

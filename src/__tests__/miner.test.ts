@@ -22,13 +22,10 @@ import {
 import { assembleCandidateBlock, mineBlock, mineBlockAsync } from '../miner.js'
 import { Blockchain } from '../chain.js'
 import { Mempool } from '../mempool.js'
-import { generateWallet, doubleSha256Hex } from '../crypto.js'
+import { doubleSha256Hex } from '../crypto.js'
+import { walletA, walletB } from './fixtures.js'
 
 const TEST_TARGET = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
-
-// Generate wallets once at module level to avoid repeated slow ML-DSA-65 keygen
-const walletA = generateWallet()
-const walletB = generateWallet()
 
 /** Helper: mine a simple coinbase-only block on top of a chain */
 function mineOnChain(chain: Blockchain, minerAddress: string): Block {
@@ -44,7 +41,7 @@ function mineOnChain(chain: Blockchain, minerAddress: string): Block {
     version: 1,
     previousHash: tip.hash,
     merkleRoot,
-    timestamp: Date.now(),
+    timestamp: tip.header.timestamp + 1,
     target,
     nonce: 0,
   }

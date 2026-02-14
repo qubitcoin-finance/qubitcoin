@@ -20,8 +20,7 @@ import {
   type BlockHeader,
 } from '../block.js'
 
-const qbtcWalletA = generateWallet()
-const qbtcWalletB = generateWallet()
+import { walletA as qbtcWalletA, walletB as qbtcWalletB } from './fixtures.js'
 
 // Easy target for tests: ~16 attempts to find valid hash
 const TEST_TARGET = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
@@ -38,7 +37,7 @@ function mineOnChain(chain: Blockchain, minerAddress: string, extraTxs: any[] = 
     version: 1,
     previousHash: tip.hash,
     merkleRoot,
-    timestamp: Date.now(),
+    timestamp: tip.header.timestamp + 1,
     target: TEST_TARGET,
     nonce: 0,
   }

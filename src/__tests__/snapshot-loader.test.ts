@@ -41,7 +41,7 @@ describe('loadSnapshot', () => {
     const filePath = path.join(tmpDir, 'with-header.jsonl')
     const merkle = 'ff'.repeat(32)
     const lines = [
-      JSON.stringify({ height: 0, hash: 'abcd1234', count: 2, merkleRoot: merkle, p2pkhCoins: 1, p2wpkhCoins: 1, totalClaimableSats: '300' }),
+      JSON.stringify({ height: 0, hash: 'abcd1234', timestamp: 1739482182, count: 2, merkleRoot: merkle, p2pkhCoins: 1, p2wpkhCoins: 1, totalClaimableSats: '300' }),
       '{"a":"aabbccdd0011223344556677889900aabbccddee","b":100}',
       '{"a":"11223344556677889900aabbccddeeff00112233","b":200}',
     ]

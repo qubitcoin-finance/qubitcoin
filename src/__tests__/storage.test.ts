@@ -4,7 +4,6 @@ import path from 'node:path'
 import os from 'node:os'
 import { FileBlockStorage, sanitizeForStorage } from '../storage.js'
 import { Blockchain } from '../chain.js'
-import { generateWallet } from '../crypto.js'
 import {
   createCoinbaseTransaction,
   utxoKey,
@@ -17,7 +16,7 @@ import {
   type BlockHeader,
 } from '../block.js'
 
-const walletA = generateWallet()
+import { walletA } from './fixtures.js'
 const TEST_TARGET = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
 
 function mineOnChain(chain: Blockchain, minerAddress: string): Block {
@@ -32,7 +31,7 @@ function mineOnChain(chain: Blockchain, minerAddress: string): Block {
     version: 1,
     previousHash: tip.hash,
     merkleRoot,
-    timestamp: Date.now(),
+    timestamp: tip.header.timestamp + 1,
     target: TEST_TARGET,
     nonce: 0,
   }

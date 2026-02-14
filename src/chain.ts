@@ -3,7 +3,7 @@
  *
  * Maintains the canonical chain, UTXO set, and handles difficulty adjustment.
  */
-import { type UTXO, utxoKey, isCoinbase, isClaimTransaction, validateTransaction } from './transaction.js'
+import { type UTXO, utxoKey, isCoinbase, isClaimTransaction, validateTransaction, COINBASE_MATURITY } from './transaction.js'
 import { type BtcSnapshot } from './snapshot.js'
 import { verifyClaimProof } from './claim.js'
 import {
@@ -118,8 +118,8 @@ export class Blockchain {
       }
     }
 
-    // Validate block structure
-    const result = validateBlock(block, previousBlock, this.utxoSet)
+    // Validate block structure (including timestamp)
+    const result = validateBlock(block, previousBlock, this.utxoSet, this.blocks)
     if (!result.valid) {
       return { success: false, error: result.error }
     }
@@ -476,6 +476,8 @@ export class Blockchain {
     }
 
     for (const tx of block.transactions) {
+      const txIsCoinbase = isCoinbase(tx)
+
       // Handle claim transactions: mark BTC UTXO as claimed, create PQ UTXO
       if (isClaimTransaction(tx)) {
         const claim = tx.claimData!
@@ -501,6 +503,7 @@ export class Blockchain {
             outputIndex: i,
             address: output.address,
             amount: output.amount,
+            height: block.height,
           })
           undo.createdUtxoKeys.push(key)
         }
@@ -508,7 +511,7 @@ export class Blockchain {
       }
 
       // Remove spent UTXOs (skip coinbase inputs)
-      if (!isCoinbase(tx)) {
+      if (!txIsCoinbase) {
         for (const input of tx.inputs) {
           const key = utxoKey(input.txId, input.outputIndex)
           const existing = this.utxoSet.get(key)
@@ -533,6 +536,8 @@ export class Blockchain {
           outputIndex: i,
           address: output.address,
           amount: output.amount,
+          height: block.height,
+          isCoinbase: txIsCoinbase || undefined,
         })
         undo.createdUtxoKeys.push(key)
       }

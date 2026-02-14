@@ -65,6 +65,12 @@ export const TARGET_BLOCK_TIME_MS = 30 * 60_000
 /** Maximum block size in bytes (1 MB, same as Bitcoin) */
 export const MAX_BLOCK_SIZE = 1_000_000
 
+/** Maximum allowed future block timestamp (2 hours, same as Bitcoin) */
+export const MAX_FUTURE_BLOCK_TIME_MS = 2 * 60 * 60 * 1000
+
+/** Number of past blocks to use for median time calculation */
+const MEDIAN_TIME_SPAN = 11
+
 /** Block header size: version(4) + prevHash(32) + merkleRoot(32) + timestamp(8) + target(32) + nonce(4) = 112 */
 const BLOCK_HEADER_SIZE = 112
 
@@ -221,7 +227,10 @@ export function createForkGenesisBlock(snapshot: BtcSnapshot): Block {
   if (cached) return structuredClone(cached)
 
   const burnAddress = '0'.repeat(64)
-  const timestamp = snapshot.btcTimestamp ? snapshot.btcTimestamp * 1000 : Date.now()
+  if (!snapshot.btcTimestamp) {
+    throw new Error('Snapshot missing btcTimestamp — cannot create deterministic genesis')
+  }
+  const timestamp = snapshot.btcTimestamp * 1000
   const encoder = new TextEncoder()
 
   // Genesis coinbase embeds the snapshot commitment
@@ -281,11 +290,20 @@ export function createForkGenesisBlock(snapshot: BtcSnapshot): Block {
   return structuredClone(result)
 }
 
+/** Compute median timestamp of the last N blocks ending at tipIndex */
+export function medianTimestamp(blocks: Block[], tipIndex: number, count = MEDIAN_TIME_SPAN): number {
+  const start = Math.max(0, tipIndex - count + 1)
+  const timestamps = blocks.slice(start, tipIndex + 1).map((b) => b.header.timestamp)
+  timestamps.sort((a, b) => a - b)
+  return timestamps[Math.floor(timestamps.length / 2)]
+}
+
 /** Validate a block against the previous block and UTXO set */
 export function validateBlock(
   block: Block,
   previousBlock: Block | null,
-  utxoSet: Map<string, UTXO>
+  utxoSet: Map<string, UTXO>,
+  chainBlocks?: Block[]
 ): { valid: boolean; error?: string } {
   // Verify block hash
   const expectedHash = computeBlockHash(block.header)
@@ -306,6 +324,21 @@ export function validateBlock(
   } else {
     if (block.header.previousHash !== '0'.repeat(64)) {
       return { valid: false, error: 'Genesis block must have zero previous hash' }
+    }
+  }
+
+  // Verify timestamp (skip genesis blocks)
+  if (chainBlocks && chainBlocks.length > 1 && block.height > 0) {
+    // Block timestamp must be greater than median of last 11 blocks
+    const tipIndex = chainBlocks.length - 1
+    const mtp = medianTimestamp(chainBlocks, tipIndex)
+    if (block.header.timestamp <= mtp) {
+      return { valid: false, error: `Block timestamp ${block.header.timestamp} must be greater than median time past ${mtp}` }
+    }
+
+    // Block timestamp must not be more than 2 hours in the future
+    if (block.header.timestamp > Date.now() + MAX_FUTURE_BLOCK_TIME_MS) {
+      return { valid: false, error: `Block timestamp ${block.header.timestamp} is too far in the future` }
     }
   }
 
@@ -367,7 +400,7 @@ export function validateBlock(
       spentInBlock.add(key)
     }
 
-    const result = validateTransaction(tx, utxoSet)
+    const result = validateTransaction(tx, utxoSet, block.height)
     if (!result.valid) {
       return { valid: false, error: `Transaction ${i} invalid: ${result.error}` }
     }

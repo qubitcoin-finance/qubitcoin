@@ -53,7 +53,12 @@ export interface UTXO {
   outputIndex: number
   address: string
   amount: number
+  height?: number      // block height where this UTXO was created
+  isCoinbase?: boolean // true if this UTXO comes from a coinbase transaction
 }
+
+/** Coinbase outputs cannot be spent until this many blocks have been mined on top */
+export const COINBASE_MATURITY = 100
 
 export const COINBASE_TXID = '0'.repeat(64)
 export const CLAIM_TXID = 'c'.repeat(64) // sentinel for BTC claim transactions
@@ -225,7 +230,8 @@ export function createTransaction(
 /** Validate a transaction against the UTXO set */
 export function validateTransaction(
   tx: Transaction,
-  utxoSet: Map<string, UTXO>
+  utxoSet: Map<string, UTXO>,
+  currentHeight?: number
 ): { valid: boolean; error?: string } {
   if (isCoinbase(tx)) {
     // Coinbase validation is handled at block level
@@ -270,6 +276,14 @@ export function validateTransaction(
 
     if (!utxo) {
       return { valid: false, error: `UTXO not found: ${key}` }
+    }
+
+    // Check coinbase maturity
+    if (utxo.isCoinbase && currentHeight !== undefined && utxo.height !== undefined) {
+      const age = currentHeight - utxo.height
+      if (age < COINBASE_MATURITY) {
+        return { valid: false, error: `Coinbase UTXO at height ${utxo.height} not mature (age ${age}, need ${COINBASE_MATURITY})` }
+      }
     }
 
     // Verify public key matches UTXO owner
