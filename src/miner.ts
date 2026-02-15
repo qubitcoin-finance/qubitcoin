@@ -127,16 +127,20 @@ export function mineBlock(block: Block, verbose = true): Block {
  * Async non-blocking mining — yields to the event loop between nonce batches
  * so RPC and P2P stay responsive during mining.
  *
+ * Uses adaptive batch sizing: targets ~100ms per batch to balance throughput
+ * with event loop responsiveness. Batch size auto-tunes based on measured time.
+ *
  * Returns the mined block, or null if the AbortSignal fires (e.g. a peer
  * broadcast a new block and we need to restart with the new tip).
  */
 export function mineBlockAsync(
   block: Block,
   signal?: AbortSignal,
-  batchSize = 200_000
 ): Promise<Block | null> {
   return new Promise((resolve) => {
     let nonce = 0
+    let batchSize = 100_000  // initial guess, auto-tunes
+    const TARGET_BATCH_MS = 100
     const target = block.header.target
     const startTime = performance.now()
 
@@ -145,6 +149,8 @@ export function mineBlockAsync(
         resolve(null)
         return
       }
+
+      const batchStart = performance.now()
 
       for (let i = 0; i < batchSize; i++) {
         block.header.nonce = nonce
@@ -166,14 +172,20 @@ export function mineBlockAsync(
         }
       }
 
+      // Adaptive batch sizing: aim for ~100ms per batch
+      const batchMs = performance.now() - batchStart
+      if (batchMs > 0) {
+        batchSize = Math.max(10_000, Math.min(500_000, Math.round(batchSize * TARGET_BATCH_MS / batchMs)))
+      }
+
       // Log progress every ~500k nonces
       if (nonce % 500_000 < batchSize) {
         const elapsed = ((performance.now() - startTime) / 1000).toFixed(1)
         log.debug({ component: 'miner', nonce, elapsed: `${elapsed}s` }, 'Mining in progress')
       }
 
-      // Yield to event loop
-      setImmediate(batch)
+      // Yield to event loop (setTimeout avoids starvation under GC pressure)
+      setTimeout(batch, 0)
     }
 
     batch()

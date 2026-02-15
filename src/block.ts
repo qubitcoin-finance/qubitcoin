@@ -51,10 +51,10 @@ export const INITIAL_TARGET =
 
 /**
  * Starting difficulty for the live chain.
- * Set for ~20min blocks with SHA-256 PoW. Adjusts via difficulty retarget.
+ * Set for ~7.5min blocks at ~74k H/s (two miners). Adjusts via difficulty retarget.
  */
 export const STARTING_DIFFICULTY =
-  '0000000fffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+  '0000007fffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
 
 /** Difficulty adjustment interval (blocks) */
 export const DIFFICULTY_ADJUSTMENT_INTERVAL = 10
