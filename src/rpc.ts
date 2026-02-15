@@ -8,6 +8,52 @@ import { type Transaction, type TransactionInput, type ClaimData, isClaimTransac
 import { deriveAddress } from './crypto.js';
 import { DIFFICULTY_ADJUSTMENT_INTERVAL, STARTING_DIFFICULTY } from './block.js';
 import { log } from './log.js';
+import type { Request, Response, NextFunction } from 'express';
+
+/** Maximum JSON body size (1 MB) */
+const MAX_BODY_SIZE = '1mb';
+
+/** Rate limit windows */
+const GET_RATE_LIMIT = 600;   // requests per minute
+const POST_RATE_LIMIT = 100;  // requests per minute
+const RATE_WINDOW_MS = 60_000;
+
+/** Simple in-memory per-IP rate limiter (sliding window) */
+function createRateLimiter() {
+  const hits = new Map<string, { timestamps: number[] }>();
+
+  // Cleanup stale entries every 5 minutes
+  setInterval(() => {
+    const cutoff = Date.now() - RATE_WINDOW_MS;
+    for (const [ip, data] of hits) {
+      data.timestamps = data.timestamps.filter(t => t > cutoff);
+      if (data.timestamps.length === 0) hits.delete(ip);
+    }
+  }, 5 * 60_000).unref();
+
+  return (limit: number) => (req: Request, res: Response, next: NextFunction) => {
+    const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown';
+    const now = Date.now();
+    const cutoff = now - RATE_WINDOW_MS;
+
+    let data = hits.get(ip);
+    if (!data) {
+      data = { timestamps: [] };
+      hits.set(ip, data);
+    }
+
+    // Remove old timestamps
+    data.timestamps = data.timestamps.filter(t => t > cutoff);
+
+    if (data.timestamps.length >= limit) {
+      res.status(429).json({ error: 'Too many requests' });
+      return;
+    }
+
+    data.timestamps.push(now);
+    next();
+  };
+}
 
 /** Recursively convert Uint8Array fields to hex strings for JSON serialization */
 export function sanitize(obj: unknown): unknown {
@@ -55,7 +101,14 @@ function deserializeTransaction(raw: Record<string, unknown>): Transaction {
 export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer) {
   const app = express();
   app.use(cors());
-  app.use(express.json());
+  app.use(express.json({ limit: MAX_BODY_SIZE }));
+
+  // Rate limiting
+  const rateLimiter = createRateLimiter();
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const limit = req.method === 'POST' ? POST_RATE_LIMIT : GET_RATE_LIMIT;
+    rateLimiter(limit)(req, res, next);
+  });
 
   // Endpoint to get the status of the node
   app.get('/api/v1/status', (req, res) => {

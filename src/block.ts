@@ -59,8 +59,8 @@ export const STARTING_DIFFICULTY =
 /** Difficulty adjustment interval (blocks) */
 export const DIFFICULTY_ADJUSTMENT_INTERVAL = 10
 
-/** Target block time in ms (30 minutes) */
-export const TARGET_BLOCK_TIME_MS = 30 * 60_000
+/** Target block time in ms (10 minutes, same as Bitcoin) */
+export const TARGET_BLOCK_TIME_MS = 10 * 60_000
 
 /** Maximum block size in bytes (1 MB, same as Bitcoin) */
 export const MAX_BLOCK_SIZE = 1_000_000
@@ -148,6 +148,13 @@ export function computeBlockHash(header: BlockHeader): string {
 /** Check if hash meets difficulty target (hash < target) */
 export function hashMeetsTarget(hash: string, target: string): boolean {
   return BigInt('0x' + hash) < BigInt('0x' + target)
+}
+
+/** Compute proof-of-work for a block: 2^256 / (target + 1) */
+export function blockWork(target: string): bigint {
+  const t = BigInt('0x' + target)
+  if (t === 0n) return 0n
+  return (2n ** 256n) / (t + 1n)
 }
 
 /** Cached genesis block (deterministic — same inputs always produce same result) */

@@ -30,6 +30,7 @@ export interface VersionPayload {
   genesisHash: string
   userAgent: string
   listenPort?: number // P2P listen port so peers know how to connect back
+  cumulativeWork?: string // hex-encoded cumulative PoW (optional for backwards compat)
 }
 
 export interface AddrPayload {

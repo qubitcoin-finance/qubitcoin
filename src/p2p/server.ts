@@ -38,10 +38,42 @@ const SEEN_CACHE_MAX = 10_000
 const BAN_DURATION_MS = 24 * 60 * 60 * 1000 // 24h
 const MAX_REORG_DEPTH = 100
 const MAX_HEADERS_RESPONSE = 500
-const SEED_RECONNECT_DELAY_MS = 5_000
+const SEED_RECONNECT_BASE_MS = 5_000
+const SEED_RECONNECT_MAX_MS = 60_000
 const MAX_ADDR_BOOK = 1_000
 const MAX_ADDR_RESPONSE = 100
 const DISCOVERY_INTERVAL_MS = 60_000
+
+/** Check if an IP address is publicly routable (not private/loopback/link-local) */
+function isRoutableAddress(host: string): boolean {
+  // IPv6 loopback and private
+  if (host === '::1' || host === '::') return false
+  if (host.startsWith('fc') || host.startsWith('fd')) return false // fc00::/7 (ULA)
+  if (host.startsWith('fe80')) return false // link-local
+
+  // IPv4 (may be plain or IPv6-mapped like ::ffff:127.0.0.1)
+  const ipv4Match = host.match(/(?:::ffff:)?(\d+\.\d+\.\d+\.\d+)$/i)
+  if (ipv4Match) {
+    const parts = ipv4Match[1].split('.').map(Number)
+    const [a, b] = parts
+    if (a === 127) return false                          // 127.0.0.0/8
+    if (a === 10) return false                           // 10.0.0.0/8
+    if (a === 172 && b >= 16 && b <= 31) return false    // 172.16.0.0/12
+    if (a === 192 && b === 168) return false              // 192.168.0.0/16
+    if (a === 169 && b === 254) return false              // 169.254.0.0/16
+    if (a === 0) return false                             // 0.0.0.0/8
+  }
+
+  return true
+}
+const FORK_RESOLUTION_TIMEOUT_MS = 60_000
+const MAX_ORPHAN_BLOCKS = 50
+const ORPHAN_EXPIRY_MS = 10 * 60_000
+
+interface OrphanBlock {
+  block: Block
+  receivedAt: number
+}
 
 /** Known Uint8Array fields that need deserialization from P2P messages */
 const TX_INPUT_BINARY_FIELDS = ['publicKey', 'signature'] as const
@@ -98,7 +130,12 @@ export class P2PServer {
   private reconnectTimer: ReturnType<typeof setInterval> | null = null
   private discoveryTimer: ReturnType<typeof setInterval> | null = null
   private forkResolutionInProgress = false
+  private forkResolutionTimer: ReturnType<typeof setTimeout> | null = null
   private knownAddresses: Map<string, { host: string; port: number; lastSeen: number }> = new Map()
+  private seedBackoff: Map<string, number> = new Map() // seed key -> current delay ms
+  private orphanBlocks: Map<string, OrphanBlock> = new Map() // parentHash -> orphan
+
+  private localMode = false
 
   constructor(node: Node, port: number, dataDir?: string) {
     this.node = node
@@ -133,6 +170,7 @@ export class P2PServer {
       clearInterval(this.discoveryTimer)
       this.discoveryTimer = null
     }
+    this.clearForkResolution()
     return new Promise((resolve) => {
       for (const peer of this.peers.values()) {
         peer.disconnect('server shutdown')
@@ -262,23 +300,27 @@ export class P2PServer {
 
     // Clear fork resolution flag if this peer was involved
     if (this.forkResolutionInProgress) {
-      this.forkResolutionInProgress = false
+      this.clearForkResolution()
     }
 
     this.peers.delete(peer.id)
     if (peer.inbound) this.inboundCount--
     else this.outboundCount--
 
-    // Schedule quick reconnect if it was a seed
+    // Schedule reconnect with exponential backoff if it was a seed
     if (!peer.inbound) {
       for (const seed of this.seeds) {
         if (peer.id === `${seed.host}:${seed.port}` || peer.address.includes(seed.host)) {
+          const seedKey = `${seed.host}:${seed.port}`
+          const currentDelay = this.seedBackoff.get(seedKey) ?? SEED_RECONNECT_BASE_MS
+          const nextDelay = Math.min(currentDelay * 2, SEED_RECONNECT_MAX_MS)
+          this.seedBackoff.set(seedKey, nextDelay)
+          log.debug({ component: 'p2p', seed: seedKey, delayMs: currentDelay }, 'Scheduling seed reconnect')
           setTimeout(() => {
             if (!this.isConnectedToSeed(seed.host, seed.port)) {
-              log.info({ component: 'p2p', seed: `${seed.host}:${seed.port}` }, 'Quick reconnect to seed')
               this.connectOutbound(seed.host, seed.port)
             }
-          }, SEED_RECONNECT_DELAY_MS)
+          }, currentDelay)
           break
         }
       }
@@ -346,6 +388,7 @@ export class P2PServer {
       genesisHash: this.node.chain.blocks[0].hash,
       userAgent: `qubitcoin/${PROTOCOL_VERSION}`,
       listenPort: this.port,
+      cumulativeWork: this.node.chain.cumulativeWork.toString(16),
     }
     peer.send({ type: 'version', payload })
   }
@@ -377,6 +420,9 @@ export class P2PServer {
     if (payload.listenPort) {
       peer.remoteListenPort = payload.listenPort
     }
+    if (payload.cumulativeWork) {
+      try { peer.remoteCumulativeWork = BigInt('0x' + payload.cumulativeWork) } catch { /* ignore */ }
+    }
 
     // If inbound, send our version back
     if (peer.inbound) {
@@ -398,6 +444,16 @@ export class P2PServer {
     // Add peer to address book
     if (peer.remoteListenPort && peer.address !== 'unknown') {
       this.addKnownAddress(peer.address, peer.remoteListenPort)
+    }
+
+    // Reset backoff on successful handshake (outbound seeds)
+    if (!peer.inbound) {
+      for (const seed of this.seeds) {
+        if (peer.id === `${seed.host}:${seed.port}` || peer.address.includes(seed.host)) {
+          this.seedBackoff.delete(`${seed.host}:${seed.port}`)
+          break
+        }
+      }
     }
 
     // IBD: if peer is ahead, request blocks
@@ -500,7 +556,19 @@ export class P2PServer {
       if (result.success) {
         this.addSeen(this.seenBlocks, block.hash)
         added++
+        // Try to connect any orphans that were waiting for this block
+        added += this.processOrphans(block.hash)
       } else if (result.error?.includes('Previous hash') && !this.forkResolutionInProgress) {
+        // During IBD (batch of blocks), "Previous hash" mismatch means fork
+        // For single blocks (relay/getdata), check if it's an orphan (parent unknown)
+        if (payload.blocks.length === 1) {
+          const parentInChain = this.node.chain.blocks.some(b => b.hash === block.header.previousHash)
+          if (!parentInChain) {
+            // Orphan: parent not in our chain yet — cache it
+            this.addOrphan(block)
+            continue
+          }
+        }
         // Fork detected — peer has a different chain at this height
         log.warn({ component: 'p2p', peer: peer.id, height: block.height, error: result.error }, 'Fork detected — initiating resolution')
         forkDetected = true
@@ -632,12 +700,33 @@ export class P2PServer {
     if (this.forkResolutionInProgress) return
     this.forkResolutionInProgress = true
 
-    const locator = this.buildBlockLocator()
-    log.info({ component: 'p2p', peer: peer.id, locatorLen: locator.length }, 'Sending getheaders for fork resolution')
-    peer.send({
-      type: 'getheaders',
-      payload: { locatorHashes: locator } as GetHeadersPayload,
-    })
+    // Auto-clear after timeout to prevent permanent deadlock
+    this.forkResolutionTimer = setTimeout(() => {
+      if (this.forkResolutionInProgress) {
+        log.warn({ component: 'p2p' }, 'Fork resolution timeout — clearing flag')
+        this.clearForkResolution()
+      }
+    }, FORK_RESOLUTION_TIMEOUT_MS)
+
+    try {
+      const locator = this.buildBlockLocator()
+      log.info({ component: 'p2p', peer: peer.id, locatorLen: locator.length }, 'Sending getheaders for fork resolution')
+      peer.send({
+        type: 'getheaders',
+        payload: { locatorHashes: locator } as GetHeadersPayload,
+      })
+    } catch (err) {
+      log.warn({ component: 'p2p', peer: peer.id, error: err instanceof Error ? err.message : String(err) }, 'Fork resolution failed')
+      this.clearForkResolution()
+    }
+  }
+
+  private clearForkResolution(): void {
+    this.forkResolutionInProgress = false
+    if (this.forkResolutionTimer) {
+      clearTimeout(this.forkResolutionTimer)
+      this.forkResolutionTimer = null
+    }
   }
 
   /** Handle getheaders: find common ancestor from locator, respond with headers */
@@ -686,13 +775,13 @@ export class P2PServer {
     }
     if (!payload || !Array.isArray(payload.headers)) {
       peer.addMisbehavior(10)
-      this.forkResolutionInProgress = false
+      this.clearForkResolution()
       return
     }
 
     if (payload.headers.length === 0) {
       log.info({ component: 'p2p', peer: peer.id }, 'No headers from peer — no reorg needed')
-      this.forkResolutionInProgress = false
+      this.clearForkResolution()
       return
     }
 
@@ -712,7 +801,7 @@ export class P2PServer {
     if (forkPoint === -1) {
       log.warn({ component: 'p2p', peer: peer.id }, 'Cannot find fork point from headers — no common ancestor')
       peer.addMisbehavior(10)
-      this.forkResolutionInProgress = false
+      this.clearForkResolution()
       return
     }
 
@@ -720,22 +809,32 @@ export class P2PServer {
     const reorgDepth = chain.getHeight() - forkPoint
     if (reorgDepth > MAX_REORG_DEPTH) {
       log.warn({ component: 'p2p', peer: peer.id, depth: reorgDepth, max: MAX_REORG_DEPTH }, 'Reorg too deep — refusing')
-      this.forkResolutionInProgress = false
+      this.clearForkResolution()
       return
     }
 
-    // Peer chain must be strictly longer to trigger reorg
+    // Decide whether to reorg: prefer cumulative work, fall back to height
     const peerHeight = forkPoint + payload.headers.length
-    // Also account for peer potentially having more headers beyond what was sent
     const effectivePeerHeight = Math.max(peerHeight, peer.remoteHeight)
-    if (effectivePeerHeight <= chain.getHeight()) {
-      log.info({ component: 'p2p', peer: peer.id, ourHeight: chain.getHeight(), peerHeight: effectivePeerHeight }, 'Peer chain not longer — no reorg')
-      this.forkResolutionInProgress = false
-      return
+
+    if (peer.remoteCumulativeWork > 0n) {
+      // Use cumulative work comparison (more accurate)
+      if (peer.remoteCumulativeWork <= chain.cumulativeWork) {
+        log.info({ component: 'p2p', peer: peer.id, ourWork: chain.cumulativeWork.toString(16).slice(0, 16), peerWork: peer.remoteCumulativeWork.toString(16).slice(0, 16) }, 'Peer chain has less work — no reorg')
+        this.clearForkResolution()
+        return
+      }
+    } else {
+      // Legacy: fall back to height comparison
+      if (effectivePeerHeight <= chain.getHeight()) {
+        log.info({ component: 'p2p', peer: peer.id, ourHeight: chain.getHeight(), peerHeight: effectivePeerHeight }, 'Peer chain not longer — no reorg')
+        this.clearForkResolution()
+        return
+      }
     }
 
     // Perform reorg
-    log.warn({ component: 'p2p', peer: peer.id, forkPoint, ourHeight: chain.getHeight(), peerHeight: effectivePeerHeight }, 'Reorging to longer chain')
+    log.warn({ component: 'p2p', peer: peer.id, forkPoint, ourHeight: chain.getHeight(), peerHeight: effectivePeerHeight, peerWork: peer.remoteCumulativeWork.toString(16).slice(0, 16) }, 'Reorging to chain with more work')
     this.node.resetToHeight(forkPoint)
 
     // Clear seen blocks cache since we've rewound
@@ -745,7 +844,7 @@ export class P2PServer {
       this.addSeen(this.seenBlocks, b.hash)
     }
 
-    this.forkResolutionInProgress = false
+    this.clearForkResolution()
 
     // Request blocks from the fork point
     this.sendGetBlocks(peer, forkPoint + 1)
@@ -843,6 +942,13 @@ export class P2PServer {
       return
     }
 
+    // Rate limit: max 1 getaddr response per peer per 60 seconds
+    const now = Date.now()
+    if (now - peer.lastGetaddrResponse < 60_000) {
+      return // silently ignore
+    }
+    peer.lastGetaddrResponse = now
+
     // Respond with up to MAX_ADDR_RESPONSE random known addresses
     const all = Array.from(this.knownAddresses.values())
     // Shuffle and take up to limit
@@ -871,6 +977,9 @@ export class P2PServer {
   }
 
   private addKnownAddress(host: string, port: number, lastSeen?: number): void {
+    // Filter private IPs unless in local mode
+    if (!this.localMode && !isRoutableAddress(host)) return
+
     const key = `${host}:${port}`
     const existing = this.knownAddresses.get(key)
     const now = lastSeen ?? Date.now()
@@ -909,9 +1018,74 @@ export class P2PServer {
     }, DISCOVERY_INTERVAL_MS)
   }
 
+  /** Enable local mode — allows private IPs in address book */
+  setLocalMode(enabled: boolean): void {
+    this.localMode = enabled
+  }
+
   /** Get the known address book (for testing) */
   getKnownAddresses(): Map<string, { host: string; port: number; lastSeen: number }> {
     return this.knownAddresses
+  }
+
+  /** Add a block to the orphan pool */
+  private addOrphan(block: Block): void {
+    // Expire old orphans first
+    this.expireOrphans()
+
+    if (this.orphanBlocks.size >= MAX_ORPHAN_BLOCKS) {
+      // Evict oldest orphan
+      let oldestKey = ''
+      let oldestTime = Infinity
+      for (const [key, orphan] of this.orphanBlocks) {
+        if (orphan.receivedAt < oldestTime) {
+          oldestTime = orphan.receivedAt
+          oldestKey = key
+        }
+      }
+      if (oldestKey) this.orphanBlocks.delete(oldestKey)
+    }
+
+    const parentHash = block.header.previousHash
+    if (!this.orphanBlocks.has(parentHash)) {
+      this.orphanBlocks.set(parentHash, { block, receivedAt: Date.now() })
+      log.debug({ component: 'p2p', hash: block.hash.slice(0, 16), parent: parentHash.slice(0, 16) }, 'Cached orphan block')
+    }
+  }
+
+  /** Try to connect orphan blocks after a new block was accepted */
+  private processOrphans(parentHash: string): number {
+    let added = 0
+    let currentHash = parentHash
+
+    while (this.orphanBlocks.has(currentHash)) {
+      const orphan = this.orphanBlocks.get(currentHash)!
+      this.orphanBlocks.delete(currentHash)
+
+      const result = this.node.receiveBlock(orphan.block)
+      if (result.success) {
+        this.addSeen(this.seenBlocks, orphan.block.hash)
+        added++
+        currentHash = orphan.block.hash
+      } else {
+        break
+      }
+    }
+
+    if (added > 0) {
+      log.info({ component: 'p2p', connected: added }, 'Connected orphan blocks')
+    }
+    return added
+  }
+
+  /** Remove expired orphan blocks */
+  private expireOrphans(): void {
+    const cutoff = Date.now() - ORPHAN_EXPIRY_MS
+    for (const [key, orphan] of this.orphanBlocks) {
+      if (orphan.receivedAt < cutoff) {
+        this.orphanBlocks.delete(key)
+      }
+    }
   }
 
   private saveBanList(): void {

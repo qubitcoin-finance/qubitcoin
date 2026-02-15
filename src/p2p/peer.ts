@@ -40,8 +40,11 @@ export class Peer {
   remoteHeight = 0
   remoteGenesisHash = ''
   remoteListenPort = 0
+  remoteCumulativeWork = 0n
+  lastGetaddrResponse = 0
 
   private misbehaviorScore = 0
+  private lastMisbehaviorDecay: number = Date.now()
   private tokens: number = RATE_LIMIT_MAX
   private lastTokenRefill: number = Date.now()
   private handshakeTimer: ReturnType<typeof setTimeout> | null = null
@@ -98,6 +101,8 @@ export class Peer {
   }
 
   addMisbehavior(score: number): void {
+    // Decay: reduce by 1 point per minute of good behavior since last check
+    this.decayMisbehavior()
     this.misbehaviorScore += score
     if (this.misbehaviorScore >= MISBEHAVIOR_THRESHOLD) {
       // Send reject before disconnecting so peer knows why
@@ -107,7 +112,18 @@ export class Peer {
   }
 
   getMisbehaviorScore(): number {
+    this.decayMisbehavior()
     return this.misbehaviorScore
+  }
+
+  /** Decay misbehavior score by 1 point per minute of good behavior */
+  private decayMisbehavior(): void {
+    const now = Date.now()
+    const elapsedMinutes = (now - this.lastMisbehaviorDecay) / 60_000
+    if (elapsedMinutes >= 1) {
+      this.misbehaviorScore = Math.max(0, this.misbehaviorScore - Math.floor(elapsedMinutes))
+      this.lastMisbehaviorDecay = now
+    }
   }
 
   completeHandshake(): void {

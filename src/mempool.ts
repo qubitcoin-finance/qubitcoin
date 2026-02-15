@@ -14,6 +14,13 @@ import { transactionSize } from './block.js'
 /** Maximum mempool size in bytes (50 MB) */
 export const MAX_MEMPOOL_BYTES = 50 * 1024 * 1024
 
+/**
+ * Minimum relay fee rate (satoshis per kilobyte).
+ * ML-DSA-65 txs are ~5 KB, so 1 sat/KB means min fee ≈ 5 sat per tx.
+ * Prevents zero-fee spam while remaining accessible.
+ */
+export const MIN_RELAY_FEE_PER_KB = 1
+
 export class Mempool {
   private transactions: Map<string, Transaction> = new Map()
   private claimedUTXOs: Set<string> = new Set()
@@ -64,6 +71,13 @@ export class Mempool {
     const result = validateTransaction(tx, utxoSet, currentHeight)
     if (!result.valid) {
       return { success: false, error: result.error }
+    }
+
+    // Enforce minimum relay fee (fee rate in sat/KB)
+    const fee = calculateFee(tx, utxoSet)
+    const feeRatePerKB = (fee / txSize) * 1000
+    if (feeRatePerKB < MIN_RELAY_FEE_PER_KB) {
+      return { success: false, error: `Fee rate ${feeRatePerKB.toFixed(0)} sat/KB below minimum ${MIN_RELAY_FEE_PER_KB}` }
     }
 
     // Check for double-spend with other mempool transactions

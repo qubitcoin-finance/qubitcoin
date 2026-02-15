@@ -12,6 +12,9 @@
  *     Read intermediate NDJSON → aggregate by address → merkle root → final snapshot
  *
  * Usage:
+ *   # Dump UTXO set from Bitcoin Core + full pipeline:
+ *   pnpm run dump-and-convert
+ *
  *   # Full pipeline with defaults (extract + aggregate):
  *   pnpm run convert-snapshot
  *
@@ -31,7 +34,7 @@ import {
   createWriteStream, createReadStream,
   openSync, closeSync, fdatasyncSync, writeSync,
   writeFileSync, readFileSync, renameSync, unlinkSync,
-  existsSync, statSync, truncateSync,
+  existsSync, statSync, truncateSync, readdirSync,
 } from 'node:fs'
 import { mkdir, readFile, rm } from 'node:fs/promises'
 import { createInterface } from 'node:readline'
@@ -44,6 +47,125 @@ import { execFileSync } from 'node:child_process'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesToHex } from '@noble/hashes/utils.js'
 import type { BtcAddressBalance } from '../snapshot.js'
+
+// --- Known block heights (binary dump doesn't include height) ---
+
+const KNOWN_BLOCK_HEIGHTS: Record<string, number> = {
+  '3aafae11a317cdd4fa7802ad577e741501e1fa0e970101000000000000000000': 935_941,
+}
+
+// --- Bitcoin Core RPC (for --dump) ---
+
+function findCookiePath(): string {
+  const platform = process.platform
+  if (platform === 'darwin') {
+    return join(HOME, 'Library', 'Application Support', 'Bitcoin', '.cookie')
+  }
+  // Linux: ~/.bitcoin/.cookie
+  return join(HOME, '.bitcoin', '.cookie')
+}
+
+async function dumpUtxoSet(outputPath: string): Promise<{ height: number; hash: string; timestamp: number } | null> {
+  const cookiePath = findCookiePath()
+  if (!existsSync(cookiePath)) {
+    console.error(`ERROR: Bitcoin Core cookie not found at ${cookiePath}`)
+    console.error('  Is bitcoind running?')
+    process.exit(1)
+  }
+
+  const cookie = readFileSync(cookiePath, 'utf8').trim()
+  const rpcUrl = 'http://127.0.0.1:8332/'
+
+  // Get current block height for logging
+  console.log('Connecting to Bitcoin Core RPC...')
+  const infoRes = await fetch(rpcUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain',
+      'Authorization': 'Basic ' + Buffer.from(cookie).toString('base64'),
+    },
+    body: JSON.stringify({ jsonrpc: '1.0', method: 'getblockchaininfo', params: [] }),
+  })
+  const info = (await infoRes.json()) as { result?: { blocks: number; initialblockdownload: boolean } }
+  if (!info.result) {
+    console.error('ERROR: Could not connect to Bitcoin Core RPC')
+    process.exit(1)
+  }
+  if (info.result.initialblockdownload) {
+    console.error('ERROR: Bitcoin Core is still syncing (initial block download in progress)')
+    process.exit(1)
+  }
+  console.log(`  Block height: ${info.result.blocks.toLocaleString()}`)
+  // Remove existing dump file (Bitcoin Core refuses to overwrite)
+  if (existsSync(outputPath)) {
+    console.log(`  Removing existing ${outputPath}`)
+    unlinkSync(outputPath)
+  }
+
+  console.log(`  Dumping UTXO set to ${outputPath}...`)
+  console.log('  (this may take 10-30 minutes)')
+  console.log()
+
+  const dumpRes = await fetch(rpcUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain',
+      'Authorization': 'Basic ' + Buffer.from(cookie).toString('base64'),
+    },
+    body: JSON.stringify({ jsonrpc: '1.0', method: 'dumptxoutset', params: [outputPath, 'latest'] }),
+  })
+  const dumpResult = (await dumpRes.json()) as { result?: { coins_written: number; base_height: number; base_hash: string }; error?: { message: string } }
+  if (dumpResult.error) {
+    console.error(`ERROR: dumptxoutset failed: ${dumpResult.error.message}`)
+    process.exit(1)
+  }
+  if (dumpResult.result) {
+    const { base_height, base_hash, coins_written } = dumpResult.result
+    console.log(`  UTXO dump complete:`)
+    console.log(`    Coins written: ${coins_written.toLocaleString()}`)
+    console.log(`    Block height:  ${base_height.toLocaleString()}`)
+    console.log(`    Block hash:    ${base_hash}`)
+
+    // Fetch block timestamp
+    let timestamp = 0
+    try {
+      const headerRes = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain',
+          'Authorization': 'Basic ' + Buffer.from(cookie).toString('base64'),
+        },
+        body: JSON.stringify({ jsonrpc: '1.0', method: 'getblockheader', params: [base_hash] }),
+      })
+      const headerResult = (await headerRes.json()) as { result?: { time: number } }
+      if (headerResult.result) {
+        timestamp = headerResult.result.time
+        console.log(`    Timestamp:     ${new Date(timestamp * 1000).toISOString()}`)
+      }
+    } catch { /* non-critical */ }
+
+    console.log()
+    return { height: base_height, hash: base_hash, timestamp }
+  }
+  return null
+}
+
+// --- Auto-detect next snapshot version ---
+
+function detectNextVersion(dir: string): string {
+  let max = 0
+  try {
+    const files = readdirSync(dir)
+    for (const f of files) {
+      const m = f.match(/qtc-snapshot-v(\d+)\.jsonl/)
+      if (m) {
+        const n = parseInt(m[1], 10)
+        if (n > max) max = n
+      }
+    }
+  } catch { /* dir doesn't exist */ }
+  return `v${max + 1}`
+}
 
 // --- Types ---
 
@@ -62,7 +184,7 @@ const DEFAULT_OUTPUT = join(HOME, `qbtc-snapshot-${new Date().toISOString().slic
 
 interface ExtractArgs { command: 'extract'; input: string; workdir: string }
 interface AggregateArgs { command: 'aggregate'; workdir: string; output: string; gzip: boolean; force: boolean; postfix: string }
-interface FullArgs { command: 'full'; input: string; workdir: string; output: string; gzip: boolean; force: boolean; postfix: string }
+interface FullArgs { command: 'full'; input: string; workdir: string; output: string; gzip: boolean; force: boolean; postfix: string; dump: boolean }
 
 type Args = ExtractArgs | AggregateArgs | FullArgs
 
@@ -77,6 +199,7 @@ function parseArgs(): Args {
   let postfix = ''
   let gzip = false
   let force = false
+  let dump = false
 
   // Find subcommand (first arg that isn't a flag)
   let subcommand = ''
@@ -90,6 +213,7 @@ function parseArgs(): Args {
     else if (args[i] === '--postfix' && args[i + 1]) postfix = args[++i]
     else if (args[i] === '--gzip') gzip = true
     else if (args[i] === '--force') force = true
+    else if (args[i] === '--dump') dump = true
   }
 
   if (subcommand === 'extract') {
@@ -99,15 +223,26 @@ function parseArgs(): Args {
     return { command: 'aggregate', workdir: workdir || DEFAULT_WORKDIR, output: output || DEFAULT_OUTPUT, gzip, force, postfix }
   }
 
-  // Default: full pipeline (extract + aggregate)
+  // Auto-detect next version when --dump is used without explicit --postfix
+  if (dump && !postfix) {
+    postfix = detectNextVersion(HOME)
+  }
+
+  // Default output includes postfix: ~/qtc-snapshot-v10.jsonl
+  const effectiveOutput = output || (postfix
+    ? join(HOME, `qtc-snapshot-${postfix}.jsonl`)
+    : DEFAULT_OUTPUT)
+
+  // Default: full pipeline (dump? + extract + aggregate)
   return {
     command: 'full',
     input: input || DEFAULT_INPUT,
     workdir: workdir || DEFAULT_WORKDIR,
-    output: output || DEFAULT_OUTPUT,
+    output: effectiveOutput,
     gzip,
     force,
     postfix,
+    dump,
   }
 }
 
@@ -134,7 +269,7 @@ function writeCheckpointAtomic(workdir: string, cp: Checkpoint) {
 
 // --- Phase 1: Extract ---
 
-async function runExtract(input: string, workdir: string) {
+async function runExtract(input: string, workdir: string, knownHeight?: number, knownTimestamp?: number) {
   const startTime = Date.now()
 
   // Ensure workdir exists
@@ -184,6 +319,8 @@ async function runExtract(input: string, workdir: string) {
   const metaPath = join(workdir, 'header.json')
   writeFileSync(metaPath, JSON.stringify({
     blockHash: header.blockHash,
+    blockHeight: knownHeight || KNOWN_BLOCK_HEIGHTS[header.blockHash] || 0,
+    ...(knownTimestamp ? { blockTimestamp: knownTimestamp } : {}),
     coinCount: header.coinCount.toString(),
   }) + '\n')
 
@@ -480,9 +617,11 @@ async function finalizeSnapshot(workdir: string, output: string, gzip: boolean, 
   // Load metadata
   const balancesMeta = JSON.parse(readFileSync(balancesMetaPath, 'utf8'))
   let blockHash = ''
+  let blockHeight = 0
   if (existsSync(metaPath)) {
     const headerMeta = JSON.parse(await readFile(metaPath, 'utf8'))
     blockHash = headerMeta.blockHash
+    blockHeight = headerMeta.blockHeight || KNOWN_BLOCK_HEIGHTS[blockHash] || 0
   }
 
   // Streaming merkle root: hash entries incrementally (constant memory)
@@ -520,7 +659,7 @@ async function finalizeSnapshot(workdir: string, output: string, gzip: boolean, 
   }
 
   const headerLine = JSON.stringify({
-    height: 0,
+    height: blockHeight,
     hash: blockHash,
     ...(blockTimestamp ? { timestamp: blockTimestamp } : {}),
     count: Number(balancesMeta.addressCount),
@@ -609,13 +748,23 @@ async function main() {
       break
     case 'full': {
       guardOutputExists(args.output, args.force)
+      let dumpHeight = 0
+      let dumpTimestamp = 0
+      if (args.dump) {
+        console.log('Phase 0: Dumping UTXO set from Bitcoin Core...\n')
+        const dumpResult = await dumpUtxoSet(args.input)
+        if (dumpResult) {
+          dumpHeight = dumpResult.height
+          dumpTimestamp = dumpResult.timestamp
+        }
+      }
       console.log('Running full pipeline (extract + aggregate)...')
       console.log(`  Input:   ${args.input}`)
       console.log(`  Workdir: ${args.workdir}`)
       console.log(`  Output:  ${args.output}`)
       if (args.postfix) console.log(`  Postfix: ${args.postfix}`)
       console.log()
-      await runExtract(args.input, args.workdir)
+      await runExtract(args.input, args.workdir, dumpHeight || undefined, dumpTimestamp || undefined)
       console.log()
       await runAggregate(args.workdir, args.output, args.gzip, args.postfix)
       break

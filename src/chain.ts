@@ -14,6 +14,7 @@ import {
   computeBlockHash,
   computeMerkleRoot,
   hashMeetsTarget,
+  blockWork,
   DIFFICULTY_ADJUSTMENT_INTERVAL,
   TARGET_BLOCK_TIME_MS,
   STARTING_DIFFICULTY,
@@ -26,6 +27,7 @@ export interface BlockUndo {
   createdUtxoKeys: string[]                         // UTXOs created by outputs — remove on disconnect
   claimedAddresses: string[]                        // BTC addresses claimed — unclaim on disconnect
   previousDifficulty: string                        // difficulty before this block — restore on disconnect
+  blockWork: bigint                                 // work contributed by this block — subtract on disconnect
 }
 
 export class Blockchain {
@@ -42,6 +44,7 @@ export class Blockchain {
   private snapshotTotalAmount = 0
   private claimedCount = 0
   private claimedAmount = 0
+  cumulativeWork: bigint = 0n
 
   constructor(snapshot?: BtcSnapshot, storage?: BlockStorage) {
     this.storage = storage ?? null
@@ -59,9 +62,11 @@ export class Blockchain {
       if (persisted.length > 0) {
         // Replay persisted blocks (genesis is first)
         this.blocks.push(persisted[0]) // genesis
+        this.cumulativeWork = blockWork(persisted[0].header.target)
         for (let i = 1; i < persisted.length; i++) {
           this.undoData.push(this.applyBlock(persisted[i]))
           this.blocks.push(persisted[i])
+          this.cumulativeWork += blockWork(persisted[i].header.target)
           if (this.blocks.length % DIFFICULTY_ADJUSTMENT_INTERVAL === 0) {
             this.difficulty = this.adjustDifficulty()
           }
@@ -92,6 +97,8 @@ export class Blockchain {
       }
     }
     // Genesis coinbase goes to burn address - don't add to UTXO set
+    // Initialize cumulative work from genesis block
+    this.cumulativeWork = blockWork(this.blocks[0].header.target)
   }
 
   /** Replace genesis block with one received from a peer (fresh node without snapshot only) */
@@ -146,6 +153,9 @@ export class Blockchain {
 
     // Apply UTXO changes and record undo data
     this.undoData.push(this.applyBlock(block))
+
+    // Track cumulative work
+    this.cumulativeWork += blockWork(block.header.target)
 
     // Append to chain
     this.blocks.push(block)
@@ -411,9 +421,11 @@ export class Blockchain {
       this.claimedCount = 0
       this.claimedAmount = 0
       this.difficulty = STARTING_DIFFICULTY
+      this.cumulativeWork = blockWork(this.blocks[0].header.target)
 
       for (let i = 1; i <= targetHeight; i++) {
         this.undoData.push(this.applyBlock(this.blocks[i]))
+        this.cumulativeWork += blockWork(this.blocks[i].header.target)
         if ((i + 1) % DIFFICULTY_ADJUSTMENT_INTERVAL === 0) {
           this.difficulty = this.adjustDifficulty()
         }
@@ -473,6 +485,7 @@ export class Blockchain {
       createdUtxoKeys: [],
       claimedAddresses: [],
       previousDifficulty: this.difficulty,
+      blockWork: blockWork(block.header.target),
     }
 
     for (const tx of block.transactions) {
@@ -569,5 +582,7 @@ export class Blockchain {
     }
     // Restore difficulty
     this.difficulty = undo.previousDifficulty
+    // Subtract work
+    this.cumulativeWork -= undo.blockWork
   }
 }

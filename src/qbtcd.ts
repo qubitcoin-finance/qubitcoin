@@ -187,6 +187,7 @@ async function main() {
 
   // Start P2P
   const p2p = new P2PServer(node, config.p2pPort, config.dataDir)
+  if (config.local) p2p.setLocalMode(true)
   await p2p.start()
 
   // Connect to seeds

@@ -12,7 +12,11 @@ import { createMockSnapshot } from '../snapshot.js'
 import { createClaimTransaction } from '../claim.js'
 import { walletA, walletB, walletC } from './fixtures.js'
 
-function makeUtxoSet(wallet: ReturnType<typeof generateWallet>, amount = 100): Map<string, UTXO> {
+// ML-DSA-65 txs are ~5KB, so we need fee >= ~5 to meet 1000 sat/KB minimum
+const DEFAULT_FEE = 10
+const DEFAULT_AMOUNT = 10000
+
+function makeUtxoSet(wallet: ReturnType<typeof generateWallet>, amount = DEFAULT_AMOUNT): Map<string, UTXO> {
   const utxoSet = new Map<string, UTXO>()
   const txId = 'a'.repeat(64)
   utxoSet.set(utxoKey(txId, 0), {
@@ -32,9 +36,9 @@ describe('Mempool', () => {
 
     const tx = createTransaction(
       wallet,
-      [{ txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: 100 }],
+      [{ txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: DEFAULT_AMOUNT }],
       [{ address: 'b'.repeat(64), amount: 50 }],
-      1
+      DEFAULT_FEE
     )
 
     const result = mempool.addTransaction(tx, utxoSet)
@@ -49,9 +53,9 @@ describe('Mempool', () => {
 
     const tx = createTransaction(
       wallet,
-      [{ txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: 100 }],
+      [{ txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: DEFAULT_AMOUNT }],
       [{ address: 'b'.repeat(64), amount: 50 }],
-      1
+      DEFAULT_FEE
     )
 
     mempool.addTransaction(tx, utxoSet)
@@ -67,17 +71,17 @@ describe('Mempool', () => {
 
     const tx1 = createTransaction(
       wallet,
-      [{ txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: 100 }],
+      [{ txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: DEFAULT_AMOUNT }],
       [{ address: 'b'.repeat(64), amount: 50 }],
-      1
+      DEFAULT_FEE
     )
     mempool.addTransaction(tx1, utxoSet)
 
     const tx2 = createTransaction(
       wallet,
-      [{ txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: 100 }],
+      [{ txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: DEFAULT_AMOUNT }],
       [{ address: 'c'.repeat(64), amount: 40 }],
-      1
+      DEFAULT_FEE
     )
     const result = mempool.addTransaction(tx2, utxoSet)
     expect(result.success).toBe(false)
@@ -96,14 +100,14 @@ describe('Mempool', () => {
         txId,
         outputIndex: 0,
         address: wallet.address,
-        amount: 100,
+        amount: DEFAULT_AMOUNT,
       })
 
       const tx = createTransaction(
         wallet,
-        [{ txId, outputIndex: 0, address: wallet.address, amount: 100 }],
+        [{ txId, outputIndex: 0, address: wallet.address, amount: DEFAULT_AMOUNT }],
         [{ address: 'b'.repeat(64), amount: 50 }],
-        1
+        DEFAULT_FEE
       )
       mempool.addTransaction(tx, utxoSet)
     }
@@ -118,9 +122,9 @@ describe('Mempool', () => {
 
     const tx = createTransaction(
       wallet,
-      [{ txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: 100 }],
+      [{ txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: DEFAULT_AMOUNT }],
       [{ address: 'b'.repeat(64), amount: 50 }],
-      1
+      DEFAULT_FEE
     )
     mempool.addTransaction(tx, utxoSet)
     expect(mempool.size()).toBe(1)
@@ -131,9 +135,9 @@ describe('Mempool', () => {
     // Can now add a tx spending the same UTXO
     const tx2 = createTransaction(
       wallet,
-      [{ txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: 100 }],
+      [{ txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: DEFAULT_AMOUNT }],
       [{ address: 'c'.repeat(64), amount: 40 }],
-      1
+      DEFAULT_FEE
     )
     const result = mempool.addTransaction(tx2, utxoSet)
     expect(result.success).toBe(true)

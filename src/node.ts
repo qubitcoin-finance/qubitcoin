@@ -177,6 +177,7 @@ export class Node {
       blockReward: blockSubsidy(height + 1),
       totalTxs,
       hashrate,
+      cumulativeWork: this.chain.cumulativeWork.toString(16),
     }
   }
 }
