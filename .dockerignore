@@ -1,0 +1,16 @@
+.git
+node_modules
+data/
+website/
+dist/
+ansible/
+docs/
+*.md
+!package.json
+!tsconfig.json
+src/__tests__/
+src/tools/parse-utxoset.ts
+src/tools/convert-snapshot.ts
+.github/
+.vscode/
+.env*

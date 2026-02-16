@@ -98,7 +98,7 @@ function deserializeTransaction(raw: Record<string, unknown>): Transaction {
   return tx;
 }
 
-export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer) {
+export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, bindAddress: string = '127.0.0.1') {
   const app = express();
   app.use(cors());
   app.use(express.json({ limit: MAX_BODY_SIZE }));
@@ -259,8 +259,8 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer) 
     }
   });
 
-  app.listen(port, '127.0.0.1', () => {
-    log.info({ component: 'rpc', port, url: `http://127.0.0.1:${port}` }, 'RPC server listening');
+  app.listen(port, bindAddress, () => {
+    log.info({ component: 'rpc', port, bind: bindAddress, url: `http://${bindAddress}:${port}` }, 'RPC server listening');
   });
 
   return app;

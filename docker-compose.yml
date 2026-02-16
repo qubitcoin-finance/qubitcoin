@@ -1,0 +1,13 @@
+services:
+  qbtcd:
+    build: .
+    image: qubitcoin/qbtcd
+    ports:
+      - "3001:3001"
+      - "6001:6001"
+    volumes:
+      - qbtc-data:/data
+    restart: unless-stopped
+
+volumes:
+  qbtc-data:
