@@ -250,10 +250,12 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
     res.json(history);
   });
 
-  // Endpoint to get connected peers
+  // Endpoint to get connected peers (filter localhost from public API)
   app.get('/api/v1/peers', (req, res) => {
     if (p2pServer) {
-      res.json(p2pServer.getPeers());
+      const isLocal = (addr: string) =>
+        addr.includes('127.0.0.1') || addr.includes('::1') || addr.includes('localhost')
+      res.json(p2pServer.getPeers().filter((p) => !isLocal(p.address)));
     } else {
       res.json([]);
     }

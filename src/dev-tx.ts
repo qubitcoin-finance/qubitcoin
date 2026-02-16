@@ -86,19 +86,28 @@ async function main() {
       }
 
       // Split into multiple small outputs to random recipients
-      const numOutputs = Math.min(Math.floor(available / 0.00001), 5)
+      const numOutputs = Math.min(Math.floor(available / 0.001), 5)
       if (numOutputs < 1) {
         pendingSpent.add(`${utxo.txId}:${utxo.outputIndex}`)
         return
       }
 
+      // Budget: spend at most 2% of available, rest goes back as change
+      const budget = available * 0.02
+      const perOutput = Math.round((budget / numOutputs) * 100000) / 100000
+
       const outputs: Array<{ address: string; amount: number }> = []
       for (let i = 0; i < numOutputs; i++) {
         const recipient = recipients[recipientIdx % recipients.length]
         recipientIdx++
-        // Random amount: 0.00001 – 0.5 QBTC
-        const amount = Math.round((Math.random() * 0.49999 + 0.00001) * 100000) / 100000
+        // Small random amount around perOutput (±50%)
+        const amount = Math.round(perOutput * (0.5 + Math.random()) * 100000) / 100000
+        if (amount < 0.00001) continue
         outputs.push({ address: recipient.address, amount })
+      }
+      if (outputs.length === 0) {
+        pendingSpent.add(`${utxo.txId}:${utxo.outputIndex}`)
+        return
       }
 
       const tx = createTransaction(wallet, [utxo], outputs, fee)
