@@ -49,16 +49,12 @@ coverage-integration/
 .env.development.local
 .env.test.local
 .env.production.local
-apps/netrunner/.env
-apps/netrunner/config.secret.yaml
 
 # Misc
 .DS_Store
 *.pem
 *.log
 pnpm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 
 # IDE
 .vscode/
@@ -74,23 +70,8 @@ cache/
 html/
 md/
 
-# Test reports
-playwright-report/
-
 # Backups
 **/backups/
-
-# Avatar images (uploaded to IPFS, not needed in repo)
-public/avatars/
-LOCAL.md
-apps/netrunner/instance-state.json
-apps/netrunner/logs/
-apps/netrunner/debug/
-apps/netrunner/.browser-data/
-scripts/logs/
-logs/
-.next-prod
-apps/netrunner/instance-state.json
 
 # Ansible local inventory
 ansible/inventory.local.yml
