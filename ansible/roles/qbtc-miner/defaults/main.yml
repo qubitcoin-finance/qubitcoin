@@ -1,0 +1,11 @@
+---
+qbtc_user: qbtc
+qbtc_repo: https://github.com/qubitcoin-finance/qubitcoin.git
+qbtc_branch: main
+qbtc_p2p_port: 6001
+qbtc_rpc_port: 3001
+qbtc_node_name: qbtc-miner
+qbtc_message: ""
+qbtc_max_old_space_size: 12288
+qbtc_min_ram_mb: 16000
+node_major_version: 22

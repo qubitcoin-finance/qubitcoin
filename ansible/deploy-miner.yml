@@ -1,0 +1,6 @@
+---
+- name: Deploy QBTC mining node
+  hosts: all
+  gather_facts: true
+  roles:
+    - qbtc-miner

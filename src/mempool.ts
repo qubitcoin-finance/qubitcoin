@@ -15,11 +15,12 @@ import { transactionSize } from './block.js'
 export const MAX_MEMPOOL_BYTES = 50 * 1024 * 1024
 
 /**
- * Minimum relay fee rate (satoshis per kilobyte).
- * ML-DSA-65 txs are ~5 KB, so 1 sat/KB means min fee ≈ 5 sat per tx.
+ * Minimum relay fee rate (QBTC per kilobyte).
+ * ML-DSA-65 txs are ~5 KB, so 0.00000001/KB means min fee ≈ 0.00000005 per tx.
  * Prevents zero-fee spam while remaining accessible.
+ * (1 satoshi = 0.00000001 QBTC)
  */
-export const MIN_RELAY_FEE_PER_KB = 1
+export const MIN_RELAY_FEE_PER_KB = 0.00000001
 
 export class Mempool {
   private transactions: Map<string, Transaction> = new Map()
@@ -77,7 +78,7 @@ export class Mempool {
     const fee = calculateFee(tx, utxoSet)
     const feeRatePerKB = (fee / txSize) * 1000
     if (feeRatePerKB < MIN_RELAY_FEE_PER_KB) {
-      return { success: false, error: `Fee rate ${feeRatePerKB.toFixed(0)} sat/KB below minimum ${MIN_RELAY_FEE_PER_KB}` }
+      return { success: false, error: `Fee rate ${feeRatePerKB} QBTC/KB below minimum ${MIN_RELAY_FEE_PER_KB}` }
     }
 
     // Check for double-spend with other mempool transactions

@@ -92,3 +92,5 @@ logs/
 .next-prod
 apps/netrunner/instance-state.json
 
+# Ansible local inventory
+ansible/inventory.local.yml

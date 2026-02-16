@@ -1,0 +1,93 @@
+---
+# 1. Assert RAM >= 16GB
+- name: Check total RAM
+  assert:
+    that:
+      - ansible_memtotal_mb >= qbtc_min_ram_mb
+    fail_msg: >-
+      This host has {{ ansible_memtotal_mb }}MB RAM but QBTC requires at least
+      {{ qbtc_min_ram_mb }}MB (snapshot loading needs ~9.4GB). Add more RAM or
+      use a larger instance.
+
+# 2. Ensure ~/.local/bin exists and is in PATH
+- name: Ensure ~/.local/bin exists
+  file:
+    path: "{{ ansible_env.HOME }}/.local/bin"
+    state: directory
+    mode: "0755"
+
+- name: Set npm prefix to ~/.local
+  command: npm config set prefix "{{ ansible_env.HOME }}/.local"
+  changed_when: true
+
+- name: Ensure PATH includes ~/.local/bin in bashrc
+  lineinfile:
+    path: "{{ ansible_env.HOME }}/.bashrc"
+    line: 'export PATH="$HOME/.local/bin:$PATH"'
+    state: present
+
+# 3. Enable corepack (Node v24+ manages pnpm via corepack)
+- name: Enable corepack
+  command: corepack enable
+  changed_when: true
+
+- name: Prepare pnpm via corepack
+  shell: "COREPACK_ENABLE_AUTO_PIN=0 corepack prepare pnpm@latest --activate"
+  changed_when: true
+
+# 4. Install pm2 (skip if already installed)
+- name: Check if pm2 is installed
+  shell: "which pm2 || test -x $HOME/.local/bin/pm2"
+  register: pm2_check
+  changed_when: false
+  failed_when: false
+
+- name: Install pm2
+  command: npm install -g pm2
+  when: pm2_check.rc != 0
+
+# 5. Clone or pull repo
+- name: Clone QBTC repository
+  git:
+    repo: "{{ qbtc_repo }}"
+    dest: "{{ ansible_env.HOME }}/qubitcoin"
+    version: "{{ qbtc_branch }}"
+    force: true
+
+# 6. pnpm install
+- name: Install project dependencies
+  shell: "export PATH=$HOME/.local/bin:$PATH && cd {{ ansible_env.HOME }}/qubitcoin && pnpm install --frozen-lockfile"
+  changed_when: true
+
+# 6. Template PM2 ecosystem config
+- name: Template PM2 ecosystem config
+  template:
+    src: ecosystem.config.cjs.j2
+    dest: "{{ ansible_env.HOME }}/qubitcoin/ecosystem.config.cjs"
+    mode: "0644"
+
+# 7. Start or restart with PM2
+- name: Start or restart QBTC node via PM2
+  shell: "export PATH=$HOME/.local/bin:$PATH && cd {{ ansible_env.HOME }}/qubitcoin && pm2 startOrRestart ecosystem.config.cjs"
+  changed_when: true
+
+# 8. PM2 save and startup
+- name: Save PM2 process list
+  shell: "export PATH=$HOME/.local/bin:$PATH && pm2 save"
+  changed_when: true
+
+# 9. Wait for node to come up (snapshot download + genesis can take ~10 min)
+- name: Wait for QBTC node RPC to respond
+  uri:
+    url: "http://127.0.0.1:{{ qbtc_rpc_port }}/api/v1/status"
+    method: GET
+    return_content: true
+  register: node_status
+  until: node_status.status == 200
+  retries: 60
+  delay: 10
+  changed_when: false
+
+- name: Display node status
+  debug:
+    var: node_status.json
