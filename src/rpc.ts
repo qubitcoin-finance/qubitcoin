@@ -179,8 +179,8 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer) 
 
   // Endpoint to get mempool transactions (lightweight: no signatures/publicKeys, includes sender)
   app.get('/api/v1/mempool/txs', (req, res) => {
-    const limit = Math.min(parseInt(req.query.limit as string, 10) || Infinity, 1000);
-    const txs = node.mempool.getTransactionsForBlock(limit);
+    const limit = Math.min(parseInt(req.query.limit as string, 10) || 1000, 1000);
+    const txs = node.mempool.getTransactionsForBlock().slice(0, limit);
     const summaries = txs.map(tx => {
       const isCoinbase = tx.inputs.length === 1 && tx.inputs[0].txId === COINBASE_TXID;
       const isClaim = isClaimTransaction(tx);

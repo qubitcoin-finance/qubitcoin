@@ -115,6 +115,24 @@ describe('Mempool', () => {
     expect(mempool.getTransactionsForBlock().length).toBe(3)
   })
 
+  it('getTransactionsForBlock called without args does not throw', () => {
+    const mempool = new Mempool()
+    const wallet = walletA
+    const utxoSet = makeUtxoSet(wallet)
+
+    const tx = createTransaction(
+      wallet,
+      [{ txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: DEFAULT_AMOUNT }],
+      [{ address: 'b'.repeat(64), amount: 50 }],
+      DEFAULT_FEE
+    )
+    mempool.addTransaction(tx, utxoSet)
+
+    // Must not throw when called without utxoSet (regression: passing a number crashed with "utxoSet.get is not a function")
+    expect(() => mempool.getTransactionsForBlock()).not.toThrow()
+    expect(mempool.getTransactionsForBlock().length).toBe(1)
+  })
+
   it('removeTransactions cleans up claimed UTXOs', () => {
     const mempool = new Mempool()
     const wallet = walletA
