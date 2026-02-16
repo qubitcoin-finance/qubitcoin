@@ -1,0 +1,42 @@
+version: 2
+updates:
+    - package-ecosystem: 'npm'
+      directory: '/'
+      schedule:
+          interval: 'daily'
+      groups:
+          minor-and-patch-production:
+              patterns:
+                  - '*'
+                  - '@*/*'
+              exclude-patterns:
+                  - '@types/*'
+                  - '*vitest*'
+                  - '*testing*'
+                  - 'typescript'
+              update-types:
+                  - 'minor'
+                  - 'patch'
+
+          minor-and-patch-development:
+              patterns:
+                  - '@types/*'
+                  - '*vitest*'
+                  - '*testing*'
+                  - 'typescript'
+              update-types:
+                  - 'minor'
+                  - 'patch'
+
+    - package-ecosystem: 'npm'
+      directory: '/website'
+      schedule:
+          interval: 'daily'
+      groups:
+          minor-and-patch:
+              patterns:
+                  - '*'
+                  - '@*/*'
+              update-types:
+                  - 'minor'
+                  - 'patch'
