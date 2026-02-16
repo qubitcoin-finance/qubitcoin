@@ -1,82 +1,69 @@
 ---
-# 1. Assert RAM >= 16GB
-- name: Check total RAM
-  assert:
-    that:
-      - ansible_memtotal_mb >= qbtc_min_ram_mb
-    fail_msg: >-
-      This host has {{ ansible_memtotal_mb }}MB RAM but QBTC requires at least
-      {{ qbtc_min_ram_mb }}MB (snapshot loading needs ~9.4GB). Add more RAM or
-      use a larger instance.
-
-# 2. Ensure ~/.local/bin exists and is in PATH
-- name: Ensure ~/.local/bin exists
-  file:
-    path: "{{ ansible_env.HOME }}/.local/bin"
-    state: directory
-    mode: "0755"
-
-- name: Set npm prefix to ~/.local
-  command: npm config set prefix "{{ ansible_env.HOME }}/.local"
-  changed_when: true
-
-- name: Ensure PATH includes ~/.local/bin in bashrc
-  lineinfile:
-    path: "{{ ansible_env.HOME }}/.bashrc"
-    line: 'export PATH="$HOME/.local/bin:$PATH"'
+# 1. Install Docker
+- name: Install Docker
+  apt:
+    name: docker.io
     state: present
+    update_cache: true
+  become: true
 
-# 3. Enable corepack (Node v24+ manages pnpm via corepack)
-- name: Enable corepack
-  command: corepack enable
+# 2. Ensure Docker service is running and enabled
+- name: Start and enable Docker service
+  systemd:
+    name: docker
+    state: started
+    enabled: true
+  become: true
+
+# 3. Add user to docker group
+- name: Add {{ qbtc_user }} to docker group
+  user:
+    name: "{{ qbtc_user }}"
+    groups: docker
+    append: true
+  become: true
+
+# 4. Create data directory
+- name: Create data directory
+  file:
+    path: "{{ qbtc_datadir }}"
+    state: directory
+    owner: "{{ qbtc_user }}"
+    group: "{{ qbtc_user }}"
+    mode: "0755"
+  become: true
+
+# 5. Pull latest image
+- name: Pull QBTC Docker image
+  command: docker pull {{ qbtc_image }}
   changed_when: true
 
-- name: Prepare pnpm via corepack
-  shell: "COREPACK_ENABLE_AUTO_PIN=0 corepack prepare pnpm@latest --activate"
-  changed_when: true
-
-# 4. Install pm2 (skip if already installed)
-- name: Check if pm2 is installed
-  shell: "which pm2 || test -x $HOME/.local/bin/pm2"
-  register: pm2_check
-  changed_when: false
+# 6. Stop and remove existing container
+- name: Stop existing container
+  command: docker stop {{ qbtc_node_name }}
   failed_when: false
-
-- name: Install pm2
-  command: npm install -g pm2
-  when: pm2_check.rc != 0
-
-# 5. Clone or pull repo
-- name: Clone QBTC repository
-  git:
-    repo: "{{ qbtc_repo }}"
-    dest: "{{ ansible_env.HOME }}/qubitcoin"
-    version: "{{ qbtc_branch }}"
-    force: true
-
-# 6. pnpm install
-- name: Install project dependencies
-  shell: "export PATH=$HOME/.local/bin:$PATH && cd {{ ansible_env.HOME }}/qubitcoin && pnpm install --frozen-lockfile"
   changed_when: true
 
-# 6. Template PM2 ecosystem config
-- name: Template PM2 ecosystem config
-  template:
-    src: ecosystem.config.cjs.j2
-    dest: "{{ ansible_env.HOME }}/qubitcoin/ecosystem.config.cjs"
-    mode: "0644"
-
-# 7. Start or restart with PM2
-- name: Start or restart QBTC node via PM2
-  shell: "export PATH=$HOME/.local/bin:$PATH && cd {{ ansible_env.HOME }}/qubitcoin && pm2 startOrRestart ecosystem.config.cjs"
+- name: Remove existing container
+  command: docker rm {{ qbtc_node_name }}
+  failed_when: false
   changed_when: true
 
-# 8. PM2 save and startup
-- name: Save PM2 process list
-  shell: "export PATH=$HOME/.local/bin:$PATH && pm2 save"
+# 7. Run container
+- name: Run QBTC node container
+  command: >-
+    docker run -d
+    --name {{ qbtc_node_name }}
+    --restart unless-stopped
+    -p {{ qbtc_rpc_port }}:3001
+    -p {{ qbtc_p2p_port }}:6001
+    -v {{ qbtc_datadir }}:/data
+    {{ qbtc_image }}
+    --mine --full --datadir /data
+    {% if qbtc_message %}--message "{{ qbtc_message }}"{% endif %}
   changed_when: true
 
-# 9. Wait for node to come up (snapshot download + genesis can take ~10 min)
+# 8. Wait for node to come up (snapshot download + genesis can take ~10 min)
 - name: Wait for QBTC node RPC to respond
   uri:
     url: "http://127.0.0.1:{{ qbtc_rpc_port }}/api/v1/status"
@@ -88,6 +75,7 @@
   delay: 10
   changed_when: false
 
+# 9. Display status
 - name: Display node status
   debug:
     var: node_status.json

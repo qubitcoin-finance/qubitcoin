@@ -248,12 +248,14 @@ export class P2PServer {
     })
   }
 
-  getPeers(): Array<{ id: string; address: string; inbound: boolean; height: number }> {
+  getPeers(): Array<{ address: string; inbound: boolean; height: number }> {
+    const isLocal = (addr: string) =>
+      addr.includes('127.0.0.1') || addr.includes('::1') || addr.includes('localhost')
+    const cleanAddr = (addr: string) => addr.replace(/^::ffff:/, '')
     return Array.from(this.peers.values())
-      .filter((p) => p.handshakeComplete)
+      .filter((p) => p.handshakeComplete && !isLocal(p.address))
       .map((p) => ({
-        id: p.id,
-        address: p.address,
+        address: cleanAddr(p.address),
         inbound: p.inbound,
         height: p.remoteHeight,
       }))
