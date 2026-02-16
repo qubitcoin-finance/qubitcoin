@@ -33,8 +33,7 @@
     "deploy:ui": "./scripts/deploy-ui.sh",
     "deploy:backend": "./scripts/deploy-backend.sh",
     "generate-snapshot": "./scripts/generate-snapshot.sh",
-    "snapshot:activate": "./scripts/activate-snapshot.sh",
-    "prepare": "husky"
+    "snapshot:activate": "./scripts/activate-snapshot.sh"
   },
   "keywords": [
     "post-quantum",
