@@ -1,6 +1,6 @@
 all:
   hosts:
     qbtc-q:
-      ansible_host: 5.181.218.91
+      ansible_host: YOUR_SERVER_IP
       ansible_user: qbtc
       qbtc_message: "mined by q"
