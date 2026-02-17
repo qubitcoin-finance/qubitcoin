@@ -65,16 +65,16 @@ export const CLAIM_TXID = 'c'.repeat(64) // sentinel for BTC claim transactions
 export const HALVING_INTERVAL = 210_000
 
 /**
- * Block mining reward.
- * Starts at 3.125 QBTC (matching BTC's current post-4th-halving subsidy)
+ * Block mining reward in satoshis (1 QBTC = 100,000,000 satoshis).
+ * Starts at 3.125 QBTC = 312,500,000 sat (matching BTC's current post-4th-halving subsidy)
  * and halves every 210,000 blocks from there.
  */
-const INITIAL_SUBSIDY = 3.125
+const INITIAL_SUBSIDY = 312_500_000
 
 export function blockSubsidy(height: number): number {
   const halvings = Math.floor(height / HALVING_INTERVAL)
   if (halvings >= 26) return 0
-  return INITIAL_SUBSIDY / Math.pow(2, halvings)
+  return Math.floor(INITIAL_SUBSIDY / Math.pow(2, halvings))
 }
 
 /** UTXO map key */

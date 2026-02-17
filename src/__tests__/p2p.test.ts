@@ -193,13 +193,15 @@ describe('P2P server integration', () => {
 
       await waitFor(() => sp2p1.getPeers().length > 0 && sp2p2.getPeers().length > 0)
 
-      // Create a claim transaction on node1
+      // Create a claim transaction on node1 (must include genesis hash for cross-fork replay protection)
+      const genesisHash = sNode1.chain.blocks[0].hash
       const claimTx = createClaimTransaction(
         holders[0].secretKey,
         holders[0].publicKey,
         snapshot.entries[0],
         walletA,
-        snapshot.btcBlockHash
+        snapshot.btcBlockHash,
+        genesisHash
       )
 
       sNode1.receiveTransaction(claimTx)
@@ -435,13 +437,15 @@ describe('P2P improvements', () => {
 
       await waitFor(() => sp2p1.getPeers().length > 0 && sp2p2.getPeers().length > 0)
 
-      // Create a P2WSH claim tx
+      // Create a P2WSH claim tx (must include genesis hash for cross-fork replay protection)
+      const genesisHash = sNode1.chain.blocks[0].hash
       const claimTx = createP2wshClaimTransaction(
         [p2wshHolder.signerKeys![0].secretKey, p2wshHolder.signerKeys![1].secretKey],
         p2wshHolder.witnessScript!,
         p2wshEntry,
         walletA,
-        snapshot.btcBlockHash
+        snapshot.btcBlockHash,
+        genesisHash
       )
 
       sNode1.receiveTransaction(claimTx)

@@ -77,8 +77,8 @@ async function main() {
 
       // Pick one UTXO to spend
       const utxo = utxos[0]
-      // Random fee: 0.00001 – 0.001 QBTC (varying by 100x)
-      const fee = Math.round((Math.random() * 0.00099 + 0.00001) * 100000) / 100000
+      // Random fee: 5,000 – 99,000 satoshis
+      const fee = 5_000 + Math.floor(Math.random() * 94_000)
       const available = utxo.amount - fee
       if (available <= 0) {
         pendingSpent.add(`${utxo.txId}:${utxo.outputIndex}`)
@@ -86,23 +86,23 @@ async function main() {
       }
 
       // Split into multiple small outputs to random recipients
-      const numOutputs = Math.min(Math.floor(available / 0.001), 5)
+      const numOutputs = Math.min(Math.floor(available / 100_000), 5)
       if (numOutputs < 1) {
         pendingSpent.add(`${utxo.txId}:${utxo.outputIndex}`)
         return
       }
 
       // Budget: spend at most 2% of available, rest goes back as change
-      const budget = available * 0.02
-      const perOutput = Math.round((budget / numOutputs) * 100000) / 100000
+      const budget = Math.floor(available * 0.02)
+      const perOutput = Math.floor(budget / numOutputs)
 
       const outputs: Array<{ address: string; amount: number }> = []
       for (let i = 0; i < numOutputs; i++) {
         const recipient = recipients[recipientIdx % recipients.length]
         recipientIdx++
         // Small random amount around perOutput (±50%)
-        const amount = Math.round(perOutput * (0.5 + Math.random()) * 100000) / 100000
-        if (amount < 0.00001) continue
+        const amount = Math.floor(perOutput * (0.5 + Math.random()))
+        if (amount < 1_000) continue
         outputs.push({ address: recipient.address, amount })
       }
       if (outputs.length === 0) {
@@ -120,7 +120,8 @@ async function main() {
 
       pendingSpent.add(`${utxo.txId}:${utxo.outputIndex}`)
 
-      console.log(`TX ${result.txid.slice(0, 16)}... → ${numOutputs} outputs (${outputs.reduce((s, o) => s + o.amount, 0).toFixed(5)} QBTC, fee ${fee} QBTC)`)
+      const totalSat = outputs.reduce((s, o) => s + o.amount, 0)
+      console.log(`TX ${result.txid.slice(0, 16)}... → ${numOutputs} outputs (${(totalSat / 1e8).toFixed(8)} QBTC, fee ${(fee / 1e8).toFixed(8)} QBTC)`)
     } catch (err: any) {
       if (err.message?.includes('already claimed')) {
         const match = err.message.match(/UTXO ([0-9a-f]+:\d+)/)

@@ -17,12 +17,11 @@ import { verifyClaimProof } from './claim.js'
 export const MAX_MEMPOOL_BYTES = 50 * 1024 * 1024
 
 /**
- * Minimum relay fee rate (QBTC per kilobyte).
- * ML-DSA-65 txs are ~5 KB, so 0.00000001/KB means min fee ≈ 0.00000005 per tx.
+ * Minimum relay fee rate (satoshis per kilobyte).
+ * ML-DSA-65 txs are ~5 KB, so 1 sat/KB means min fee ≈ 5 sat per tx.
  * Prevents zero-fee spam while remaining accessible.
- * (1 satoshi = 0.00000001 QBTC)
  */
-export const MIN_RELAY_FEE_PER_KB = 0.00000001
+export const MIN_RELAY_FEE_PER_KB = 1
 
 export class Mempool {
   private transactions: Map<string, Transaction> = new Map()
@@ -30,20 +29,46 @@ export class Mempool {
   private pendingBtcClaims: Set<string> = new Set() // btcAddress hex
   private totalBytes = 0
 
+  /** Cached transaction sizes (immutable per tx, never invalidated) */
+  private sizeCache: Map<string, number> = new Map()
+  /** Cached fee densities (fee/size), invalidated when UTXO set changes */
+  private feeDensityCache: Map<string, number> = new Map()
+
+  /** Get or compute and cache transaction size */
+  private getTxSize(tx: Transaction): number {
+    let s = this.sizeCache.get(tx.id)
+    if (s === undefined) {
+      s = transactionSize(tx)
+      this.sizeCache.set(tx.id, s)
+    }
+    return s
+  }
+
+  /** Get or compute and cache fee density for a regular tx */
+  private getFeeDensity(tx: Transaction, utxoSet: Map<string, UTXO>): number {
+    let d = this.feeDensityCache.get(tx.id)
+    if (d === undefined) {
+      d = calculateFee(tx, utxoSet) / this.getTxSize(tx)
+      this.feeDensityCache.set(tx.id, d)
+    }
+    return d
+  }
+
   /** Add a validated transaction to the mempool */
   addTransaction(
     tx: Transaction,
     utxoSet: Map<string, UTXO>,
     claimedBtcAddresses?: Set<string>,
     currentHeight?: number,
-    btcSnapshot?: BtcSnapshot | null
+    btcSnapshot?: BtcSnapshot | null,
+    genesisHash?: string
   ): { success: boolean; error?: string } {
     // Already in mempool?
     if (this.transactions.has(tx.id)) {
       return { success: false, error: 'Transaction already in mempool' }
     }
 
-    const txSize = transactionSize(tx)
+    const txSize = this.getTxSize(tx)
 
     // Claim transactions: skip UTXO validation, check for duplicate claims
     if (isClaimTransaction(tx)) {
@@ -62,7 +87,7 @@ export class Mempool {
 
       // Verify claim proof (ECDSA/Schnorr signature) before accepting
       if (btcSnapshot) {
-        const claimResult = verifyClaimProof(tx, btcSnapshot)
+        const claimResult = verifyClaimProof(tx, btcSnapshot, genesisHash ?? '')
         if (!claimResult.valid) {
           return { success: false, error: `Invalid claim: ${claimResult.error}` }
         }
@@ -89,7 +114,7 @@ export class Mempool {
     const fee = calculateFee(tx, utxoSet)
     const feeRatePerKB = (fee / txSize) * 1000
     if (feeRatePerKB < MIN_RELAY_FEE_PER_KB) {
-      return { success: false, error: `Fee rate ${feeRatePerKB} QBTC/KB below minimum ${MIN_RELAY_FEE_PER_KB}` }
+      return { success: false, error: `Fee rate ${feeRatePerKB} sat/KB below minimum ${MIN_RELAY_FEE_PER_KB}` }
     }
 
     // Check for double-spend with other mempool transactions
@@ -105,7 +130,6 @@ export class Mempool {
 
     // Mempool size limit with eviction
     if (this.totalBytes + txSize > MAX_MEMPOOL_BYTES) {
-      const txFeeDensity = calculateFee(tx, utxoSet) / txSize
       const evicted = this.evictLowest(utxoSet, txSize)
       if (!evicted) {
         // Could not free space — new tx has lower fee density than everything in pool
@@ -120,6 +144,9 @@ export class Mempool {
     }
     this.totalBytes += txSize
 
+    // Cache fee density for the new tx
+    this.feeDensityCache.set(tx.id, fee / txSize)
+
     return { success: true }
   }
 
@@ -133,8 +160,8 @@ export class Mempool {
         const aClaim = isClaimTransaction(a) ? 1 : 0
         const bClaim = isClaimTransaction(b) ? 1 : 0
         if (aClaim !== bClaim) return bClaim - aClaim // claims first
-        const aFeeDensity = calculateFee(a, utxoSet) / transactionSize(a)
-        const bFeeDensity = calculateFee(b, utxoSet) / transactionSize(b)
+        const aFeeDensity = this.getFeeDensity(a, utxoSet)
+        const bFeeDensity = this.getFeeDensity(b, utxoSet)
         return bFeeDensity - aFeeDensity
       })
     }
@@ -147,7 +174,7 @@ export class Mempool {
     for (const id of txIds) {
       const tx = this.transactions.get(id)
       if (tx) {
-        this.totalBytes -= transactionSize(tx)
+        this.totalBytes -= this.getTxSize(tx)
         if (isClaimTransaction(tx)) {
           const claim = tx.claimData!
           this.pendingBtcClaims.delete(claim.btcAddress)
@@ -157,8 +184,12 @@ export class Mempool {
           }
         }
         this.transactions.delete(id)
+        this.sizeCache.delete(id)
+        this.feeDensityCache.delete(id)
       }
     }
+    // UTXO set changed — invalidate fee density cache for remaining txs
+    this.feeDensityCache.clear()
   }
 
   /** Re-validate all transactions against current UTXO set after a reorg */
@@ -195,12 +226,14 @@ export class Mempool {
     for (const id of toRemove) {
       const tx = this.transactions.get(id)
       if (tx) {
-        this.totalBytes -= transactionSize(tx)
+        this.totalBytes -= this.getTxSize(tx)
         this.transactions.delete(id)
+        this.sizeCache.delete(id)
       }
     }
 
-    // Rebuild claimedUTXOs and pendingBtcClaims from remaining transactions
+    // Clear all caches and rebuild tracking sets
+    this.feeDensityCache.clear()
     this.claimedUTXOs.clear()
     this.pendingBtcClaims.clear()
     for (const tx of this.transactions.values()) {
@@ -224,6 +257,8 @@ export class Mempool {
     this.transactions.clear()
     this.claimedUTXOs.clear()
     this.pendingBtcClaims.clear()
+    this.sizeCache.clear()
+    this.feeDensityCache.clear()
     this.totalBytes = 0
   }
 
@@ -246,8 +281,8 @@ export class Mempool {
     const candidates: Array<{ id: string; tx: Transaction; density: number; size: number }> = []
     for (const [id, tx] of this.transactions) {
       if (isClaimTransaction(tx)) continue
-      const size = transactionSize(tx)
-      const density = calculateFee(tx, utxoSet) / size
+      const size = this.getTxSize(tx)
+      const density = this.getFeeDensity(tx, utxoSet)
       candidates.push({ id, tx, density, size })
     }
     candidates.sort((a, b) => a.density - b.density)
@@ -262,6 +297,8 @@ export class Mempool {
         this.claimedUTXOs.delete(utxoKey(input.txId, input.outputIndex))
       }
       this.transactions.delete(c.id)
+      this.sizeCache.delete(c.id)
+      this.feeDensityCache.delete(c.id)
       freed += c.size
     }
 

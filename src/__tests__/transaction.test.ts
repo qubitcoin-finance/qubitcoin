@@ -18,20 +18,20 @@ import { deriveAddress } from '../crypto.js'
 import { walletA, walletB } from './fixtures.js'
 
 describe('blockSubsidy', () => {
-  it('returns 3.125 at height 0', () => {
-    expect(blockSubsidy(0)).toBe(3.125)
+  it('returns 312500000 at height 0', () => {
+    expect(blockSubsidy(0)).toBe(312_500_000)
   })
 
-  it('returns 3.125 before first halving', () => {
-    expect(blockSubsidy(HALVING_INTERVAL - 1)).toBe(3.125)
+  it('returns 312500000 before first halving', () => {
+    expect(blockSubsidy(HALVING_INTERVAL - 1)).toBe(312_500_000)
   })
 
   it('halves at 210,000', () => {
-    expect(blockSubsidy(HALVING_INTERVAL)).toBe(1.5625)
+    expect(blockSubsidy(HALVING_INTERVAL)).toBe(156_250_000)
   })
 
   it('halves again at 420,000', () => {
-    expect(blockSubsidy(HALVING_INTERVAL * 2)).toBe(0.78125)
+    expect(blockSubsidy(HALVING_INTERVAL * 2)).toBe(78_125_000)
   })
 
   it('reaches 0 after 26 halvings', () => {
@@ -42,10 +42,10 @@ describe('blockSubsidy', () => {
 describe('createCoinbaseTransaction', () => {
   it('creates correct coinbase', () => {
     const addr = '0'.repeat(64)
-    const tx = createCoinbaseTransaction(addr, 0, 5)
+    const tx = createCoinbaseTransaction(addr, 0, 500_000_000)
     expect(isCoinbase(tx)).toBe(true)
     expect(tx.outputs.length).toBe(1)
-    expect(tx.outputs[0].amount).toBe(8.125) // 3.125 subsidy + 5 fees
+    expect(tx.outputs[0].amount).toBe(812_500_000) // 312500000 subsidy + 500000000 fees
     expect(tx.outputs[0].address).toBe(addr)
     expect(tx.id.length).toBe(64)
   })

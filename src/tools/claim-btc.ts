@@ -339,26 +339,35 @@ async function modeGenerate() {
 
     // Snapshot block hash — user must provide it for offline mode
     console.log('\n  ── Step 2: Snapshot Info ─────────────────────────────────')
-    console.log('  You need the snapshot block hash from the genesis block.')
-    console.log('  Get it from an online node:')
+    console.log('  You need the snapshot block hash and genesis block hash.')
+    console.log('  Get them from an online node:')
     console.log('    curl -s http://127.0.0.1:3001/api/v1/block-by-height/0 | jq .transactions[0].inputs[0].publicKey')
+    console.log('    curl -s http://127.0.0.1:3001/api/v1/block-by-height/0 | jq .hash')
     console.log()
     const snapshotBlockHash = await ask(rl, '  Snapshot block hash: ')
     if (!/^[0-9a-fA-F]{64}$/.test(snapshotBlockHash.trim())) {
       console.error('\n  ✗ Expected a 64-char hex hash.\n')
       process.exit(1)
     }
+    const genesisHashInput = await ask(rl, '  Genesis block hash: ')
+    if (!/^[0-9a-fA-F]{64}$/.test(genesisHashInput.trim())) {
+      console.error('\n  ✗ Expected a 64-char hex hash.\n')
+      process.exit(1)
+    }
+    const genesisHash = genesisHashInput.trim()
 
     // Amount
     console.log('\n  You need your exact BTC snapshot balance.')
     console.log('  The node will reject the claim if the amount doesn\'t match.')
+    console.log('  Enter the amount in QBTC (e.g. 1.5 for 1.5 QBTC).')
     console.log()
     const amountStr = await ask(rl, '  Snapshot balance (QBTC): ')
-    const amount = parseFloat(amountStr.trim())
-    if (isNaN(amount) || amount <= 0) {
+    const amountFloat = parseFloat(amountStr.trim())
+    if (isNaN(amountFloat) || amountFloat <= 0) {
       console.error('\n  ✗ Invalid amount.\n')
       process.exit(1)
     }
+    const amount = Math.round(amountFloat * 100_000_000) // convert to satoshis
 
     // Generate QBTC wallet
     console.log('\n  ── Step 3: Generate QBTC Wallet ───────────────────────────')
@@ -370,8 +379,8 @@ async function modeGenerate() {
     console.log('\n  ── Step 4: Build Transaction ─────────────────────────────')
     const entry = { btcAddress, amount, ...(isP2wsh ? { type: 'p2wsh' as const } : {}) }
     const tx = isP2wsh
-      ? createP2wshClaimTransaction(p2wsh!.signerSecretKeys, p2wsh!.witnessScript, entry, qbtcWallet, snapshotBlockHash.trim())
-      : createClaimTransaction(btc!.secretKey, btc!.publicKey, entry, qbtcWallet, snapshotBlockHash.trim())
+      ? createP2wshClaimTransaction(p2wsh!.signerSecretKeys, p2wsh!.witnessScript, entry, qbtcWallet, snapshotBlockHash.trim(), genesisHash)
+      : createClaimTransaction(btc!.secretKey, btc!.publicKey, entry, qbtcWallet, snapshotBlockHash.trim(), genesisHash)
     const serialized = JSON.stringify(sanitize(tx), null, 2)
 
     // Save to file
@@ -428,7 +437,8 @@ async function modeSend(filepath: string) {
   console.log(`  Loaded claim transaction: ${tx.id?.slice(0, 16)}...`)
   console.log(`  BTC address: ${tx.claimData?.btcAddress ?? 'unknown'}`)
   console.log(`  QBTC address: ${tx.claimData?.qbtcAddress ?? 'unknown'}`)
-  console.log(`  Amount:      ${tx.outputs?.[0]?.amount ?? '?'} QBTC`)
+  const rawAmount = tx.outputs?.[0]?.amount ?? 0
+  console.log(`  Amount:      ${(rawAmount / 1e8).toFixed(8)} QBTC (${rawAmount} sat)`)
   console.log()
 
   // Connect to node
@@ -510,7 +520,7 @@ async function modeFull() {
     console.error('  ✗ Could not fetch claim stats.\n')
     process.exit(1)
   }
-  console.log(`  Snapshot: ${(claimStats.totalEntries as number).toLocaleString()} addresses, ${(claimStats.unclaimedAmount as number).toLocaleString()} QBTC claimable`)
+  console.log(`  Snapshot: ${(claimStats.totalEntries as number).toLocaleString()} addresses, ${((claimStats.unclaimedAmount as number) / 1e8).toFixed(8)} QBTC claimable`)
   console.log()
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
@@ -565,18 +575,20 @@ async function modeFull() {
     console.log('\n  ── Step 4: Broadcast ─────────────────────────────────────')
     console.log('  Building claim transaction...')
 
-    // Get snapshot block hash from genesis
+    // Get snapshot block hash and genesis hash from genesis block
     let snapshotBlockHash: string
+    let genesisHash: string
     try {
       const genesisRes = await fetch(`${rpcUrl}/block-by-height/0`)
       const genesis = await genesisRes.json() as Record<string, unknown>
+      genesisHash = (genesis as { hash: string }).hash
       const txs = (genesis as { transactions: Array<{ inputs: Array<{ publicKey: string }> }> }).transactions
       const coinbasePk = txs?.[0]?.inputs?.[0]?.publicKey ?? ''
       const parts = coinbasePk.split(':')
       if (parts[0] === 'QBTC_FORK' && parts[2]) {
         snapshotBlockHash = parts[2]
       } else {
-        snapshotBlockHash = (genesis as { hash: string }).hash
+        snapshotBlockHash = genesisHash
       }
     } catch {
       console.error('  ✗ Could not fetch genesis block to extract snapshot hash.\n')
@@ -587,10 +599,10 @@ async function modeFull() {
     const buildClaimTx = (amount: number) => {
       if (isP2wsh) {
         const entry = { btcAddress, amount, type: 'p2wsh' as const }
-        return createP2wshClaimTransaction(p2wsh!.signerSecretKeys, p2wsh!.witnessScript, entry, qbtcWallet, snapshotBlockHash)
+        return createP2wshClaimTransaction(p2wsh!.signerSecretKeys, p2wsh!.witnessScript, entry, qbtcWallet, snapshotBlockHash, genesisHash)
       }
       const entry = { btcAddress, amount }
-      return createClaimTransaction(btc!.secretKey, btc!.publicKey, entry, qbtcWallet, snapshotBlockHash)
+      return createClaimTransaction(btc!.secretKey, btc!.publicKey, entry, qbtcWallet, snapshotBlockHash, genesisHash)
     }
 
     // Probe with amount=0 to discover real balance
@@ -622,8 +634,8 @@ async function modeFull() {
       process.exit(1)
     }
 
-    const realAmount = parseFloat(amountMatch[1])
-    console.log(`  Snapshot balance: ${realAmount} QBTC`)
+    const realAmount = Number(amountMatch[1])
+    console.log(`  Snapshot balance: ${(realAmount / 1e8).toFixed(8)} QBTC (${realAmount} sat)`)
 
     const tx = buildClaimTx(realAmount)
     const payload = JSON.stringify(sanitize(tx))
@@ -654,7 +666,7 @@ async function modeFull() {
 function printSuccess(txid: string, amount: number, qbtcWallet: { address: string; publicKey: Uint8Array; secretKey: Uint8Array }) {
   console.log(`\n  ✓ Claim transaction broadcast!`)
   console.log(`    txid:   ${txid}`)
-  if (amount > 0) console.log(`    amount: ${amount} QBTC`)
+  if (amount > 0) console.log(`    amount: ${(amount / 1e8).toFixed(8)} QBTC (${amount} sat)`)
   console.log(`\n  Your QBTC will appear at ${qbtcWallet.address} once mined.`)
   console.log()
   console.log('  ┌─────────────────────────────────────────────────────────┐')

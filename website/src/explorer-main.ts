@@ -115,6 +115,13 @@ const fetchClaimStats = () => api<ClaimStats>('/claims/stats');
 
 const COINBASE_TXID = '0'.repeat(64);
 
+/** Convert satoshi integer to human-readable QBTC string (trim trailing zeros) */
+function formatQBTC(satoshis: number): string {
+  const val = (satoshis / 1e8).toFixed(8);
+  // Trim trailing zeros but keep at least one decimal place
+  return val.replace(/\.?0+$/, '') || '0';
+}
+
 function hexToUtf8(hex: string): string {
   const bytes = new Uint8Array(hex.match(/.{1,2}/g)!.map(b => parseInt(b, 16)));
   return new TextDecoder().decode(bytes);
@@ -381,12 +388,12 @@ async function renderDashboard(): Promise<void> {
     card('Avg Block Time', formatDuration(status.avgBlockTime)),
     card('Next Block', blockEta(status.lastBlockTime, avgBlockInterval(blocks, status.targetBlockTime))),
     card('Peers', status.peers),
-    card('Block Reward', status.blockReward + ' QBTC'),
+    card('Block Reward', formatQBTC(status.blockReward) + ' QBTC'),
     card('Total Txs', status.totalTxs),
   ];
   if (claimStats && claimStats.totalEntries > 0) {
     cards.push(card('BTC Fork Block', claimStats.btcBlockHeight.toLocaleString()));
-    cards.push(card('Claimed BTC', claimStats.claimedAmount.toLocaleString() + ' QBTC'));
+    cards.push(card('Claimed BTC', formatQBTC(claimStats.claimedAmount) + ' QBTC'));
   }
   html += `<div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">${cards.join('')}</div>`;
 
@@ -540,7 +547,7 @@ async function renderBlock(hash: string): Promise<void> {
         ${txTypeBadge(tx)}
         ${hashLink(tx.id, 'tx')}
       </div>
-      <span class="text-text-muted text-sm font-mono">${amount} QBTC</span>
+      <span class="text-text-muted text-sm font-mono">${formatQBTC(amount)} QBTC</span>
     </div>`;
   }
   html += `</div>`;
@@ -571,7 +578,7 @@ async function renderTx(txid: string): Promise<void> {
       return srcTx?.outputs[inp.outputIndex]?.amount ?? 0;
     }));
     const totalIn = inputAmounts.reduce((s, a) => s + a, 0);
-    fee = Math.round((totalIn - totalOut) * 1e8) / 1e8;
+    fee = totalIn - totalOut;
   }
 
   let html = ``;
@@ -590,7 +597,7 @@ async function renderTx(txid: string): Promise<void> {
       </div>
       <div>
         <p class="text-text-muted mb-1">Amount</p>
-        <p class="font-mono">${amount} QBTC</p>
+        <p class="font-mono">${formatQBTC(amount)} QBTC</p>
       </div>
       <div>
         <p class="text-text-muted mb-1">Type</p>
@@ -598,7 +605,7 @@ async function renderTx(txid: string): Promise<void> {
       </div>${fee !== null ? `
       <div>
         <p class="text-text-muted mb-1">Fee</p>
-        <p class="font-mono">${fee} QBTC</p>
+        <p class="font-mono">${formatQBTC(fee)} QBTC</p>
       </div>` : ''}
     </div>
   </div>`;
@@ -645,7 +652,7 @@ async function renderTx(txid: string): Promise<void> {
           <p class="text-text-muted text-xs mb-1">From tx</p>
           <p>${hashLink(inp.txId, 'tx')}<span class="text-text-muted">:${inp.outputIndex}</span></p>
         </div>${inAmt !== undefined ? `
-        <span class="font-mono text-qubit-300">${inAmt} QBTC</span>` : ''}
+        <span class="font-mono text-qubit-300">${formatQBTC(inAmt)} QBTC</span>` : ''}
       </div>`;
     }
   }
@@ -661,7 +668,7 @@ async function renderTx(txid: string): Promise<void> {
         <p class="text-text-muted text-xs mb-1">To</p>
         <p>${hashLink(out.address, 'address')}</p>
       </div>
-      <span class="font-mono text-qubit-300">${out.amount} QBTC</span>
+      <span class="font-mono text-qubit-300">${formatQBTC(out.amount)} QBTC</span>
     </div>`;
   }
   html += `</div></div>`;
@@ -690,7 +697,7 @@ async function renderAddress(addr: string): Promise<void> {
       </div>
       <div>
         <p class="text-text-muted mb-1">Balance</p>
-        <p class="text-2xl font-bold">${balanceRes?.balance ?? 0} QBTC</p>
+        <p class="text-2xl font-bold">${formatQBTC(balanceRes?.balance ?? 0)} QBTC</p>
       </div>
     </div>
   </div>`;
@@ -703,7 +710,7 @@ async function renderAddress(addr: string): Promise<void> {
         <div>
           ${hashLink(u.txId, 'tx')}<span class="text-text-muted">:${u.outputIndex}</span>
         </div>
-        <span class="font-mono text-qubit-300">${u.amount} QBTC</span>
+        <span class="font-mono text-qubit-300">${formatQBTC(u.amount)} QBTC</span>
       </div>`;
     }
     html += `</div>`;
@@ -737,7 +744,7 @@ async function renderMempool(): Promise<void> {
         ${hashLink(tx.id, 'tx')}
       </div>
       <div class="text-right">
-        <span class="text-text-muted text-sm font-mono">${amount} QBTC</span>
+        <span class="text-text-muted text-sm font-mono">${formatQBTC(amount)} QBTC</span>
         <span class="text-text-muted text-xs ml-2">${timeAgo(tx.timestamp)}</span>
       </div>
     </div>`;
@@ -1099,10 +1106,10 @@ ${docP('Create a new ML-DSA-65 keypair. This gives you a quantum-safe public key
 
 ${docH3('Step 2 — Sign the Claim Message')}
 ${docP('Construct a claim message and sign it with your Bitcoin private key (ECDSA secp256k1):')}
-${docCode(`message = "QBTC_CLAIM:{btcAddress}:{qbtcAddress}:{snapshotBlockHash}"
+${docCode(`message = "QBTC_CLAIM:{btcAddress}:{qbtcAddress}:{snapshotBlockHash}:{genesisHash}"
 msgHash = doubleSha256(message)
 signature = secp256k1.sign(msgHash, btcPrivateKey)`)}
-${docP('The snapshot block hash acts as replay protection — the claim is bound to a specific snapshot and cannot be reused on a different fork.')}
+${docP('The snapshot block hash and genesis hash act as replay protection — the claim is bound to a specific snapshot and genesis block, preventing cross-fork replay attacks.')}
 
 ${docH3('Step 3 — Broadcast the Claim Transaction')}
 ${docP('Submit a claim transaction containing your ECDSA signature, compressed BTC public key (33 bytes), and destination QBTC address. The transaction uses a special sentinel input (<span class="font-mono text-xs text-qubit-400">cccc...cccc</span>) to identify it as a claim.')}
@@ -1134,7 +1141,7 @@ ${docH3('How It Works')}
 
 ${docH3('Claim Message')}
 ${docP('Each signer signs the same message as single-key claims:')}
-${docCode('message = "QBTC_CLAIM:{btcAddress}:{qbtcAddress}:{snapshotBlockHash}"\nmsgHash = doubleSha256(message)\n\n// Each of the m signers produces:\nsig_i = secp256k1.sign(msgHash, signerPrivateKey_i)')}
+${docCode('message = "QBTC_CLAIM:{btcAddress}:{qbtcAddress}:{snapshotBlockHash}:{genesisHash}"\nmsgHash = doubleSha256(message)\n\n// Each of the m signers produces:\nsig_i = secp256k1.sign(msgHash, signerPrivateKey_i)')}
 
 ${docH3('Verification')}
 ${docP('The network verifies multisig claims using CHECKMULTISIG ordering: signatures are matched against public keys in order. Signature 1 must correspond to a pubkey at or after the position of the previous match. This is the same ordering rule Bitcoin uses.')}
@@ -1344,7 +1351,7 @@ ${docJson(`{
   "peers": 4,
   "hashrate": 12500,            // estimated H/s
   "avgBlockTime": 1800000,      // ms (actual average)
-  "blockReward": 3.125,
+  "blockReward": 312500000,
   "totalTxs": 9876,
   "lastBlockTime": 1707000000000,
   "targetBlockTime": 1800000
@@ -1429,7 +1436,7 @@ ${docJson(`[
       { "txId": "...", "outputIndex": 0 }
     ],
     "outputs": [
-      { "address": "...", "amount": 1.5 }
+      { "address": "...", "amount": 150000000 }
     ],
     "claimData": null              // or ClaimData object
   }
@@ -1443,11 +1450,11 @@ ${docH2('Addresses')}
   </tbody>
 </table>
 ${docH3('GET /address/:addr/balance')}
-${docJson(`{ "balance": 15.625 }`)}
+${docJson(`{ "balance": 1562500000 }`)}
 ${docH3('GET /address/:addr/utxos')}
 ${docJson(`[
-  { "txId": "abc...", "outputIndex": 0, "address": "def...", "amount": 3.125 },
-  { "txId": "ghi...", "outputIndex": 1, "address": "def...", "amount": 12.5 }
+  { "txId": "abc...", "outputIndex": 0, "address": "def...", "amount": 312500000 },
+  { "txId": "ghi...", "outputIndex": 1, "address": "def...", "amount": 1250000000 }
 ]`)}
 
 ${docH2('Claims')}
@@ -1462,8 +1469,8 @@ ${docJson(`{
   "totalEntries": 43235452,
   "claimed": 12,
   "unclaimed": 43235440,
-  "claimedAmount": 150.5,
-  "unclaimedAmount": 12736829.87
+  "claimedAmount": 15050000000,
+  "unclaimedAmount": 1273682987000000
 }`)}
 
 ${docH2('Error Handling')}
@@ -1775,17 +1782,18 @@ ${docJson(`[
     "txId": "d4e5f6...64hex",
     "outputIndex": 1,
     "address": "deadbeef...64hex",
-    "amount": 3.125
+    "amount": 312500000
   }
 ]`)}
 ${docP('You can also use the <a href="#/docs/api" class="text-qubit-400 hover:text-qubit-300">block explorer</a> to look up any address visually.')}
+${docP('All amounts are in <strong>satoshis</strong> (1 QBTC = 100,000,000 satoshis). The explorer displays amounts in QBTC for readability.')}
 
 ${docH2('Sending QBTC')}
-${docP('Transactions follow the UTXO model: you select unspent outputs as inputs, specify new outputs (recipients + change), and sign with your ML-DSA-65 secret key.')}
+${docP('Transactions follow the UTXO model: you select unspent outputs as inputs, specify new outputs (recipients + change), and sign with your ML-DSA-65 secret key. All amounts are integer satoshis.')}
 ${docH3('Step by Step')}
 ${docSteps([
   '<span class="text-text-primary font-medium">Select UTXOs</span> — choose inputs whose total value covers the amount + fee',
-  '<span class="text-text-primary font-medium">Define outputs</span> — recipient address(es) and amounts. Send change back to yourself.',
+  '<span class="text-text-primary font-medium">Define outputs</span> — recipient address(es) and amounts (in satoshis). Send change back to yourself.',
   '<span class="text-text-primary font-medium">Calculate fee</span> — fee = total inputs &minus; total outputs. The difference goes to the miner.',
   '<span class="text-text-primary font-medium">Sign &amp; build</span> — <span class="font-mono text-xs text-qubit-400">createTransaction(wallet, utxos, recipients, fee)</span> signs and returns the full tx.',
   '<span class="text-text-primary font-medium">Broadcast</span> — POST the transaction to any node\'s RPC endpoint.',
@@ -1795,9 +1803,10 @@ ${docCode(`import { generateWallet } from './crypto.js';
 import { createTransaction } from './transaction.js';
 
 const wallet = generateWallet();
-const utxos = [{ txId: 'abc...', outputIndex: 0, address: wallet.address, amount: 10 }];
-const recipients = [{ address: 'recipient_address_64hex', amount: 9.5 }];
-const fee = 0.5;
+// Amounts are in satoshis (1 QBTC = 100,000,000 sat)
+const utxos = [{ txId: 'abc...', outputIndex: 0, address: wallet.address, amount: 1000000000 }];
+const recipients = [{ address: 'recipient_address_64hex', amount: 950000000 }];
+const fee = 50000000;
 
 const tx = createTransaction(wallet, utxos, recipients, fee);
 // tx.id is the transaction hash`)}
@@ -1821,10 +1830,10 @@ ${docP('If you have many small UTXOs, spending them all at once requires one ML-
 ${docCode(`// Consolidate all UTXOs into one
 const allUtxos = await fetchUtxos(wallet.address);
 const total = allUtxos.reduce((s, u) => s + u.amount, 0);
-const fee = 0.1;
+const fee = 10000000; // 0.1 QBTC in satoshis
 const tx = createTransaction(wallet, allUtxos, [{ address: wallet.address, amount: total - fee }], fee);`)}
 ${docH3('Dust Threshold')}
-${docP('Because ML-DSA-65 signatures are ~3.3 KB, spending a tiny UTXO can cost more in fees than the UTXO is worth. There is no consensus-enforced minimum fee — miners choose which transactions to include. With typical fees around <span class="font-mono text-xs text-qubit-400">0.00001 QBTC</span>, outputs below that threshold are effectively unspendable dust.')}
+${docP('Because ML-DSA-65 signatures are ~3.3 KB, spending a tiny UTXO can cost more in fees than the UTXO is worth. There is no consensus-enforced minimum fee — miners choose which transactions to include. With typical fees around <span class="font-mono text-xs text-qubit-400">1,000 sat (0.00001 QBTC)</span>, outputs below that threshold are effectively unspendable dust.')}
 
 ${docH2('Key Management')}
 <ul class="text-text-secondary text-sm leading-relaxed mb-3 list-disc list-inside space-y-1">

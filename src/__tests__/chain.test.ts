@@ -73,7 +73,7 @@ describe('Blockchain', () => {
     const wallet = walletA
     const block = mineOnChain(chain, wallet.address)
     chain.addBlock(block)
-    expect(chain.getBalance(wallet.address)).toBe(3.125)
+    expect(chain.getBalance(wallet.address)).toBe(312_500_000)
   })
 
   it('findUTXOs returns mined outputs', () => {
@@ -83,7 +83,7 @@ describe('Blockchain', () => {
     chain.addBlock(block)
     const utxos = chain.findUTXOs(wallet.address)
     expect(utxos.length).toBe(1)
-    expect(utxos[0].amount).toBe(3.125)
+    expect(utxos[0].amount).toBe(312_500_000)
   })
 
   it('validates chain detects tampering', () => {
@@ -289,8 +289,8 @@ describe('Blockchain resetToHeight', () => {
     expect(chain.getHeight()).toBe(2)
     expect(chain.blocks.length).toBe(3) // genesis + 2 blocks
     // walletA mined block 1, walletB mined block 2
-    expect(chain.getBalance(walletA.address)).toBe(3.125) // 1 coinbase reward
-    expect(chain.getBalance(walletB.address)).toBe(3.125)
+    expect(chain.getBalance(walletA.address)).toBe(312_500_000) // 1 coinbase reward
+    expect(chain.getBalance(walletB.address)).toBe(312_500_000)
   })
 
   it('preserves correct balances after reset', () => {
@@ -431,25 +431,26 @@ describe('Blockchain undo data', () => {
 
     // Spend walletA's UTXO → walletB
     const spendHeight = chain.getHeight() + 1
-    const tx = createTransaction(walletA, utxosBefore, [{ address: walletB.address, amount: 2 }], 0.125)
+    const tx = createTransaction(walletA, utxosBefore, [{ address: walletB.address, amount: 200_000_000 }], 12_500_000)
     const block2 = mineOnChain(chain, walletB.address, [tx])
     chain.addBlock(block2)
 
     // walletA spent its UTXO, only has change
-    expect(chain.getBalance(walletA.address)).toBe(1) // 3.125 - 2 - 0.125 = 1
-    expect(chain.getBalance(walletB.address)).toBe(3.125 + 2) // coinbase + transfer
+    expect(chain.getBalance(walletA.address)).toBe(100_000_000) // 312500000 - 200000000 - 12500000 = 100000000
+    expect(chain.getBalance(walletB.address)).toBe(312_500_000 + 200_000_000) // coinbase + transfer
 
     // Disconnect the spending block via resetToHeight
     chain.resetToHeight(spendHeight - 1)
 
     // walletA's original UTXO should be restored
-    expect(chain.getBalance(walletA.address)).toBe(3.125)
+    expect(chain.getBalance(walletA.address)).toBe(312_500_000)
     expect(chain.getBalance(walletB.address)).toBe(0)
   })
 
   it('undo reverses claim transactions', () => {
     const { snapshot, holders } = createMockSnapshot()
     const chain = new Blockchain(snapshot)
+    const genesisHash = chain.blocks[0].hash
     const qbtcWallet = walletB
 
     // Mine a block with a claim
@@ -458,7 +459,8 @@ describe('Blockchain undo data', () => {
       holders[0].publicKey,
       snapshot.entries[0],
       qbtcWallet,
-      snapshot.btcBlockHash
+      snapshot.btcBlockHash,
+      genesisHash
     )
     const block = mineOnChain(chain, 'f'.repeat(64), [claimTx])
     chain.addBlock(block)
@@ -477,7 +479,8 @@ describe('Blockchain undo data', () => {
       holders[0].publicKey,
       snapshot.entries[0],
       qbtcWallet,
-      snapshot.btcBlockHash
+      snapshot.btcBlockHash,
+      genesisHash
     )
     const block2 = mineOnChain(chain, 'f'.repeat(64), [claimTx2])
     const result = chain.addBlock(block2)
@@ -515,6 +518,7 @@ describe('Blockchain with snapshot', () => {
   it('processes claim transactions', () => {
     const { snapshot, holders } = createMockSnapshot()
     const chain = new Blockchain(snapshot)
+    const genesisHash = chain.blocks[0].hash
     const qbtcWallet = walletB
 
     // Create and include claim in a block
@@ -523,7 +527,8 @@ describe('Blockchain with snapshot', () => {
       holders[0].publicKey,
       snapshot.entries[0],
       qbtcWallet,
-      snapshot.btcBlockHash
+      snapshot.btcBlockHash,
+      genesisHash
     )
 
     const block = mineOnChain(chain, 'f'.repeat(64), [claimTx])
@@ -535,6 +540,7 @@ describe('Blockchain with snapshot', () => {
   it('rejects double-claim', () => {
     const { snapshot, holders } = createMockSnapshot()
     const chain = new Blockchain(snapshot)
+    const genesisHash = chain.blocks[0].hash
     const qbtcWallet = walletB
 
     const claimTx = createClaimTransaction(
@@ -542,7 +548,8 @@ describe('Blockchain with snapshot', () => {
       holders[0].publicKey,
       snapshot.entries[0],
       qbtcWallet,
-      snapshot.btcBlockHash
+      snapshot.btcBlockHash,
+      genesisHash
     )
 
     const block1 = mineOnChain(chain, 'f'.repeat(64), [claimTx])
@@ -554,7 +561,8 @@ describe('Blockchain with snapshot', () => {
       holders[0].publicKey,
       snapshot.entries[0],
       qbtcWallet,
-      snapshot.btcBlockHash
+      snapshot.btcBlockHash,
+      genesisHash
     )
 
     const block2 = mineOnChain(chain, 'f'.repeat(64), [claimTx2])
@@ -566,6 +574,7 @@ describe('Blockchain with snapshot', () => {
   it('tracks claim statistics', () => {
     const { snapshot, holders } = createMockSnapshot()
     const chain = new Blockchain(snapshot)
+    const genesisHash = chain.blocks[0].hash
 
     let stats = chain.getClaimStats()
     expect(stats.totalEntries).toBe(9) // 5 P2PKH/P2WPKH + 1 P2SH-P2WPKH + 1 P2SH multisig + 1 P2TR + 1 P2WSH
@@ -577,7 +586,8 @@ describe('Blockchain with snapshot', () => {
       holders[0].publicKey,
       snapshot.entries[0],
       qbtcWallet,
-      snapshot.btcBlockHash
+      snapshot.btcBlockHash,
+      genesisHash
     )
     const block = mineOnChain(chain, 'f'.repeat(64), [claimTx])
     chain.addBlock(block)
@@ -606,7 +616,7 @@ describe('Coinbase maturity', () => {
     // Try to spend walletA's coinbase — should fail (age=50 < 100)
     const utxos = chain.findUTXOs(walletA.address)
     expect(utxos.length).toBe(1)
-    const tx = createTransaction(walletA, utxos, [{ address: walletB.address, amount: 2 }], 0.125)
+    const tx = createTransaction(walletA, utxos, [{ address: walletB.address, amount: 200_000_000 }], 12_500_000)
     const spendBlock = mineOnChain(chain, 'f'.repeat(64), [tx])
     const result = chain.addBlock(spendBlock)
     expect(result.success).toBe(false)
@@ -631,7 +641,7 @@ describe('Coinbase maturity', () => {
     expect(utxos.length).toBe(1)
     expect(utxos[0].isCoinbase).toBe(true)
     expect(utxos[0].height).toBe(1)
-    const tx = createTransaction(walletA, utxos, [{ address: walletB.address, amount: 2 }], 0.125)
+    const tx = createTransaction(walletA, utxos, [{ address: walletB.address, amount: 200_000_000 }], 12_500_000)
     const spendBlock = mineOnChain(chain, 'f'.repeat(64), [tx])
     const result = chain.addBlock(spendBlock)
     expect(result.success).toBe(true)
@@ -648,14 +658,14 @@ describe('Coinbase maturity', () => {
 
     // Spend walletA's coinbase → walletB (creates non-coinbase UTXO)
     const utxos = chain.findUTXOs(walletA.address)
-    const tx = createTransaction(walletA, utxos, [{ address: walletB.address, amount: 2 }], 0.125)
+    const tx = createTransaction(walletA, utxos, [{ address: walletB.address, amount: 200_000_000 }], 12_500_000)
     chain.addBlock(mineOnChain(chain, 'f'.repeat(64), [tx]))
 
     // walletB can spend immediately (non-coinbase, no maturity required)
     const utxosB = chain.findUTXOs(walletB.address)
     expect(utxosB.length).toBe(1)
     expect(utxosB[0].isCoinbase).toBeUndefined() // not a coinbase
-    const tx2 = createTransaction(walletB, utxosB, [{ address: walletA.address, amount: 1 }], 0.5)
+    const tx2 = createTransaction(walletB, utxosB, [{ address: walletA.address, amount: 100_000_000 }], 50_000_000)
     const spendBlock = mineOnChain(chain, 'f'.repeat(64), [tx2])
     const result = chain.addBlock(spendBlock)
     expect(result.success).toBe(true)
@@ -675,7 +685,7 @@ describe('Coinbase maturity', () => {
 
     // Spending at height 100 → age = 99, still immature
     const utxos = chain.findUTXOs(walletA.address)
-    const tx = createTransaction(walletA, utxos, [{ address: walletB.address, amount: 2 }], 0.125)
+    const tx = createTransaction(walletA, utxos, [{ address: walletB.address, amount: 200_000_000 }], 12_500_000)
     const spendBlock = mineOnChain(chain, 'f'.repeat(64), [tx])
     const result = chain.addBlock(spendBlock)
     expect(result.success).toBe(false)

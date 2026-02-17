@@ -155,8 +155,8 @@ export class Blockchain {
         if (this.claimedBtcAddresses.has(claimKey)) {
           return { success: false, error: `BTC address already claimed: ${claimKey}` }
         }
-        // Verify ECDSA proof
-        const claimResult = verifyClaimProof(tx, this.btcSnapshot)
+        // Verify ECDSA proof (include genesis hash for cross-fork replay protection)
+        const claimResult = verifyClaimProof(tx, this.btcSnapshot, this.blocks[0].hash)
         if (!claimResult.valid) {
           return { success: false, error: `Claim tx ${i} invalid: ${claimResult.error}` }
         }
@@ -344,7 +344,7 @@ export class Blockchain {
               invalidAtHeight: i,
             }
           }
-          const claimResult = verifyClaimProof(tx, this.btcSnapshot)
+          const claimResult = verifyClaimProof(tx, this.btcSnapshot, this.blocks[0].hash)
           if (!claimResult.valid) {
             return {
               valid: false,

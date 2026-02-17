@@ -125,7 +125,7 @@ function deterministicKeypair(index: number): { secretKey: Uint8Array; publicKey
 }
 
 /** Pre-mined nonce for the deterministic mock snapshot fork genesis */
-const MOCK_FORK_GENESIS_NONCE = 649089
+const MOCK_FORK_GENESIS_NONCE = 61037
 
 export function createMockSnapshot(): {
   snapshot: BtcSnapshot
@@ -133,11 +133,11 @@ export function createMockSnapshot(): {
 } {
   if (_cachedMockSnapshot) return _cachedMockSnapshot
   let keyIndex = 0
-  const holderAmounts = [100, 250, 50, 500, 75] // BTC amounts for 5 P2PKH/P2WPKH holders
-  const p2shAmounts = [200] // BTC amounts for P2SH-P2WPKH holders
-  const p2shMultisigAmounts = [350] // BTC amounts for P2SH multisig (2-of-3) holders
-  const p2trAmounts = [300] // BTC amounts for P2TR (Taproot) holders
-  const p2wshAmounts = [400] // BTC amounts for P2WSH (2-of-3 multisig) holders
+  const holderAmounts = [10_000_000_000, 25_000_000_000, 5_000_000_000, 50_000_000_000, 7_500_000_000] // satoshis for 5 P2PKH/P2WPKH holders
+  const p2shAmounts = [20_000_000_000] // satoshis for P2SH-P2WPKH holders
+  const p2shMultisigAmounts = [35_000_000_000] // satoshis for P2SH multisig (2-of-3) holders
+  const p2trAmounts = [30_000_000_000] // satoshis for P2TR (Taproot) holders
+  const p2wshAmounts = [40_000_000_000] // satoshis for P2WSH (2-of-3 multisig) holders
   const holders: MockHolder[] = []
   const entries: BtcAddressBalance[] = []
 

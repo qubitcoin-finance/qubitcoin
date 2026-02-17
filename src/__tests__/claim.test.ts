@@ -25,6 +25,9 @@ import { walletA as qbtcWalletA, walletB as qbtcWalletB } from './fixtures.js'
 // Easy target for tests: ~16 attempts to find valid hash
 const TEST_TARGET = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
 
+// Dummy genesis hash for standalone claim tests (not going through chain)
+const DUMMY_GENESIS = '0'.repeat(64)
+
 function mineOnChain(chain: Blockchain, minerAddress: string, extraTxs: any[] = []): Block {
   chain.difficulty = TEST_TARGET
   const tip = chain.getChainTip()
@@ -230,6 +233,7 @@ describe('end-to-end: claim → mine → spend', () => {
   it('claim, mine, then spend with ML-DSA-65', () => {
     const { snapshot, holders } = createMockSnapshot()
     const chain = new Blockchain(snapshot)
+    const genesisHash = chain.blocks[0].hash
     const qbtcWallet = qbtcWalletA
     const recipient = qbtcWalletB
 
@@ -239,7 +243,8 @@ describe('end-to-end: claim → mine → spend', () => {
       holders[0].publicKey,
       snapshot.entries[0],
       qbtcWallet,
-      snapshot.btcBlockHash
+      snapshot.btcBlockHash,
+      genesisHash
     )
     const block1 = mineOnChain(chain, 'f'.repeat(64), [claimTx])
     const addResult = chain.addBlock(block1)
@@ -253,8 +258,8 @@ describe('end-to-end: claim → mine → spend', () => {
     const spendTx = createTransaction(
       qbtcWallet,
       utxos,
-      [{ address: recipient.address, amount: 30 }],
-      1
+      [{ address: recipient.address, amount: 3_000_000_000 }],
+      100_000_000
     )
 
     const block2 = mineOnChain(chain, 'f'.repeat(64), [spendTx])
@@ -262,8 +267,8 @@ describe('end-to-end: claim → mine → spend', () => {
     expect(addResult2.success).toBe(true)
 
     // Verify balances
-    expect(chain.getBalance(recipient.address)).toBe(30)
-    expect(chain.getBalance(qbtcWallet.address)).toBe(holders[0].amount - 30 - 1) // minus send minus fee
+    expect(chain.getBalance(recipient.address)).toBe(3_000_000_000)
+    expect(chain.getBalance(qbtcWallet.address)).toBe(holders[0].amount - 3_000_000_000 - 100_000_000)
   })
 })
 
@@ -362,6 +367,7 @@ describe('P2SH-P2WPKH claims', () => {
   it('end-to-end: P2SH-P2WPKH claim → mine → spend', () => {
     const { snapshot, holders } = createMockSnapshot()
     const chain = new Blockchain(snapshot)
+    const genesisHash = chain.blocks[0].hash
     const qbtcWallet = qbtcWalletA
     const recipient = qbtcWalletB
 
@@ -374,7 +380,8 @@ describe('P2SH-P2WPKH claims', () => {
       p2shHolder.publicKey,
       p2shEntry,
       qbtcWallet,
-      snapshot.btcBlockHash
+      snapshot.btcBlockHash,
+      genesisHash
     )
     const block1 = mineOnChain(chain, 'f'.repeat(64), [claimTx])
     const addResult = chain.addBlock(block1)
@@ -388,15 +395,15 @@ describe('P2SH-P2WPKH claims', () => {
     const spendTx = createTransaction(
       qbtcWallet,
       utxos,
-      [{ address: recipient.address, amount: 50 }],
-      1
+      [{ address: recipient.address, amount: 5_000_000_000 }],
+      100_000_000
     )
     const block2 = mineOnChain(chain, 'f'.repeat(64), [spendTx])
     const addResult2 = chain.addBlock(block2)
     expect(addResult2.success).toBe(true)
 
-    expect(chain.getBalance(recipient.address)).toBe(50)
-    expect(chain.getBalance(qbtcWallet.address)).toBe(p2shHolder.amount - 50 - 1)
+    expect(chain.getBalance(recipient.address)).toBe(5_000_000_000)
+    expect(chain.getBalance(qbtcWallet.address)).toBe(p2shHolder.amount - 5_000_000_000 - 100_000_000)
   })
 })
 
@@ -505,6 +512,7 @@ describe('P2TR (Taproot) claims', () => {
   it('end-to-end: P2TR claim → mine → spend', () => {
     const { snapshot, holders } = createMockSnapshot()
     const chain = new Blockchain(snapshot)
+    const genesisHash = chain.blocks[0].hash
     const qbtcWallet = qbtcWalletA
     const recipient = qbtcWalletB
 
@@ -517,7 +525,8 @@ describe('P2TR (Taproot) claims', () => {
       p2trHolder.publicKey,
       p2trEntry,
       qbtcWallet,
-      snapshot.btcBlockHash
+      snapshot.btcBlockHash,
+      genesisHash
     )
     const block1 = mineOnChain(chain, 'f'.repeat(64), [claimTx])
     const addResult = chain.addBlock(block1)
@@ -531,15 +540,15 @@ describe('P2TR (Taproot) claims', () => {
     const spendTx = createTransaction(
       qbtcWallet,
       utxos,
-      [{ address: recipient.address, amount: 100 }],
-      1
+      [{ address: recipient.address, amount: 10_000_000_000 }],
+      100_000_000
     )
     const block2 = mineOnChain(chain, 'f'.repeat(64), [spendTx])
     const addResult2 = chain.addBlock(block2)
     expect(addResult2.success).toBe(true)
 
-    expect(chain.getBalance(recipient.address)).toBe(100)
-    expect(chain.getBalance(qbtcWallet.address)).toBe(p2trHolder.amount - 100 - 1)
+    expect(chain.getBalance(recipient.address)).toBe(10_000_000_000)
+    expect(chain.getBalance(qbtcWallet.address)).toBe(p2trHolder.amount - 10_000_000_000 - 100_000_000)
   })
 })
 
@@ -690,6 +699,7 @@ describe('P2WSH claims', () => {
   it('end-to-end: P2WSH claim → mine → spend with ML-DSA-65', () => {
     const { snapshot, holders } = createMockSnapshot()
     const chain = new Blockchain(snapshot)
+    const genesisHash = chain.blocks[0].hash
     const qbtcWallet = qbtcWalletA
     const recipient = qbtcWalletB
 
@@ -702,7 +712,8 @@ describe('P2WSH claims', () => {
       p2wshHolder.witnessScript!,
       p2wshEntry,
       qbtcWallet,
-      snapshot.btcBlockHash
+      snapshot.btcBlockHash,
+      genesisHash
     )
     const block1 = mineOnChain(chain, 'f'.repeat(64), [claimTx])
     const addResult = chain.addBlock(block1)
@@ -716,15 +727,15 @@ describe('P2WSH claims', () => {
     const spendTx = createTransaction(
       qbtcWallet,
       utxos,
-      [{ address: recipient.address, amount: 100 }],
-      1
+      [{ address: recipient.address, amount: 10_000_000_000 }],
+      100_000_000
     )
     const block2 = mineOnChain(chain, 'f'.repeat(64), [spendTx])
     const addResult2 = chain.addBlock(block2)
     expect(addResult2.success).toBe(true)
 
-    expect(chain.getBalance(recipient.address)).toBe(100)
-    expect(chain.getBalance(qbtcWallet.address)).toBe(p2wshHolder.amount - 100 - 1)
+    expect(chain.getBalance(recipient.address)).toBe(10_000_000_000)
+    expect(chain.getBalance(qbtcWallet.address)).toBe(p2wshHolder.amount - 10_000_000_000 - 100_000_000)
   })
 })
 
@@ -860,6 +871,7 @@ describe('P2SH multisig claims', () => {
   it('end-to-end: P2SH multisig claim → mine → spend', () => {
     const { snapshot, holders } = createMockSnapshot()
     const chain = new Blockchain(snapshot)
+    const genesisHash = chain.blocks[0].hash
     const qbtcWallet = qbtcWalletA
     const recipient = qbtcWalletB
 
@@ -873,7 +885,8 @@ describe('P2SH multisig claims', () => {
       p2shMultisigHolder.witnessScript!,
       p2shMultisigEntry,
       qbtcWallet,
-      snapshot.btcBlockHash
+      snapshot.btcBlockHash,
+      genesisHash
     )
     const block1 = mineOnChain(chain, 'f'.repeat(64), [claimTx])
     const addResult = chain.addBlock(block1)
@@ -886,14 +899,14 @@ describe('P2SH multisig claims', () => {
     const spendTx = createTransaction(
       qbtcWallet,
       utxos,
-      [{ address: recipient.address, amount: 100 }],
-      1
+      [{ address: recipient.address, amount: 10_000_000_000 }],
+      100_000_000
     )
     const block2 = mineOnChain(chain, 'f'.repeat(64), [spendTx])
     const addResult2 = chain.addBlock(block2)
     expect(addResult2.success).toBe(true)
 
-    expect(chain.getBalance(recipient.address)).toBe(100)
-    expect(chain.getBalance(qbtcWallet.address)).toBe(p2shMultisigHolder.amount - 100 - 1)
+    expect(chain.getBalance(recipient.address)).toBe(10_000_000_000)
+    expect(chain.getBalance(qbtcWallet.address)).toBe(p2shMultisigHolder.amount - 10_000_000_000 - 100_000_000)
   })
 })

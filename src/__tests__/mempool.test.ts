@@ -13,11 +13,11 @@ import { createClaimTransaction } from '../claim.js'
 import { generateBtcKeypair } from '../crypto.js'
 import { walletA, walletB, walletC } from './fixtures.js'
 
-// ML-DSA-65 txs are ~5KB, so we need fee >= ~5 to meet 1000 sat/KB minimum
-const DEFAULT_FEE = 10
-const DEFAULT_AMOUNT = 10000
+// ML-DSA-65 txs are ~5KB, so we need fee >= ~5 sat to meet 1 sat/KB minimum
+const DEFAULT_FEE = 10_000
+const DEFAULT_AMOUNT = 10_000_000_000
 
-function makeUtxoSet(wallet: ReturnType<typeof generateWallet>, amount = DEFAULT_AMOUNT): Map<string, UTXO> {
+function makeUtxoSet(wallet: { address: string }, amount = DEFAULT_AMOUNT): Map<string, UTXO> {
   const utxoSet = new Map<string, UTXO>()
   const txId = 'a'.repeat(64)
   utxoSet.set(utxoKey(txId, 0), {
@@ -38,7 +38,7 @@ describe('Mempool', () => {
     const tx = createTransaction(
       wallet,
       [{ txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: DEFAULT_AMOUNT }],
-      [{ address: 'b'.repeat(64), amount: 50 }],
+      [{ address: 'b'.repeat(64), amount: 5_000_000_000 }],
       DEFAULT_FEE
     )
 
@@ -55,7 +55,7 @@ describe('Mempool', () => {
     const tx = createTransaction(
       wallet,
       [{ txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: DEFAULT_AMOUNT }],
-      [{ address: 'b'.repeat(64), amount: 50 }],
+      [{ address: 'b'.repeat(64), amount: 5_000_000_000 }],
       DEFAULT_FEE
     )
 
@@ -73,7 +73,7 @@ describe('Mempool', () => {
     const tx1 = createTransaction(
       wallet,
       [{ txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: DEFAULT_AMOUNT }],
-      [{ address: 'b'.repeat(64), amount: 50 }],
+      [{ address: 'b'.repeat(64), amount: 5_000_000_000 }],
       DEFAULT_FEE
     )
     mempool.addTransaction(tx1, utxoSet)
@@ -81,7 +81,7 @@ describe('Mempool', () => {
     const tx2 = createTransaction(
       wallet,
       [{ txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: DEFAULT_AMOUNT }],
-      [{ address: 'c'.repeat(64), amount: 40 }],
+      [{ address: 'c'.repeat(64), amount: 4_000_000_000 }],
       DEFAULT_FEE
     )
     const result = mempool.addTransaction(tx2, utxoSet)
@@ -124,7 +124,7 @@ describe('Mempool', () => {
     const tx = createTransaction(
       wallet,
       [{ txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: DEFAULT_AMOUNT }],
-      [{ address: 'b'.repeat(64), amount: 50 }],
+      [{ address: 'b'.repeat(64), amount: 5_000_000_000 }],
       DEFAULT_FEE
     )
     mempool.addTransaction(tx, utxoSet)
@@ -142,7 +142,7 @@ describe('Mempool', () => {
     const tx = createTransaction(
       wallet,
       [{ txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: DEFAULT_AMOUNT }],
-      [{ address: 'b'.repeat(64), amount: 50 }],
+      [{ address: 'b'.repeat(64), amount: 5_000_000_000 }],
       DEFAULT_FEE
     )
     mempool.addTransaction(tx, utxoSet)
@@ -155,7 +155,7 @@ describe('Mempool', () => {
     const tx2 = createTransaction(
       wallet,
       [{ txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: DEFAULT_AMOUNT }],
-      [{ address: 'c'.repeat(64), amount: 40 }],
+      [{ address: 'c'.repeat(64), amount: 4_000_000_000 }],
       DEFAULT_FEE
     )
     const result = mempool.addTransaction(tx2, utxoSet)
@@ -247,8 +247,8 @@ describe('Mempool claims', () => {
       snapshot.btcBlockHash
     )
 
-    // With snapshot: should reject
-    const result = mempool.addTransaction(claimTx, new Map(), new Set(), undefined, snapshot)
+    // With snapshot: should reject (genesis hash doesn't matter here — wrong key is what fails)
+    const result = mempool.addTransaction(claimTx, new Map(), new Set(), undefined, snapshot, '')
     expect(result.success).toBe(false)
     expect(result.error).toContain('Invalid claim')
   })

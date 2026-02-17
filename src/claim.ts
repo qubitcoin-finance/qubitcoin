@@ -31,15 +31,17 @@ import { type BtcSnapshot, type BtcAddressBalance, getSnapshotIndex } from './sn
 
 /**
  * Serialize the claim message that gets ECDSA-signed.
- * Format: "QBTC_CLAIM:<btcAddress>:<qbtcAddress>:<snapshotBlockHash>"
- * This ensures replay protection (snapshot hash) and address binding (qbtc address).
+ * Format: "QBTC_CLAIM:<btcAddress>:<qbtcAddress>:<snapshotBlockHash>:<genesisHash>"
+ * This ensures replay protection (snapshot hash + genesis hash) and address binding (qbtc address).
+ * The genesis hash prevents cross-fork replay attacks.
  */
 export function serializeClaimMessage(
   btcAddress: string,
   qbtcAddress: string,
-  snapshotBlockHash: string
+  snapshotBlockHash: string,
+  genesisHash: string
 ): Uint8Array {
-  const msg = `QBTC_CLAIM:${btcAddress}:${qbtcAddress}:${snapshotBlockHash}`
+  const msg = `QBTC_CLAIM:${btcAddress}:${qbtcAddress}:${snapshotBlockHash}:${genesisHash}`
   return doubleSha256(new TextEncoder().encode(msg))
 }
 
@@ -53,12 +55,14 @@ export function createClaimTransaction(
   btcPubKey: Uint8Array,
   entry: BtcAddressBalance,
   qbtcWallet: Wallet,
-  snapshotBlockHash: string
+  snapshotBlockHash: string,
+  genesisHash: string = ''
 ): Transaction {
   const claimMsgHash = serializeClaimMessage(
     entry.btcAddress,
     qbtcWallet.address,
-    snapshotBlockHash
+    snapshotBlockHash,
+    genesisHash
   )
 
   let claimData: ClaimData
@@ -120,7 +124,8 @@ export function createP2wshClaimTransaction(
   witnessScript: Uint8Array,
   entry: BtcAddressBalance,
   qbtcWallet: Wallet,
-  snapshotBlockHash: string
+  snapshotBlockHash: string,
+  genesisHash: string = ''
 ): Transaction {
   // Verify witness script hashes to the claimed address
   const derivedAddr = deriveP2wshAddress(witnessScript)
@@ -131,7 +136,8 @@ export function createP2wshClaimTransaction(
   const claimMsgHash = serializeClaimMessage(
     entry.btcAddress,
     qbtcWallet.address,
-    snapshotBlockHash
+    snapshotBlockHash,
+    genesisHash
   )
 
   // Each signer signs the claim message
@@ -181,7 +187,8 @@ export function createP2shMultisigClaimTransaction(
   redeemScript: Uint8Array,
   entry: BtcAddressBalance,
   qbtcWallet: Wallet,
-  snapshotBlockHash: string
+  snapshotBlockHash: string,
+  genesisHash: string = ''
 ): Transaction {
   const derivedAddr = deriveP2shMultisigAddress(redeemScript)
   if (derivedAddr !== entry.btcAddress) {
@@ -191,7 +198,8 @@ export function createP2shMultisigClaimTransaction(
   const claimMsgHash = serializeClaimMessage(
     entry.btcAddress,
     qbtcWallet.address,
-    snapshotBlockHash
+    snapshotBlockHash,
+    genesisHash
   )
 
   const sigs: Uint8Array[] = []
@@ -241,7 +249,8 @@ export function createP2shMultisigClaimTransaction(
  */
 export function verifyClaimProof(
   tx: Transaction,
-  snapshot: BtcSnapshot
+  snapshot: BtcSnapshot,
+  genesisHash: string = ''
 ): { valid: boolean; error?: string } {
   const claim = tx.claimData
   if (!claim) {
@@ -261,7 +270,8 @@ export function verifyClaimProof(
   const claimMsgHash = serializeClaimMessage(
     claim.btcAddress,
     claim.qbtcAddress,
-    snapshot.btcBlockHash
+    snapshot.btcBlockHash,
+    genesisHash
   )
 
   if (entry.type === 'p2wsh' || entry.type === 'multisig') {
