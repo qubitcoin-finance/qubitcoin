@@ -92,8 +92,8 @@ async function main() {
         return
       }
 
-      // Budget: spend at most 2% of available, rest goes back as change
-      const budget = Math.floor(available * 0.02)
+      // Budget: spend at most 0.1% of available, rest goes back as change
+      const budget = Math.floor(available * 0.001)
       const perOutput = Math.floor(budget / numOutputs)
 
       const outputs: Array<{ address: string; amount: number }> = []

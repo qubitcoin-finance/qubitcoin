@@ -115,11 +115,15 @@ const fetchClaimStats = () => api<ClaimStats>('/claims/stats');
 
 const COINBASE_TXID = '0'.repeat(64);
 
-/** Convert satoshi integer to human-readable QBTC string (trim trailing zeros) */
+/** Convert satoshi integer to human-readable QBTC string (no float artifacts) */
 function formatQBTC(satoshis: number): string {
-  const val = (satoshis / 1e8).toFixed(8);
-  // Trim trailing zeros but keep at least one decimal place
-  return val.replace(/\.?0+$/, '') || '0';
+  const sat = Math.round(satoshis);
+  const whole = Math.floor(Math.abs(sat) / 1e8);
+  const frac = Math.abs(sat) % 1e8;
+  const sign = sat < 0 ? '-' : '';
+  if (frac === 0) return `${sign}${whole}`;
+  const fracStr = frac.toString().padStart(8, '0').replace(/0+$/, '');
+  return `${sign}${whole}.${fracStr}`;
 }
 
 function hexToUtf8(hex: string): string {
@@ -445,7 +449,7 @@ async function renderDashboard(): Promise<void> {
           ${txTypeBadge(tx)}
           ${hashLink(tx.id, 'tx')}
         </div>
-        <span class="text-text-muted text-xs font-mono">${amount} QBTC</span>
+        <span class="text-text-muted text-xs font-mono">${formatQBTC(amount)} QBTC</span>
       </div>`;
     }
     html += `</div>`;

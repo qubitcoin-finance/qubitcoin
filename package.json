@@ -29,6 +29,7 @@
     "website": "cd website && pnpm run dev",
     "website:build": "cd website && pnpm run build",
     "dev:tx": "node --loader ts-node/esm src/dev-tx.ts",
+    "ship": "./scripts/deploy.sh",
     "deploy": "./scripts/deploy.sh",
     "deploy:ui": "./scripts/deploy-ui.sh",
     "deploy:backend": "./scripts/deploy-backend.sh",
