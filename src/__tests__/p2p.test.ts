@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
+import net from 'node:net'
 import { Node } from '../node.js'
 import { P2PServer } from '../p2p/server.js'
 import { FileBlockStorage } from '../storage.js'
@@ -388,6 +389,134 @@ describe('P2P fork resolution', () => {
     // Node1 should keep its longer chain
     expect(node1.chain.getHeight()).toBe(4)
     expect(node1.chain.getChainTip().hash).toBe(originalTip)
+  })
+})
+
+describe('P2P improvements', () => {
+  let tmpDir1: string
+  let tmpDir2: string
+
+  const TEST_TARGET = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+
+  beforeEach(() => {
+    tmpDir1 = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-imp-1-'))
+    tmpDir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-imp-2-'))
+  })
+
+  afterEach(() => {
+    fs.rmSync(tmpDir1, { recursive: true, force: true })
+    fs.rmSync(tmpDir2, { recursive: true, force: true })
+  })
+
+  it('should relay P2WSH claim transactions with correct binary fields', async () => {
+    const { createMockSnapshot } = await import('../snapshot.js')
+    const { createP2wshClaimTransaction } = await import('../claim.js')
+    const { snapshot, holders } = createMockSnapshot()
+
+    const p2wshHolder = holders.find(h => h.type === 'p2wsh')!
+    const p2wshEntry = snapshot.entries.find(e => e.type === 'p2wsh')!
+
+    const storage1 = new FileBlockStorage(tmpDir1)
+    const storage2 = new FileBlockStorage(tmpDir2)
+    const sNode1 = new Node('alice', snapshot, storage1)
+    const sNode2 = new Node('bob', snapshot, storage2)
+    sNode1.chain.difficulty = TEST_TARGET
+    sNode2.chain.difficulty = TEST_TARGET
+
+    const sp2p1 = new P2PServer(sNode1, 0, tmpDir1)
+    const sp2p2 = new P2PServer(sNode2, 0, tmpDir2)
+    await sp2p1.start()
+    await sp2p2.start()
+
+    try {
+      const addr = (sp2p1 as any).server.address()
+      const port = typeof addr === 'object' ? addr.port : 0
+      sp2p2.connectOutbound('127.0.0.1', port)
+
+      await waitFor(() => sp2p1.getPeers().length > 0 && sp2p2.getPeers().length > 0)
+
+      // Create a P2WSH claim tx
+      const claimTx = createP2wshClaimTransaction(
+        [p2wshHolder.signerKeys![0].secretKey, p2wshHolder.signerKeys![1].secretKey],
+        p2wshHolder.witnessScript!,
+        p2wshEntry,
+        walletA,
+        snapshot.btcBlockHash
+      )
+
+      sNode1.receiveTransaction(claimTx)
+
+      // Wait for it to appear in node2's mempool
+      await waitFor(() => sNode2.mempool.size() > 0, 10_000)
+
+      const relayed = sNode2.mempool.getTransaction(claimTx.id)!
+      expect(relayed).toBeDefined()
+      expect(relayed.claimData!.witnessScript).toBeInstanceOf(Uint8Array)
+      expect(relayed.claimData!.witnessSignatures).toBeInstanceOf(Uint8Array)
+      expect(relayed.claimData!.witnessScript!.length).toBeGreaterThan(0)
+      expect(relayed.claimData!.witnessSignatures!.length).toBe(128) // 2 × 64
+    } finally {
+      await sp2p1.stop()
+      await sp2p2.stop()
+    }
+  })
+
+  it('should reject inbound connections exceeding per-IP limit', async () => {
+    const storage1 = new FileBlockStorage(tmpDir1)
+    const node1 = new Node('alice', undefined, storage1)
+    const p2p1 = new P2PServer(node1, 0, tmpDir1)
+    await p2p1.start()
+
+    try {
+      const addr = (p2p1 as any).server.address()
+      const port = typeof addr === 'object' ? addr.port : 0
+
+      // Open 4 inbound connections from same IP (limit is 3)
+      const sockets: net.Socket[] = []
+      for (let i = 0; i < 4; i++) {
+        const sock = net.createConnection({ host: '127.0.0.1', port })
+        sockets.push(sock)
+        // Small delay to ensure sequential handling
+        await new Promise(r => setTimeout(r, 50))
+      }
+
+      // Wait for connections to be processed
+      await new Promise(r => setTimeout(r, 500))
+
+      // Should have at most 3 inbound peers from same IP
+      const inboundCount = (p2p1 as any).inboundCount
+      expect(inboundCount).toBeLessThanOrEqual(3)
+
+      for (const sock of sockets) sock.destroy()
+    } finally {
+      await p2p1.stop()
+    }
+  })
+
+  it('stopMining should stop the mining loop', async () => {
+    const storage1 = new FileBlockStorage(tmpDir1)
+    const node1 = new Node('alice', undefined, storage1)
+    node1.chain.difficulty = TEST_TARGET
+
+    // Start mining in the background
+    const miningPromise = node1.startMining(walletA.address)
+
+    // Wait for at least one block to be mined
+    await waitFor(() => node1.chain.getHeight() >= 1, 10_000)
+
+    // Stop mining
+    node1.stopMining()
+
+    // The mining promise should resolve (not hang forever)
+    await Promise.race([
+      miningPromise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('stopMining did not resolve')), 5_000))
+    ])
+
+    // Record height — should not increase after stopping
+    const heightAfterStop = node1.chain.getHeight()
+    await new Promise(r => setTimeout(r, 500))
+    expect(node1.chain.getHeight()).toBe(heightAfterStop)
   })
 })
 

@@ -27,6 +27,7 @@ export class Node {
 
   /** Active mining abort controller (null when not mining) */
   private miningAbort: AbortController | null = null
+  private mining = false
 
   constructor(name: string, snapshot?: BtcSnapshot, storage?: BlockStorage) {
     this.name = name
@@ -100,8 +101,9 @@ export class Node {
    */
   async startMining(minerAddress: string, message?: string): Promise<void> {
     log.info({ component: 'miner', address: minerAddress }, 'Mining started')
+    this.mining = true
 
-    while (true) {
+    while (this.mining) {
       this.miningAbort = new AbortController()
 
       const candidate = assembleCandidateBlock(
@@ -134,6 +136,7 @@ export class Node {
   }
 
   stopMining(): void {
+    this.mining = false
     this.miningAbort?.abort()
     this.miningAbort = null
   }
