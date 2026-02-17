@@ -10,6 +10,8 @@ import {
   utxoKey,
 } from './transaction.js'
 import { transactionSize } from './block.js'
+import { type BtcSnapshot } from './snapshot.js'
+import { verifyClaimProof } from './claim.js'
 
 /** Maximum mempool size in bytes (50 MB) */
 export const MAX_MEMPOOL_BYTES = 50 * 1024 * 1024
@@ -33,7 +35,8 @@ export class Mempool {
     tx: Transaction,
     utxoSet: Map<string, UTXO>,
     claimedBtcAddresses?: Set<string>,
-    currentHeight?: number
+    currentHeight?: number,
+    btcSnapshot?: BtcSnapshot | null
   ): { success: boolean; error?: string } {
     // Already in mempool?
     if (this.transactions.has(tx.id)) {
@@ -55,6 +58,14 @@ export class Mempool {
       // Already pending in mempool?
       if (this.pendingBtcClaims.has(claimKey)) {
         return { success: false, error: `BTC address already pending claim: ${claimKey}` }
+      }
+
+      // Verify claim proof (ECDSA/Schnorr signature) before accepting
+      if (btcSnapshot) {
+        const claimResult = verifyClaimProof(tx, btcSnapshot)
+        if (!claimResult.valid) {
+          return { success: false, error: `Invalid claim: ${claimResult.error}` }
+        }
       }
 
       // Claims always accepted — evict a non-claim tx if needed

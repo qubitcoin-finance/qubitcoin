@@ -10,6 +10,7 @@ import {
 } from '../transaction.js'
 import { createMockSnapshot } from '../snapshot.js'
 import { createClaimTransaction } from '../claim.js'
+import { generateBtcKeypair } from '../crypto.js'
 import { walletA, walletB, walletC } from './fixtures.js'
 
 // ML-DSA-65 txs are ~5KB, so we need fee >= ~5 to meet 1000 sat/KB minimum
@@ -229,6 +230,47 @@ describe('Mempool claims', () => {
     const result = mempool.addTransaction(claimTx, new Map(), claimedSet)
     expect(result.success).toBe(false)
     expect(result.error).toContain('already claimed on-chain')
+  })
+
+  it('rejects claim with invalid signature when snapshot is provided', () => {
+    const mempool = new Mempool()
+    const { snapshot, holders } = createMockSnapshot()
+    const qbtcWallet = walletB
+
+    // Sign with wrong key
+    const wrongKey = generateBtcKeypair()
+    const claimTx = createClaimTransaction(
+      wrongKey.secretKey,
+      wrongKey.publicKey,
+      snapshot.entries[0],
+      qbtcWallet,
+      snapshot.btcBlockHash
+    )
+
+    // With snapshot: should reject
+    const result = mempool.addTransaction(claimTx, new Map(), new Set(), undefined, snapshot)
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Invalid claim')
+  })
+
+  it('accepts claim without verification when no snapshot provided', () => {
+    const mempool = new Mempool()
+    const { snapshot, holders } = createMockSnapshot()
+    const qbtcWallet = walletB
+
+    // Sign with wrong key
+    const wrongKey = generateBtcKeypair()
+    const claimTx = createClaimTransaction(
+      wrongKey.secretKey,
+      wrongKey.publicKey,
+      snapshot.entries[0],
+      qbtcWallet,
+      snapshot.btcBlockHash
+    )
+
+    // Without snapshot: should accept (backwards compatible)
+    const result = mempool.addTransaction(claimTx, new Map())
+    expect(result.success).toBe(true)
   })
 
   it('removeTransactions cleans up pending claims', () => {

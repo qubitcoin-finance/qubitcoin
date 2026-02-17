@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { Blockchain } from '../chain.js'
+import { Blockchain, MAX_REORG_DEPTH } from '../chain.js'
 import { createCoinbaseTransaction, createTransaction, COINBASE_MATURITY, validateTransaction, utxoKey, type UTXO } from '../transaction.js'
 import { computeMerkleRoot, computeBlockHash, hashMeetsTarget, medianTimestamp, MAX_FUTURE_BLOCK_TIME_MS, type Block, type BlockHeader, DIFFICULTY_ADJUSTMENT_INTERVAL, TARGET_BLOCK_TIME_MS, STARTING_DIFFICULTY } from '../block.js'
 import { createMockSnapshot } from '../snapshot.js'
@@ -772,5 +772,50 @@ describe('Block timestamp validation', () => {
     expect(medianTimestamp(blocks, 11, 12)).toBe(7000)
     // Median of first 3 (indices 0-2): [1000,2000,3000], floor(3/2)=1 → 2000
     expect(medianTimestamp(blocks, 2, 3)).toBe(2000)
+  })
+})
+
+describe('Undo data pruning', () => {
+  it('prunes undo data to MAX_REORG_DEPTH', () => {
+    const chain = new Blockchain()
+    const numBlocks = MAX_REORG_DEPTH + 20
+
+    for (let i = 0; i < numBlocks; i++) {
+      const block = mineOnChain(chain, walletA.address)
+      chain.addBlock(block)
+    }
+
+    // Undo data should be capped at MAX_REORG_DEPTH
+    expect(chain.undoData.length).toBe(MAX_REORG_DEPTH)
+    expect(chain.getHeight()).toBe(numBlocks)
+  })
+
+  it('shallow reorg still works after pruning', () => {
+    const chain = new Blockchain()
+    const numBlocks = MAX_REORG_DEPTH + 10
+
+    for (let i = 0; i < numBlocks; i++) {
+      chain.addBlock(mineOnChain(chain, walletA.address))
+    }
+
+    const heightBefore = chain.getHeight()
+    // Reset by 5 blocks (within MAX_REORG_DEPTH)
+    // This will take slow path since undoData.length !== currentHeight after pruning
+    chain.resetToHeight(heightBefore - 5)
+    expect(chain.getHeight()).toBe(heightBefore - 5)
+  })
+
+  it('deep reorg falls back to full replay after pruning', () => {
+    const chain = new Blockchain()
+    const numBlocks = MAX_REORG_DEPTH + 10
+
+    for (let i = 0; i < numBlocks; i++) {
+      chain.addBlock(mineOnChain(chain, walletA.address))
+    }
+
+    // Reset to height 1 (deeper than MAX_REORG_DEPTH) — falls back to slow replay
+    chain.resetToHeight(1)
+    expect(chain.getHeight()).toBe(1)
+    expect(chain.undoData.length).toBe(1)
   })
 })

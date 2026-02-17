@@ -325,7 +325,12 @@ export function verifyClaimProof(
     }
 
     // Compute tweaked output key Q from internal key P, check it matches snapshot address
-    const derivedAddress = bytesToHex(computeTaprootOutputKey(claim.schnorrPublicKey))
+    let derivedAddress: string
+    try {
+      derivedAddress = bytesToHex(computeTaprootOutputKey(claim.schnorrPublicKey))
+    } catch {
+      return { valid: false, error: 'Invalid P2TR public key' }
+    }
     if (derivedAddress !== claim.btcAddress) {
       return {
         valid: false,

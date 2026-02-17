@@ -22,6 +22,9 @@ import {
 import { type BlockStorage } from './storage.js'
 import { getSnapshotIndex, type ShardedIndex } from './snapshot.js'
 
+/** Maximum reorg depth supported by fast undo path. Deeper reorgs use full replay. */
+export const MAX_REORG_DEPTH = 100
+
 export interface BlockUndo {
   spentUtxos: Array<{ key: string; utxo: UTXO }>  // UTXOs consumed by inputs — restore on disconnect
   createdUtxoKeys: string[]                         // UTXOs created by outputs — remove on disconnect
@@ -35,6 +38,8 @@ export class Blockchain {
   blocksByHash: Map<string, Block> = new Map()
   undoData: BlockUndo[] = []
   utxoSet: Map<string, UTXO> = new Map()
+  /** Address → set of UTXO keys for O(1) balance/findUTXOs lookups */
+  private utxosByAddress: Map<string, Set<string>> = new Map()
   difficulty: string = STARTING_DIFFICULTY
   btcSnapshot: BtcSnapshot | null = null
   claimedBtcAddresses: Set<string> = new Set() // btcAddress hex string
@@ -161,6 +166,12 @@ export class Blockchain {
     // Apply UTXO changes and record undo data
     this.undoData.push(this.applyBlock(block))
 
+    // Prune old undo data beyond MAX_REORG_DEPTH to bound memory usage.
+    // Deep reorgs will fall back to full replay (resetToHeight slow path).
+    if (this.undoData.length > MAX_REORG_DEPTH) {
+      this.undoData.splice(0, this.undoData.length - MAX_REORG_DEPTH)
+    }
+
     // Track cumulative work
     this.cumulativeWork += blockWork(block.header.target)
 
@@ -186,24 +197,28 @@ export class Blockchain {
     return { success: true }
   }
 
-  /** Get balance for an address */
+  /** Get balance for an address (O(1) via address index) */
   getBalance(address: string): number {
+    const keys = this.utxosByAddress.get(address)
+    if (!keys) return 0
     let balance = 0
-    for (const utxo of this.utxoSet.values()) {
-      if (utxo.address === address) {
-        balance += utxo.amount
-      }
+    for (const key of keys) {
+      const utxo = this.utxoSet.get(key)
+      if (utxo) balance += utxo.amount
     }
     return balance
   }
 
-  /** Find UTXOs for an address, optionally enough to cover an amount */
+  /** Find UTXOs for an address, optionally enough to cover an amount (O(1) via address index) */
   findUTXOs(address: string, amount?: number): UTXO[] {
+    const keys = this.utxosByAddress.get(address)
+    if (!keys) return []
     const result: UTXO[] = []
     let accumulated = 0
 
-    for (const utxo of this.utxoSet.values()) {
-      if (utxo.address === address) {
+    for (const key of keys) {
+      const utxo = this.utxoSet.get(key)
+      if (utxo) {
         result.push(utxo)
         accumulated += utxo.amount
         if (amount !== undefined && accumulated >= amount) {
@@ -428,6 +443,7 @@ export class Blockchain {
       for (const b of this.blocks) this.blocksByHash.set(b.hash, b)
       this.undoData.length = 0
       this.utxoSet.clear()
+      this.utxosByAddress.clear()
       this.claimedBtcAddresses.clear()
       this.claimedCount = 0
       this.claimedAmount = 0
@@ -489,6 +505,25 @@ export class Blockchain {
     }
   }
 
+  /** Add a UTXO key to the address index */
+  private indexUtxo(address: string, key: string): void {
+    let set = this.utxosByAddress.get(address)
+    if (!set) {
+      set = new Set()
+      this.utxosByAddress.set(address, set)
+    }
+    set.add(key)
+  }
+
+  /** Remove a UTXO key from the address index */
+  private unindexUtxo(address: string, key: string): void {
+    const set = this.utxosByAddress.get(address)
+    if (set) {
+      set.delete(key)
+      if (set.size === 0) this.utxosByAddress.delete(address)
+    }
+  }
+
   /** Apply UTXO set changes for a validated block and return undo data (private) */
   private applyBlock(block: Block): BlockUndo {
     const undo: BlockUndo = {
@@ -521,6 +556,7 @@ export class Blockchain {
           const overwritten = this.utxoSet.get(key)
           if (overwritten) {
             undo.spentUtxos.push({ key, utxo: overwritten })
+            this.unindexUtxo(overwritten.address, key)
           }
           this.utxoSet.set(key, {
             txId: tx.id,
@@ -529,6 +565,7 @@ export class Blockchain {
             amount: output.amount,
             height: block.height,
           })
+          this.indexUtxo(output.address, key)
           undo.createdUtxoKeys.push(key)
         }
         continue
@@ -541,6 +578,7 @@ export class Blockchain {
           const existing = this.utxoSet.get(key)
           if (existing) {
             undo.spentUtxos.push({ key, utxo: existing })
+            this.unindexUtxo(existing.address, key)
           }
           this.utxoSet.delete(key)
         }
@@ -554,6 +592,7 @@ export class Blockchain {
         const overwritten = this.utxoSet.get(key)
         if (overwritten) {
           undo.spentUtxos.push({ key, utxo: overwritten })
+          this.unindexUtxo(overwritten.address, key)
         }
         this.utxoSet.set(key, {
           txId: tx.id,
@@ -563,6 +602,7 @@ export class Blockchain {
           height: block.height,
           isCoinbase: txIsCoinbase || undefined,
         })
+        this.indexUtxo(output.address, key)
         undo.createdUtxoKeys.push(key)
       }
     }
@@ -574,11 +614,14 @@ export class Blockchain {
   private disconnectBlock(undo: BlockUndo): void {
     // Remove created UTXOs
     for (const key of undo.createdUtxoKeys) {
+      const utxo = this.utxoSet.get(key)
+      if (utxo) this.unindexUtxo(utxo.address, key)
       this.utxoSet.delete(key)
     }
     // Restore spent UTXOs
     for (const { key, utxo } of undo.spentUtxos) {
       this.utxoSet.set(key, utxo)
+      this.indexUtxo(utxo.address, key)
     }
     // Unclaim BTC addresses
     for (const addr of undo.claimedAddresses) {

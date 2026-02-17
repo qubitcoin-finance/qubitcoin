@@ -41,7 +41,8 @@ export class Node {
       tx,
       this.chain.utxoSet,
       this.chain.claimedBtcAddresses,
-      this.chain.getHeight() + 1
+      this.chain.getHeight() + 1,
+      this.chain.btcSnapshot
     )
     if (result.success) {
       log.info({ component: 'mempool', txid: tx.id.slice(0, 16) }, 'Accepted tx')

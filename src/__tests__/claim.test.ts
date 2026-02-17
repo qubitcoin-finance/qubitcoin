@@ -183,6 +183,35 @@ describe('verifyClaimProof', () => {
   })
 })
 
+describe('verifyClaimProof — P2TR edge cases', () => {
+  it('returns error (not crash) for invalid P2TR public key', () => {
+    const { snapshot } = createMockSnapshot()
+    const p2trEntry = snapshot.entries.find(e => e.type === 'p2tr')!
+    const qbtcWallet = qbtcWalletA
+
+    // Construct a claim tx with a 32-byte but invalid schnorrPublicKey
+    const tx = {
+      id: 'x'.repeat(64),
+      inputs: [{ txId: CLAIM_TXID, outputIndex: 0, publicKey: new Uint8Array(0), signature: new Uint8Array(0) }],
+      outputs: [{ address: qbtcWallet.address, amount: p2trEntry.amount }],
+      timestamp: Date.now(),
+      claimData: {
+        btcAddress: p2trEntry.btcAddress,
+        ecdsaPublicKey: new Uint8Array(0),
+        ecdsaSignature: new Uint8Array(0),
+        qbtcAddress: qbtcWallet.address,
+        schnorrPublicKey: new Uint8Array(32), // all zeros — invalid point
+        schnorrSignature: new Uint8Array(64),
+      },
+    }
+
+    // Should return error, not throw
+    const result = verifyClaimProof(tx, snapshot)
+    expect(result.valid).toBe(false)
+    expect(result.error).toBeDefined()
+  })
+})
+
 describe('serializeClaimMessage', () => {
   it('is deterministic', () => {
     const msg1 = serializeClaimMessage('a'.repeat(40), 'b'.repeat(64), 'c'.repeat(64))

@@ -172,10 +172,12 @@ export function mineBlockAsync(
         }
       }
 
-      // Adaptive batch sizing: aim for ~100ms per batch
+      // Adaptive batch sizing with exponential smoothing: aim for ~100ms per batch
       const batchMs = performance.now() - batchStart
       if (batchMs > 0) {
-        batchSize = Math.max(10_000, Math.min(500_000, Math.round(batchSize * TARGET_BATCH_MS / batchMs)))
+        const idealBatch = Math.round(batchSize * TARGET_BATCH_MS / batchMs)
+        const ALPHA = 0.3
+        batchSize = Math.max(10_000, Math.min(500_000, Math.round(ALPHA * idealBatch + (1 - ALPHA) * batchSize)))
       }
 
       // Log progress every ~500k nonces
