@@ -165,7 +165,7 @@ export function createGenesisBlock(): Block {
   if (_cachedGenesis) return structuredClone(_cachedGenesis)
 
   const burnAddress = '0'.repeat(64)
-  const timestamp = Date.now()
+  const timestamp = 0 // fixed for deterministic genesis
 
   // Genesis coinbase - pays to burn address (unspendable, like Bitcoin's genesis)
   const coinbaseTx: Transaction = {
@@ -203,17 +203,10 @@ export function createGenesisBlock(): Block {
     merkleRoot,
     timestamp,
     target: INITIAL_TARGET,
-    nonce: 0,
+    nonce: 106720, // pre-mined for deterministic genesis (timestamp=0)
   }
 
-  // Mine genesis with easy target - find a valid nonce
-  let nonce = 0
-  let hash = computeBlockHash(header)
-  while (!hashMeetsTarget(hash, INITIAL_TARGET)) {
-    nonce++
-    header.nonce = nonce
-    hash = computeBlockHash(header)
-  }
+  const hash = computeBlockHash(header)
 
   _cachedGenesis = { header, hash, transactions: [coinbaseTx], height: 0 }
   return structuredClone(_cachedGenesis)
@@ -229,6 +222,7 @@ const _cachedForkGenesis = new Map<string, Block>()
  * Cached per snapshot (deterministic — same snapshot always produces same result).
  */
 export function createForkGenesisBlock(snapshot: BtcSnapshot): Block {
+  const nonceHint = (snapshot as Record<string, unknown>)._genesisNonceHint as number | undefined
   const cacheKey = snapshot.merkleRoot
   const cached = _cachedForkGenesis.get(cacheKey)
   if (cached) return structuredClone(cached)
@@ -280,16 +274,18 @@ export function createForkGenesisBlock(snapshot: BtcSnapshot): Block {
     merkleRoot,
     timestamp,
     target: INITIAL_TARGET,
-    nonce: 0,
+    nonce: nonceHint ?? 0,
   }
 
-  // Mine genesis
-  let nonce = 0
+  // Try hint first, then mine if it doesn't work
   let hash = computeBlockHash(header)
-  while (!hashMeetsTarget(hash, INITIAL_TARGET)) {
-    nonce++
-    header.nonce = nonce
+  if (!hashMeetsTarget(hash, INITIAL_TARGET)) {
+    header.nonce = 0
     hash = computeBlockHash(header)
+    while (!hashMeetsTarget(hash, INITIAL_TARGET)) {
+      header.nonce++
+      hash = computeBlockHash(header)
+    }
   }
 
   const result = { header, hash, transactions: [coinbaseTx], height: 0 }

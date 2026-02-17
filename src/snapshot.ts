@@ -113,10 +113,26 @@ export interface MockHolder {
   signerKeys?: Array<{ secretKey: Uint8Array; publicKey: Uint8Array }>
 }
 
+let _cachedMockSnapshot: { snapshot: BtcSnapshot; holders: MockHolder[] } | null = null
+
+/** Deterministic keypair from index (SHA-256 of index as secret key) */
+function deterministicKeypair(index: number): { secretKey: Uint8Array; publicKey: Uint8Array } {
+  const seed = new Uint8Array(4)
+  new DataView(seed.buffer).setUint32(0, index)
+  const secretKey = sha256(seed)
+  const publicKey = secp256k1.getPublicKey(secretKey, true)
+  return { secretKey, publicKey }
+}
+
+/** Pre-mined nonce for the deterministic mock snapshot fork genesis */
+const MOCK_FORK_GENESIS_NONCE = 649089
+
 export function createMockSnapshot(): {
   snapshot: BtcSnapshot
   holders: MockHolder[]
 } {
+  if (_cachedMockSnapshot) return _cachedMockSnapshot
+  let keyIndex = 0
   const holderAmounts = [100, 250, 50, 500, 75] // BTC amounts for 5 P2PKH/P2WPKH holders
   const p2shAmounts = [200] // BTC amounts for P2SH-P2WPKH holders
   const p2shMultisigAmounts = [350] // BTC amounts for P2SH multisig (2-of-3) holders
@@ -126,7 +142,7 @@ export function createMockSnapshot(): {
   const entries: BtcAddressBalance[] = []
 
   for (let i = 0; i < holderAmounts.length; i++) {
-    const kp = generateBtcKeypair()
+    const kp = deterministicKeypair(keyIndex++)
     const address = deriveBtcAddress(kp.publicKey)
     holders.push({
       secretKey: kp.secretKey,
@@ -143,7 +159,7 @@ export function createMockSnapshot(): {
 
   // Add P2SH-P2WPKH holders
   for (let i = 0; i < p2shAmounts.length; i++) {
-    const kp = generateBtcKeypair()
+    const kp = deterministicKeypair(keyIndex++)
     const address = deriveP2shP2wpkhAddress(kp.publicKey)
     holders.push({
       secretKey: kp.secretKey,
@@ -162,7 +178,7 @@ export function createMockSnapshot(): {
 
   // Add P2SH multisig (2-of-3) holders
   for (let i = 0; i < p2shMultisigAmounts.length; i++) {
-    const signerKeys = [generateBtcKeypair(), generateBtcKeypair(), generateBtcKeypair()]
+    const signerKeys = [deterministicKeypair(keyIndex++), deterministicKeypair(keyIndex++), deterministicKeypair(keyIndex++)]
     const pubkeys = signerKeys.map(kp => kp.publicKey)
     const redeemScript = buildMultisigScript(2, pubkeys)
     const address = deriveP2shMultisigAddress(redeemScript)
@@ -185,11 +201,11 @@ export function createMockSnapshot(): {
 
   // Add P2TR (Taproot) holders
   for (let i = 0; i < p2trAmounts.length; i++) {
-    const secretKey = secp256k1.utils.randomSecretKey()
-    const internalPubkey = getSchnorrPublicKey(secretKey)
+    const kp = deterministicKeypair(keyIndex++)
+    const internalPubkey = getSchnorrPublicKey(kp.secretKey)
     const address = deriveP2trAddress(internalPubkey)
     holders.push({
-      secretKey,
+      secretKey: kp.secretKey,
       publicKey: internalPubkey, // 32-byte x-only for P2TR
       address,
       amount: p2trAmounts[i],
@@ -205,7 +221,7 @@ export function createMockSnapshot(): {
 
   // Add P2WSH (2-of-3 multisig) holders
   for (let i = 0; i < p2wshAmounts.length; i++) {
-    const signerKeys = [generateBtcKeypair(), generateBtcKeypair(), generateBtcKeypair()]
+    const signerKeys = [deterministicKeypair(keyIndex++), deterministicKeypair(keyIndex++), deterministicKeypair(keyIndex++)]
     const pubkeys = signerKeys.map(kp => kp.publicKey)
     const witnessScript = buildMultisigScript(2, pubkeys)
     const address = deriveP2wshAddress(witnessScript)
@@ -236,5 +252,9 @@ export function createMockSnapshot(): {
     merkleRoot,
   }
 
-  return { snapshot, holders }
+  // Attach pre-mined nonce hint to skip genesis mining in tests
+  ;(snapshot as any)._genesisNonceHint = MOCK_FORK_GENESIS_NONCE
+
+  _cachedMockSnapshot = { snapshot, holders }
+  return _cachedMockSnapshot
 }

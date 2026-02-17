@@ -32,6 +32,7 @@ export interface BlockUndo {
 
 export class Blockchain {
   blocks: Block[] = []
+  blocksByHash: Map<string, Block> = new Map()
   undoData: BlockUndo[] = []
   utxoSet: Map<string, UTXO> = new Map()
   difficulty: string = STARTING_DIFFICULTY
@@ -62,10 +63,12 @@ export class Blockchain {
       if (persisted.length > 0) {
         // Replay persisted blocks (genesis is first)
         this.blocks.push(persisted[0]) // genesis
+        this.blocksByHash.set(persisted[0].hash, persisted[0])
         this.cumulativeWork = blockWork(persisted[0].header.target)
         for (let i = 1; i < persisted.length; i++) {
           this.undoData.push(this.applyBlock(persisted[i]))
           this.blocks.push(persisted[i])
+          this.blocksByHash.set(persisted[i].hash, persisted[i])
           this.cumulativeWork += blockWork(persisted[i].header.target)
           if (this.blocks.length % DIFFICULTY_ADJUSTMENT_INTERVAL === 0) {
             this.difficulty = this.adjustDifficulty()
@@ -84,6 +87,7 @@ export class Blockchain {
     if (snapshot) {
       const genesis = createForkGenesisBlock(snapshot)
       this.blocks.push(genesis)
+      this.blocksByHash.set(genesis.hash, genesis)
       if (storage) {
         storage.appendBlock(genesis)
         storage.saveMetadata({ height: 0, difficulty: this.difficulty, genesisHash: genesis.hash })
@@ -91,6 +95,7 @@ export class Blockchain {
     } else {
       const genesis = createGenesisBlock()
       this.blocks.push(genesis)
+      this.blocksByHash.set(genesis.hash, genesis)
       if (storage) {
         storage.appendBlock(genesis)
         storage.saveMetadata({ height: 0, difficulty: this.difficulty, genesisHash: genesis.hash })
@@ -105,7 +110,9 @@ export class Blockchain {
   replaceGenesis(genesis: Block): boolean {
     if (this.getHeight() !== 0) return false
     if (this.btcSnapshot) return false
+    this.blocksByHash.delete(this.blocks[0].hash)
     this.blocks[0] = genesis
+    this.blocksByHash.set(genesis.hash, genesis)
     if (this.storage) {
       this.storage.rewriteBlocks(this.blocks)
       this.storage.saveMetadata({ height: 0, difficulty: this.difficulty, genesisHash: genesis.hash })
@@ -159,6 +166,7 @@ export class Blockchain {
 
     // Append to chain
     this.blocks.push(block)
+    this.blocksByHash.set(block.hash, block)
 
     // Check difficulty adjustment
     if (this.blocks.length % DIFFICULTY_ADJUSTMENT_INTERVAL === 0) {
@@ -408,6 +416,7 @@ export class Blockchain {
     if (hasUndoData && targetHeight > 0) {
       // Fast path: disconnect blocks backwards using undo data — O(blocks_removed)
       for (let h = currentHeight; h > targetHeight; h--) {
+        this.blocksByHash.delete(this.blocks[h].hash)
         this.disconnectBlock(this.undoData[h - 1])
         this.undoData.pop()
         this.blocks.pop()
@@ -415,6 +424,8 @@ export class Blockchain {
     } else {
       // Slow path: full replay from genesis
       this.blocks.length = targetHeight + 1
+      this.blocksByHash.clear()
+      for (const b of this.blocks) this.blocksByHash.set(b.hash, b)
       this.undoData.length = 0
       this.utxoSet.clear()
       this.claimedBtcAddresses.clear()

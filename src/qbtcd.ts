@@ -12,6 +12,7 @@
  *   --mine            Enable mining (generates a wallet and mines continuously)
  *   --full            Auto-download snapshot if missing, then start as full node
  *   --local           Run without default seed (isolated local chain)
+ *   --rpc-bind <addr> RPC bind address (default 127.0.0.1)
  *   --simulate        Enable periodic mining and transaction simulation (dev only)
  */
 import { Node } from './node.js'
@@ -52,6 +53,7 @@ Options:
   --full                  Auto-download snapshot if missing, then start as full node
   --local                 Run without default seed (isolated local chain)
   --message <text>        Coinbase message included in every mined block
+  --rpc-bind <addr>       RPC bind address (default 127.0.0.1)
   --simulate              Dev mode: pinned easy difficulty, fake txs
   -h, --help              Show this help`)
       process.exit(0)
@@ -79,6 +81,7 @@ Options:
     local: flags.has('local'),
     simulate: flags.has('simulate'),
     message: opts['message'] ?? null,
+    rpcBind: opts['rpc-bind'] ?? '127.0.0.1',
   }
 }
 
@@ -196,7 +199,7 @@ async function main() {
   }
 
   // Start RPC
-  startRpcServer(node, config.port, p2p)
+  startRpcServer(node, config.port, p2p, config.rpcBind)
 
   // Mining mode — load or generate a wallet, then mine continuously
   if (config.mine) {

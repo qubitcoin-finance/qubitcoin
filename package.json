@@ -4,6 +4,7 @@
   "description": "Post-Quantum Cryptography proof of concept using NIST FIPS 203/204/205",
   "type": "module",
   "scripts": {
+    "prepare": "husky",
     "build": "tsc",
     "start": "node --loader ts-node/esm src/index.ts",
     "kem": "node --loader ts-node/esm src/ml-kem-demo.ts",
@@ -61,6 +62,7 @@
     "typescript": "^5.9.3"
   },
   "devDependencies": {
+    "husky": "^9.1.7",
     "vitest": "^4.0.18"
   }
 }

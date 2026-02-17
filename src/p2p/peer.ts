@@ -32,7 +32,8 @@ export class Peer {
   readonly address: string
   readonly inbound: boolean
   private socket: net.Socket
-  private buffer: Buffer = Buffer.alloc(0)
+  private buffers: Buffer[] = []
+  private bufferedBytes = 0
   private onMessage: PeerEventHandler
   private onDisconnect: PeerDisconnectHandler
 
@@ -86,7 +87,11 @@ export class Peer {
     if (this.destroyed) return
     try {
       const frame = encodeMessage(msg)
-      this.socket.write(frame)
+      const ok = this.socket.write(frame)
+      if (!ok) {
+        // Slow peer: kernel buffer full — disconnect immediately (Bitcoin Core behavior)
+        this.disconnect('write backpressure')
+      }
     } catch {
       this.disconnect('send error')
     }
@@ -137,17 +142,27 @@ export class Peer {
   private handleData(data: Buffer): void {
     this.resetIdleTimer()
 
-    this.buffer = Buffer.concat([this.buffer, data])
+    this.buffers.push(data)
+    this.bufferedBytes += data.length
 
     // Guard against oversized accumulation
-    if (this.buffer.length > MAX_MESSAGE_SIZE + 4) {
+    if (this.bufferedBytes > MAX_MESSAGE_SIZE + 4) {
       this.disconnect('buffer overflow')
       return
     }
 
+    // Concat only when we need to parse
+    const buffer = this.buffers.length === 1 ? this.buffers[0] : Buffer.concat(this.buffers)
+
     try {
-      const { messages, remainder } = decodeMessages(this.buffer)
-      this.buffer = remainder
+      const { messages, remainder } = decodeMessages(buffer)
+      if (remainder.length > 0) {
+        this.buffers = [remainder]
+        this.bufferedBytes = remainder.length
+      } else {
+        this.buffers = []
+        this.bufferedBytes = 0
+      }
 
       for (const msg of messages) {
         if (!this.consumeToken()) {

@@ -1,6 +1,6 @@
 all:
   hosts:
-    miner1:
-      ansible_host: 0.0.0.0  # Replace with actual IP
+    qbtc-q:
+      ansible_host: 5.181.218.91
       ansible_user: qbtc
-      qbtc_message: "mined by satoshi"
+      qbtc_message: "mined by q"

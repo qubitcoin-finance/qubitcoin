@@ -33,7 +33,7 @@ import { log } from '../log.js'
 
 const MAX_INBOUND = 25
 const MAX_OUTBOUND = 25
-const IBD_BATCH_SIZE = 50
+const IBD_BATCH_SIZE = 200
 const SEEN_CACHE_MAX = 10_000
 const BAN_DURATION_MS = 24 * 60 * 60 * 1000 // 24h
 const MAX_REORG_DEPTH = 100
@@ -66,6 +66,19 @@ function isRoutableAddress(host: string): boolean {
 
   return true
 }
+/** Strip ::ffff: prefix from IPv4-mapped IPv6 addresses */
+function normalizeIP(ip: string): string {
+  return ip.replace(/^::ffff:/i, '')
+}
+
+/** Check if a peer matches a given host:port, with IPv6 normalization */
+function peerMatchesHost(peer: { id: string; address: string }, host: string, port: number): boolean {
+  if (peer.id === `${host}:${port}`) return true
+  return normalizeIP(peer.address) === normalizeIP(host)
+}
+
+const MAX_INBOUND_PER_IP = 3
+
 const FORK_RESOLUTION_TIMEOUT_MS = 60_000
 const MAX_ORPHAN_BLOCKS = 50
 const ORPHAN_EXPIRY_MS = 10 * 60_000
@@ -77,7 +90,7 @@ interface OrphanBlock {
 
 /** Known Uint8Array fields that need deserialization from P2P messages */
 const TX_INPUT_BINARY_FIELDS = ['publicKey', 'signature'] as const
-const CLAIM_DATA_BINARY_FIELDS = ['ecdsaPublicKey', 'ecdsaSignature', 'schnorrPublicKey', 'schnorrSignature'] as const
+const CLAIM_DATA_BINARY_FIELDS = ['ecdsaPublicKey', 'ecdsaSignature', 'schnorrPublicKey', 'schnorrSignature', 'witnessScript', 'witnessSignatures'] as const
 
 function deserializeTransaction(raw: Record<string, unknown>): Transaction {
   const tx = raw as unknown as Transaction
@@ -248,12 +261,12 @@ export class P2PServer {
     })
   }
 
-  getPeers(): Array<{ id: string; address: string; inbound: boolean; height: number }> {
+  getPeers(): Array<{ address: string; inbound: boolean; height: number }> {
+    const cleanAddr = (addr: string) => addr.replace(/^::ffff:/, '')
     return Array.from(this.peers.values())
       .filter((p) => p.handshakeComplete)
       .map((p) => ({
-        id: p.id,
-        address: p.address,
+        address: cleanAddr(p.address),
         inbound: p.inbound,
         height: p.remoteHeight,
       }))
@@ -271,7 +284,23 @@ export class P2PServer {
       socket.destroy()
       return
     }
+    if (this.countInboundFromIP(addr) >= MAX_INBOUND_PER_IP) {
+      log.info({ component: 'p2p', ip: addr }, 'Rejected peer — per-IP inbound limit')
+      socket.destroy()
+      return
+    }
     this.createPeer(socket, true)
+  }
+
+  private countInboundFromIP(ip: string): number {
+    const normalized = normalizeIP(ip)
+    let count = 0
+    for (const peer of this.peers.values()) {
+      if (peer.inbound && normalizeIP(peer.address) === normalized) {
+        count++
+      }
+    }
+    return count
   }
 
   private createPeer(socket: net.Socket, inbound: boolean, label?: string): Peer | null {
@@ -310,7 +339,7 @@ export class P2PServer {
     // Schedule reconnect with exponential backoff if it was a seed
     if (!peer.inbound) {
       for (const seed of this.seeds) {
-        if (peer.id === `${seed.host}:${seed.port}` || peer.address.includes(seed.host)) {
+        if (peerMatchesHost(peer, seed.host, seed.port)) {
           const seedKey = `${seed.host}:${seed.port}`
           const currentDelay = this.seedBackoff.get(seedKey) ?? SEED_RECONNECT_BASE_MS
           const nextDelay = Math.min(currentDelay * 2, SEED_RECONNECT_MAX_MS)
@@ -449,7 +478,7 @@ export class P2PServer {
     // Reset backoff on successful handshake (outbound seeds)
     if (!peer.inbound) {
       for (const seed of this.seeds) {
-        if (peer.id === `${seed.host}:${seed.port}` || peer.address.includes(seed.host)) {
+        if (peerMatchesHost(peer, seed.host, seed.port)) {
           this.seedBackoff.delete(`${seed.host}:${seed.port}`)
           break
         }
@@ -562,7 +591,7 @@ export class P2PServer {
         // During IBD (batch of blocks), "Previous hash" mismatch means fork
         // For single blocks (relay/getdata), check if it's an orphan (parent unknown)
         if (payload.blocks.length === 1) {
-          const parentInChain = this.node.chain.blocks.some(b => b.hash === block.header.previousHash)
+          const parentInChain = this.node.chain.blocksByHash.has(block.header.previousHash)
           if (!parentInChain) {
             // Orphan: parent not in our chain yet — cache it
             this.addOrphan(block)
@@ -585,7 +614,9 @@ export class P2PServer {
     }
 
     if (added > 0) {
-      log.info({ component: 'p2p', peer: peer.id, added, height: this.node.chain.getHeight(), peerHeight: peer.remoteHeight }, 'Syncing blocks')
+      const ourHeight = this.node.chain.getHeight()
+      const progress = peer.remoteHeight > 0 ? Math.min(100, Math.round((ourHeight / peer.remoteHeight) * 100)) : 100
+      log.info({ component: 'p2p', peer: peer.id, added, height: ourHeight, peerHeight: peer.remoteHeight, progress: `${progress}%` }, 'Syncing blocks')
     }
 
     // Request more if we got a full batch and peer is still ahead
@@ -658,7 +689,7 @@ export class P2PServer {
     }
 
     if (payload.type === 'block') {
-      const block = this.node.chain.blocks.find((b) => b.hash === payload.hash)
+      const block = this.node.chain.blocksByHash.get(payload.hash)
       if (block) {
         peer.send({
           type: 'blocks',
@@ -745,7 +776,7 @@ export class P2PServer {
     // Find the first locator hash that matches a block in our chain
     let forkPoint = 0 // default to genesis
     for (const hash of payload.locatorHashes) {
-      const block = chain.blocks.find((b) => b.hash === hash)
+      const block = chain.blocksByHash.get(hash)
       if (block) {
         forkPoint = block.height
         break
@@ -854,7 +885,7 @@ export class P2PServer {
   private isConnectedToSeed(host: string, port: number): boolean {
     const label = `${host}:${port}`
     for (const peer of this.peers.values()) {
-      if (!peer.inbound && (peer.id === label || peer.address.includes(host))) {
+      if (!peer.inbound && peerMatchesHost(peer, host, port)) {
         return true
       }
     }
@@ -904,18 +935,20 @@ export class P2PServer {
   }
 
   private isBanned(ip: string): boolean {
-    const expiry = this.banList.get(ip)
+    const normalized = normalizeIP(ip)
+    const expiry = this.banList.get(normalized)
     if (expiry === undefined) return false
     if (Date.now() > expiry) {
-      this.banList.delete(ip)
+      this.banList.delete(normalized)
       return false
     }
     return true
   }
 
   private ban(ip: string): void {
-    log.warn({ component: 'p2p', ip }, 'Banning peer for 24h')
-    this.banList.set(ip, Date.now() + BAN_DURATION_MS)
+    const normalized = normalizeIP(ip)
+    log.warn({ component: 'p2p', ip: normalized }, 'Banning peer for 24h')
+    this.banList.set(normalized, Date.now() + BAN_DURATION_MS)
     this.saveBanList()
   }
 
@@ -970,9 +1003,32 @@ export class P2PServer {
       return
     }
 
+    const newAddresses: Array<{ host: string; port: number; lastSeen?: number }> = []
     for (const entry of payload.addresses) {
       if (!entry.host || typeof entry.port !== 'number' || entry.port <= 0 || entry.port > 65535) continue
+      const key = `${entry.host}:${entry.port}`
+      const wasNew = !this.knownAddresses.has(key)
       this.addKnownAddress(entry.host, entry.port, entry.lastSeen)
+      if (wasNew) newAddresses.push(entry)
+    }
+
+    // Forward new addresses to up to 2 random peers (excluding sender)
+    if (newAddresses.length > 0) {
+      const eligible = Array.from(this.peers.values()).filter(
+        (p) => p.id !== peer.id && p.handshakeComplete
+      )
+      // Shuffle and pick up to 2
+      for (let i = eligible.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1))
+        ;[eligible[i], eligible[j]] = [eligible[j], eligible[i]]
+      }
+      const targets = eligible.slice(0, 2)
+      if (targets.length > 0) {
+        const msg: Message = { type: 'addr', payload: { addresses: newAddresses } as AddrPayload }
+        for (const target of targets) {
+          target.send(msg)
+        }
+      }
     }
   }
 

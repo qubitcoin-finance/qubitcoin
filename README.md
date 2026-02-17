@@ -38,6 +38,34 @@ pnpm install
 Running
 -------
 
+### Docker (recommended)
+
+```bash
+# Easiest way: pull and run (auto-downloads snapshot, starts mining)
+docker run -d --name qbtc \
+  --restart unless-stopped \
+  -p 3001:3001 -p 6001:6001 \
+  -v qbtc-data:/data \
+  ghcr.io/qubitcoin-finance/qbtcd:main \
+  --mine --full --datadir /data --message "my node"
+
+# Check status
+curl http://localhost:3001/api/v1/status
+
+# View logs
+docker logs -f qbtc
+
+# Relay-only node (no mining)
+docker run -d --name qbtc \
+  --restart unless-stopped \
+  -p 3001:3001 -p 6001:6001 \
+  -v qbtc-data:/data \
+  ghcr.io/qubitcoin-finance/qbtcd:main \
+  --full --datadir /data
+```
+
+### From source
+
 ```bash
 # Easiest way: auto-download the BTC snapshot and start mining
 pnpm run qbtcd -- --mine --full
@@ -49,7 +77,7 @@ pnpm run qbtcd -- --mine --snapshot /path/to/qbtc-snapshot.jsonl
 pnpm run qbtcd -- --full
 ```
 
-The `--full` flag automatically downloads the 2.4 GB BTC snapshot from `qubitcoin.finance` on first run (saved to `<datadir>/qbtc-snapshot.jsonl`). Subsequent starts skip the download. The default seed node is `qubitcoin.finance:6001`.
+The `--full` flag automatically downloads the 3.6 GB BTC snapshot from `qubitcoin.finance` on first run (saved to `<datadir>/qbtc-snapshot.jsonl`). Subsequent starts skip the download. The default seed node is `qubitcoin.finance:6001`.
 
 ### qbtcd CLI options
 
@@ -82,6 +110,23 @@ pnpm run website:build  # Production build
 ```
 
 Visit `http://localhost:5173` (dev) or the deployed site at https://qubitcoin.finance.
+
+Deploying a Miner
+-----------------
+
+An Ansible role is included for automated deployment of mining nodes via Docker.
+
+```bash
+# 1. Edit ansible/inventory.yml with your server IP and user
+# 2. Ensure Docker is installed on the target (or install it as root)
+# 3. Deploy
+cd ansible
+ansible-playbook -i inventory.yml deploy-miner.yml
+```
+
+The playbook pulls the Docker image from GHCR, mounts a persistent data volume, and starts mining with `--mine --full`. The node auto-downloads the BTC snapshot on first run.
+
+See `ansible/roles/qbtc-miner/defaults/main.yml` for configurable variables (`qbtc_image`, `qbtc_rpc_port`, `qbtc_p2p_port`, `qbtc_message`, etc.).
 
 Development Process
 -------------------

@@ -300,8 +300,8 @@ describe('Fork resolution safety', () => {
     await waitFor(() => p2p1.getPeers().length > 0)
 
     // Disconnect the peer
-    const peers = p2p1.getPeers()
-    const peer = (p2p1 as any).peers.get(peers[0].id) as Peer
+    const peerMap = (p2p1 as any).peers as Map<string, Peer>
+    const peer = peerMap.values().next().value as Peer
     peer.disconnect('test disconnect')
 
     await waitFor(() => p2p1.getPeers().length === 0)
