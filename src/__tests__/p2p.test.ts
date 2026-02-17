@@ -384,7 +384,7 @@ describe('P2P fork resolution', () => {
     await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
 
     // Give some time for potential (unwanted) reorg
-    await new Promise((r) => setTimeout(r, 2000))
+    await new Promise((r) => setTimeout(r, 500))
 
     // Node1 should keep its longer chain
     expect(node1.chain.getHeight()).toBe(4)
@@ -476,12 +476,13 @@ describe('P2P improvements', () => {
       for (let i = 0; i < 4; i++) {
         const sock = net.createConnection({ host: '127.0.0.1', port })
         sockets.push(sock)
-        // Small delay to ensure sequential handling
-        await new Promise(r => setTimeout(r, 50))
+        await new Promise<void>(r => sock.once('connect', r))
       }
 
-      // Wait for connections to be processed
-      await new Promise(r => setTimeout(r, 500))
+      // Wait for all connections to be processed by the server
+      await waitFor(() => (p2p1 as any).peers.size >= 3, 2_000)
+      // Small extra delay for the 4th to be rejected
+      await new Promise(r => setTimeout(r, 50))
 
       // Should have at most 3 inbound peers from same IP
       const inboundCount = (p2p1 as any).inboundCount
