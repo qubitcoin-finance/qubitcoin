@@ -356,6 +356,15 @@ export function validateBlock(
     return { valid: false, error: `Merkle root mismatch: expected ${expectedMerkle}` }
   }
 
+  // Reject duplicate transaction IDs (CVE-2012-2459 defence-in-depth)
+  const txIdSet = new Set<string>()
+  for (const tx of block.transactions) {
+    if (txIdSet.has(tx.id)) {
+      return { valid: false, error: `Duplicate transaction ID: ${tx.id}` }
+    }
+    txIdSet.add(tx.id)
+  }
+
   // Verify block size
   const size = blockSize(block)
   if (size > MAX_BLOCK_SIZE) {

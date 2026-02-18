@@ -10,7 +10,7 @@ import { createMockSnapshot, computeSnapshotMerkleRoot, type BtcAddressBalance, 
 import { generateWallet, generateBtcKeypair, bytesToHex, hash160, doubleSha256Hex, deriveP2shP2wpkhAddress, deriveP2shMultisigAddress, getSchnorrPublicKey, deriveP2trAddress, buildMultisigScript, deriveP2wshAddress, parseWitnessScript } from '../crypto.js'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { secp256k1 } from '@noble/curves/secp256k1.js'
-import { isClaimTransaction, CLAIM_TXID } from '../transaction.js'
+import { isClaimTransaction, CLAIM_TXID, CLAIM_MATURITY } from '../transaction.js'
 import { Blockchain } from '../chain.js'
 import { createCoinbaseTransaction, createTransaction, utxoKey } from '../transaction.js'
 import {
@@ -252,6 +252,12 @@ describe('end-to-end: claim → mine → spend', () => {
     expect(addResult.success).toBe(true)
     expect(chain.getBalance(qbtcWallet.address)).toBe(holders[0].amount)
 
+    // Mine CLAIM_MATURITY blocks to mature the claim output
+    for (let i = 0; i < CLAIM_MATURITY; i++) {
+      const emptyBlock = mineOnChain(chain, 'f'.repeat(64))
+      expect(chain.addBlock(emptyBlock).success).toBe(true)
+    }
+
     // Step 2: Spend claimed coins with ML-DSA-65
     const utxos = chain.findUTXOs(qbtcWallet.address)
     expect(utxos.length).toBe(1)
@@ -388,6 +394,12 @@ describe('P2SH-P2WPKH claims', () => {
     const addResult = chain.addBlock(block1)
     expect(addResult.success).toBe(true)
     expect(chain.getBalance(qbtcWallet.address)).toBe(p2shHolder.amount)
+
+    // Mine CLAIM_MATURITY blocks to mature the claim output
+    for (let i = 0; i < CLAIM_MATURITY; i++) {
+      const emptyBlock = mineOnChain(chain, 'f'.repeat(64))
+      expect(chain.addBlock(emptyBlock).success).toBe(true)
+    }
 
     // Spend
     const utxos = chain.findUTXOs(qbtcWallet.address)
@@ -533,6 +545,12 @@ describe('P2TR (Taproot) claims', () => {
     const addResult = chain.addBlock(block1)
     expect(addResult.success).toBe(true)
     expect(chain.getBalance(qbtcWallet.address)).toBe(p2trHolder.amount)
+
+    // Mine CLAIM_MATURITY blocks to mature the claim output
+    for (let i = 0; i < CLAIM_MATURITY; i++) {
+      const emptyBlock = mineOnChain(chain, 'f'.repeat(64))
+      expect(chain.addBlock(emptyBlock).success).toBe(true)
+    }
 
     // Spend claimed coins
     const utxos = chain.findUTXOs(qbtcWallet.address)
@@ -721,6 +739,12 @@ describe('P2WSH claims', () => {
     expect(addResult.success).toBe(true)
     expect(chain.getBalance(qbtcWallet.address)).toBe(p2wshHolder.amount)
 
+    // Mine CLAIM_MATURITY blocks to mature the claim output
+    for (let i = 0; i < CLAIM_MATURITY; i++) {
+      const emptyBlock = mineOnChain(chain, 'f'.repeat(64))
+      expect(chain.addBlock(emptyBlock).success).toBe(true)
+    }
+
     // Spend claimed coins with ML-DSA-65
     const utxos = chain.findUTXOs(qbtcWallet.address)
     expect(utxos.length).toBe(1)
@@ -893,6 +917,12 @@ describe('P2SH multisig claims', () => {
     const addResult = chain.addBlock(block1)
     expect(addResult.success).toBe(true)
     expect(chain.getBalance(qbtcWallet.address)).toBe(p2shMultisigHolder.amount)
+
+    // Mine CLAIM_MATURITY blocks to mature the claim output
+    for (let i = 0; i < CLAIM_MATURITY; i++) {
+      const emptyBlock = mineOnChain(chain, 'f'.repeat(64))
+      expect(chain.addBlock(emptyBlock).success).toBe(true)
+    }
 
     const utxos = chain.findUTXOs(qbtcWallet.address)
     expect(utxos.length).toBe(1)

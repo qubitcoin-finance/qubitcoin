@@ -567,6 +567,7 @@ export class Blockchain {
             address: output.address,
             amount: output.amount,
             height: block.height,
+            isClaim: true,
           })
           this.indexUtxo(output.address, key)
           undo.createdUtxoKeys.push(key)

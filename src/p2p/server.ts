@@ -43,6 +43,14 @@ const SEED_RECONNECT_MAX_MS = 60_000
 const MAX_ADDR_BOOK = 1_000
 const MAX_ADDR_RESPONSE = 100
 const DISCOVERY_INTERVAL_MS = 60_000
+const MAX_OUTBOUND_PER_SUBNET = 2
+
+/** Extract /16 subnet prefix from an IPv4 address (e.g., "1.2" from "1.2.3.4") */
+function getSubnet16(ip: string): string {
+  const normalized = ip.replace(/^::ffff:/i, '')
+  const match = normalized.match(/^(\d+\.\d+)\.\d+\.\d+$/)
+  return match ? match[1] : ip // non-IPv4 addresses use full IP as "subnet"
+}
 
 /** Check if an IP address is publicly routable (not private/loopback/link-local) */
 function isRoutableAddress(host: string): boolean {
@@ -153,6 +161,8 @@ export class P2PServer {
   private lastGetblocksTime: Map<string, number> = new Map()
 
   private localMode = false
+  private anchorsPath: string | null = null
+  private readonly MAX_ANCHORS = 10
 
   constructor(node: Node, port: number, dataDir?: string) {
     this.node = node
@@ -162,6 +172,8 @@ export class P2PServer {
     if (dataDir) {
       this.banListPath = path.join(dataDir, 'banned.json')
       this.loadBanList()
+      this.anchorsPath = path.join(dataDir, 'anchors.json')
+      this.loadAnchors()
     }
 
     // Wire up node broadcast hooks
@@ -188,6 +200,7 @@ export class P2PServer {
       this.discoveryTimer = null
     }
     this.clearForkResolution()
+    this.saveAnchors()
     return new Promise((resolve) => {
       for (const peer of this.peers.values()) {
         peer.disconnect('server shutdown')
@@ -909,7 +922,7 @@ export class P2PServer {
         verifiedPeerWork += blockWork(chain.getDifficulty())
       }
       // If peer claims more work than headers can justify, ban them
-      if (peer.remoteCumulativeWork > verifiedPeerWork * 2n) {
+      if (peer.remoteCumulativeWork > verifiedPeerWork * 3n / 2n) {
         log.warn({ component: 'p2p', peer: peer.id, claimed: peer.remoteCumulativeWork.toString(16).slice(0, 16), verified: verifiedPeerWork.toString(16).slice(0, 16) }, 'Peer claims impossibly high cumulative work — banning')
         peer.addMisbehavior(100)
         this.clearForkResolution()
@@ -1144,9 +1157,28 @@ export class P2PServer {
       )
       if (candidates.length === 0) return
 
-      const pick = candidates[Math.floor(Math.random() * candidates.length)]
+      // Enforce /16 subnet diversity (skip in localMode — all peers are 127.0.0.1)
+      let filtered = candidates
+      if (!this.localMode) {
+        const subnetCounts = new Map<string, number>()
+        for (const peer of this.peers.values()) {
+          if (!(peer as any).inbound) {
+            const subnet = getSubnet16(peer.address)
+            subnetCounts.set(subnet, (subnetCounts.get(subnet) ?? 0) + 1)
+          }
+        }
+        filtered = candidates.filter(
+          (a) => (subnetCounts.get(getSubnet16(a.host)) ?? 0) < MAX_OUTBOUND_PER_SUBNET
+        )
+        if (filtered.length === 0) filtered = candidates // fallback if all subnets saturated
+      }
+
+      const pick = filtered[Math.floor(Math.random() * filtered.length)]
       log.debug({ component: 'p2p', addr: `${pick.host}:${pick.port}` }, 'Discovering peer')
       this.connectOutbound(pick.host, pick.port)
+
+      // Periodically save anchors
+      this.saveAnchors()
     }, DISCOVERY_INTERVAL_MS)
   }
 
@@ -1231,5 +1263,47 @@ export class P2PServer {
       obj[ip] = expiry
     }
     fs.writeFileSync(this.banListPath, JSON.stringify(obj, null, 2) + '\n')
+  }
+
+  /** Load anchor peers from disk and add to known addresses */
+  private loadAnchors(): void {
+    if (!this.anchorsPath) return
+    try {
+      const data = fs.readFileSync(this.anchorsPath, 'utf-8')
+      const anchors: Array<{ host: string; port: number; lastSeen: number }> = JSON.parse(data)
+      for (const a of anchors) {
+        if (a.host && a.port) {
+          this.knownAddresses.set(`${a.host}:${a.port}`, { host: a.host, port: a.port, lastSeen: a.lastSeen ?? Date.now() })
+        }
+      }
+      if (anchors.length > 0) {
+        log.info({ component: 'p2p', count: anchors.length }, 'Loaded anchor peers')
+      }
+    } catch {
+      // File doesn't exist or is invalid — start fresh
+    }
+  }
+
+  /** Persist the most recently seen known addresses as anchor peers */
+  saveAnchors(): void {
+    if (!this.anchorsPath) return
+    const entries = Array.from(this.knownAddresses.values())
+      .sort((a, b) => b.lastSeen - a.lastSeen)
+      .slice(0, this.MAX_ANCHORS)
+    try {
+      fs.writeFileSync(this.anchorsPath, JSON.stringify(entries, null, 2) + '\n')
+    } catch {
+      // Data dir may not be writable — ignore
+    }
+  }
+
+  /** Connect to anchor peers (called after loading) */
+  connectToAnchors(): void {
+    if (!this.anchorsPath) return
+    for (const [, addr] of this.knownAddresses) {
+      if (!this.isConnectedToSeed(addr.host, addr.port) && !this.isBanned(addr.host)) {
+        this.connectOutbound(addr.host, addr.port)
+      }
+    }
   }
 }

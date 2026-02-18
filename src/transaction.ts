@@ -55,10 +55,14 @@ export interface UTXO {
   amount: number
   height?: number      // block height where this UTXO was created
   isCoinbase?: boolean // true if this UTXO comes from a coinbase transaction
+  isClaim?: boolean    // true if this UTXO comes from a claim transaction
 }
 
 /** Coinbase outputs cannot be spent until this many blocks have been mined on top */
 export const COINBASE_MATURITY = 100
+
+/** Claim outputs cannot be spent until this many blocks have been mined on top */
+export const CLAIM_MATURITY = 10
 
 export const COINBASE_TXID = '0'.repeat(64)
 export const CLAIM_TXID = 'c'.repeat(64) // sentinel for BTC claim transactions
@@ -293,6 +297,14 @@ export function validateTransaction(
       const age = currentHeight - utxo.height
       if (age < COINBASE_MATURITY) {
         return { valid: false, error: `Coinbase UTXO at height ${utxo.height} not mature (age ${age}, need ${COINBASE_MATURITY})` }
+      }
+    }
+
+    // Check claim maturity
+    if (utxo.isClaim && currentHeight !== undefined && utxo.height !== undefined) {
+      const age = currentHeight - utxo.height
+      if (age < CLAIM_MATURITY) {
+        return { valid: false, error: `Claim UTXO at height ${utxo.height} not mature (age ${age}, need ${CLAIM_MATURITY})` }
       }
     }
 

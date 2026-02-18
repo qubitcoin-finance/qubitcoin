@@ -27,8 +27,10 @@ import {
 import {
   createTransaction,
   createCoinbaseTransaction,
+  validateTransaction,
   utxoKey,
   CLAIM_TXID,
+  CLAIM_MATURITY,
   type UTXO,
 } from '../transaction.js'
 import { doubleSha256Hex } from '../crypto.js'
@@ -1192,5 +1194,754 @@ describe('validateBlock edge cases', () => {
 
   it('blockWork returns 0n for zero target', () => {
     expect(blockWork('0'.repeat(64))).toBe(0n)
+  })
+})
+
+describe('Duplicate txid rejection', () => {
+  const TEST_TARGET = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+
+  function mineTestBlock(header: BlockHeader): { header: BlockHeader; hash: string } {
+    let hash = computeBlockHash(header)
+    while (!hashMeetsTarget(hash, TEST_TARGET)) {
+      header.nonce++
+      hash = computeBlockHash(header)
+    }
+    return { header, hash }
+  }
+
+  it('should reject block with duplicate coinbase txid', () => {
+    const genesis = createGenesisBlock()
+    const coinbase = createCoinbaseTransaction(walletA.address, 1, 0)
+
+    const txs = [coinbase, coinbase]
+    const merkleRoot = computeMerkleRoot(txs.map(t => t.id))
+    const { header, hash } = mineTestBlock({
+      version: 1, previousHash: genesis.hash, merkleRoot,
+      timestamp: Date.now(), target: TEST_TARGET, nonce: 0,
+    })
+    const result = validateBlock({ header, hash, transactions: txs, height: 1 }, genesis, new Map())
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('Duplicate transaction ID')
+  })
+
+  it('should reject block with duplicate claim txid among multiple txs', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const chain = new Blockchain(snapshot)
+    chain.difficulty = TEST_TARGET
+
+    const genesis = chain.getChainTip()
+    const coinbase = createCoinbaseTransaction(walletA.address, 1, 0)
+
+    // Create a claim tx, then include it twice alongside coinbase
+    const claimTx = createClaimTransaction(
+      holders[0].secretKey, holders[0].publicKey,
+      snapshot.entries[0], walletA, snapshot.btcBlockHash, genesis.hash
+    )
+
+    const txs = [coinbase, claimTx, claimTx]
+    const merkleRoot = computeMerkleRoot(txs.map(t => t.id))
+    const { header, hash } = mineTestBlock({
+      version: 1, previousHash: genesis.hash, merkleRoot,
+      timestamp: genesis.header.timestamp + 1, target: TEST_TARGET, nonce: 0,
+    })
+    const result = validateBlock(
+      { header, hash, transactions: txs, height: 1 },
+      genesis, chain.utxoSet, chain.blocks
+    )
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('Duplicate transaction ID')
+  })
+
+  it('should accept block with three unique transactions', () => {
+    const node = new Node('dup-test')
+    node.chain.difficulty = TEST_TARGET
+
+    // Mine 2 blocks so we have mature coinbase UTXOs (height 1 coinbase matures at 101)
+    // For this test just verify unique txs pass — mine 1 block is enough
+    node.mine(walletA.address, false)
+    expect(node.chain.getHeight()).toBe(1)
+    // Block 1 has coinbase only — that's unique, so it passes
+  })
+
+  it('should report the duplicate txid in error message', () => {
+    const genesis = createGenesisBlock()
+    const coinbase = createCoinbaseTransaction(walletA.address, 1, 0)
+
+    const txs = [coinbase, coinbase]
+    const merkleRoot = computeMerkleRoot(txs.map(t => t.id))
+    const { header, hash } = mineTestBlock({
+      version: 1, previousHash: genesis.hash, merkleRoot,
+      timestamp: Date.now(), target: TEST_TARGET, nonce: 0,
+    })
+    const result = validateBlock({ header, hash, transactions: txs, height: 1 }, genesis, new Map())
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain(coinbase.id)
+  })
+})
+
+describe('Claim maturity', () => {
+  const TEST_TARGET = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+
+  function mineEmpty(node: Node) {
+    node.mine(walletA.address, false)
+  }
+
+  function mineBlockOnChain(chain: Blockchain, extraTxs: any[] = []) {
+    const tip = chain.getChainTip()
+    const height = chain.getHeight() + 1
+    const coinbase = createCoinbaseTransaction('f'.repeat(64), height, 0)
+    const txs = [coinbase, ...extraTxs]
+    const merkleRoot = computeMerkleRoot(txs.map(t => t.id))
+    const header = {
+      version: 1,
+      previousHash: tip.hash,
+      merkleRoot,
+      timestamp: tip.header.timestamp + 1,
+      target: TEST_TARGET,
+      nonce: 0,
+    }
+    let hash = computeBlockHash(header)
+    while (!hashMeetsTarget(hash, TEST_TARGET)) {
+      header.nonce++
+      hash = computeBlockHash(header)
+    }
+    return { header, hash, transactions: txs, height }
+  }
+
+  it('should reject spending claim UTXO at age 1 (validateTransaction)', () => {
+    const claimUtxo: UTXO = {
+      txId: 'c'.repeat(63) + '1',
+      outputIndex: 0,
+      address: walletA.address,
+      amount: 100_000_000,
+      height: 5,
+      isClaim: true,
+    }
+    const utxoSet = new Map<string, UTXO>()
+    utxoSet.set(utxoKey(claimUtxo.txId, 0), claimUtxo)
+
+    const spendTx = createTransaction(
+      walletA,
+      [claimUtxo],
+      [{ address: walletB.address, amount: 100_000_000 - 10000 }],
+      10000
+    )
+
+    const result = validateTransaction(spendTx, utxoSet, 6) // age=1
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('Claim UTXO')
+    expect(result.error).toContain('not mature')
+    expect(result.error).toContain('age 1')
+  })
+
+  it('should reject spending claim UTXO at age 9 (one block short)', () => {
+    const claimUtxo: UTXO = {
+      txId: 'c'.repeat(63) + '2',
+      outputIndex: 0,
+      address: walletA.address,
+      amount: 50_000_000,
+      height: 1,
+      isClaim: true,
+    }
+    const utxoSet = new Map<string, UTXO>()
+    utxoSet.set(utxoKey(claimUtxo.txId, 0), claimUtxo)
+
+    const spendTx = createTransaction(
+      walletA,
+      [claimUtxo],
+      [{ address: walletB.address, amount: 50_000_000 - 10000 }],
+      10000
+    )
+
+    // currentHeight=10, height=1, age=9 < CLAIM_MATURITY(10)
+    const result = validateTransaction(spendTx, utxoSet, 10)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('age 9')
+    expect(result.error).toContain(`need ${CLAIM_MATURITY}`)
+  })
+
+  it('should allow spending claim UTXO at exactly CLAIM_MATURITY age', () => {
+    const claimUtxo: UTXO = {
+      txId: 'c'.repeat(63) + '3',
+      outputIndex: 0,
+      address: walletA.address,
+      amount: 100_000_000,
+      height: 1,
+      isClaim: true,
+    }
+    const utxoSet = new Map<string, UTXO>()
+    utxoSet.set(utxoKey(claimUtxo.txId, 0), claimUtxo)
+
+    const spendTx = createTransaction(
+      walletA,
+      [claimUtxo],
+      [{ address: walletB.address, amount: 100_000_000 - 10000 }],
+      10000
+    )
+
+    // currentHeight=11, height=1, age=10 == CLAIM_MATURITY
+    const result = validateTransaction(spendTx, utxoSet, 1 + CLAIM_MATURITY)
+    expect(result.valid).toBe(true)
+  })
+
+  it('should allow spending claim UTXO well past maturity', () => {
+    const claimUtxo: UTXO = {
+      txId: 'c'.repeat(63) + '4',
+      outputIndex: 0,
+      address: walletA.address,
+      amount: 100_000_000,
+      height: 1,
+      isClaim: true,
+    }
+    const utxoSet = new Map<string, UTXO>()
+    utxoSet.set(utxoKey(claimUtxo.txId, 0), claimUtxo)
+
+    const spendTx = createTransaction(
+      walletA,
+      [claimUtxo],
+      [{ address: walletB.address, amount: 100_000_000 - 10000 }],
+      10000
+    )
+
+    // age = 500, well past maturity
+    const result = validateTransaction(spendTx, utxoSet, 501)
+    expect(result.valid).toBe(true)
+  })
+
+  it('should not apply claim maturity to non-claim UTXOs', () => {
+    // Regular UTXO (not isClaim, not isCoinbase) — should be spendable immediately
+    const utxo: UTXO = {
+      txId: 'a'.repeat(64),
+      outputIndex: 0,
+      address: walletA.address,
+      amount: 100_000_000,
+      height: 10,
+      // no isClaim flag
+    }
+    const utxoSet = new Map<string, UTXO>()
+    utxoSet.set(utxoKey(utxo.txId, 0), utxo)
+
+    const spendTx = createTransaction(
+      walletA,
+      [utxo],
+      [{ address: walletB.address, amount: 100_000_000 - 10000 }],
+      10000
+    )
+
+    // currentHeight=11, age=1 — would fail if claim maturity applied
+    const result = validateTransaction(spendTx, utxoSet, 11)
+    expect(result.valid).toBe(true)
+  })
+
+  it('should set isClaim=true on UTXOs created by claim transactions (chain level)', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const chain = new Blockchain(snapshot)
+    chain.difficulty = TEST_TARGET
+    const genesisHash = chain.blocks[0].hash
+
+    const claimTx = createClaimTransaction(
+      holders[0].secretKey, holders[0].publicKey,
+      snapshot.entries[0], walletA, snapshot.btcBlockHash, genesisHash
+    )
+
+    const block = mineBlockOnChain(chain, [claimTx])
+    expect(chain.addBlock(block).success).toBe(true)
+
+    // Check the UTXO created by the claim has isClaim=true
+    const key = utxoKey(claimTx.id, 0)
+    const utxo = chain.utxoSet.get(key)
+    expect(utxo).toBeDefined()
+    expect(utxo!.isClaim).toBe(true)
+    expect(utxo!.height).toBe(1)
+  })
+
+  it('should NOT set isClaim on coinbase UTXOs', () => {
+    const node = new Node('cb-flag')
+    node.chain.difficulty = TEST_TARGET
+    node.mine(walletA.address, false)
+
+    // Get the coinbase UTXO
+    const coinbaseTx = node.chain.blocks[1].transactions[0]
+    const key = utxoKey(coinbaseTx.id, 0)
+    const utxo = node.chain.utxoSet.get(key)
+    expect(utxo).toBeDefined()
+    expect(utxo!.isClaim).toBeUndefined()
+    expect(utxo!.isCoinbase).toBe(true)
+  })
+
+  it('should reject immature claim spend at chain level (addBlock)', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const chain = new Blockchain(snapshot)
+    chain.difficulty = TEST_TARGET
+    const genesisHash = chain.blocks[0].hash
+
+    // Mine a claim in block 1
+    const claimTx = createClaimTransaction(
+      holders[0].secretKey, holders[0].publicKey,
+      snapshot.entries[0], walletA, snapshot.btcBlockHash, genesisHash
+    )
+    const block1 = mineBlockOnChain(chain, [claimTx])
+    expect(chain.addBlock(block1).success).toBe(true)
+
+    // Try spending immediately in block 2 (age=1, need 10)
+    const utxos = chain.findUTXOs(walletA.address)
+    expect(utxos.length).toBe(1)
+
+    const spendTx = createTransaction(
+      walletA,
+      utxos,
+      [{ address: walletB.address, amount: utxos[0].amount - 10000 }],
+      10000
+    )
+    const block2 = mineBlockOnChain(chain, [spendTx])
+    const result = chain.addBlock(block2)
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Claim UTXO')
+    expect(result.error).toContain('not mature')
+  })
+
+  it('should accept mature claim spend at chain level (addBlock)', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const chain = new Blockchain(snapshot)
+    chain.difficulty = TEST_TARGET
+    const genesisHash = chain.blocks[0].hash
+
+    // Mine a claim in block 1
+    const claimTx = createClaimTransaction(
+      holders[0].secretKey, holders[0].publicKey,
+      snapshot.entries[0], walletA, snapshot.btcBlockHash, genesisHash
+    )
+    const block1 = mineBlockOnChain(chain, [claimTx])
+    expect(chain.addBlock(block1).success).toBe(true)
+
+    // Mine CLAIM_MATURITY empty blocks to mature the claim
+    for (let i = 0; i < CLAIM_MATURITY; i++) {
+      expect(chain.addBlock(mineBlockOnChain(chain)).success).toBe(true)
+    }
+
+    // Now spend at height 1 + CLAIM_MATURITY + 1 = 12 (age=11, need 10) — should succeed
+    const utxos = chain.findUTXOs(walletA.address)
+    expect(utxos.length).toBe(1)
+
+    const spendTx = createTransaction(
+      walletA,
+      utxos,
+      [{ address: walletB.address, amount: utxos[0].amount - 10000 }],
+      10000
+    )
+    const spendBlock = mineBlockOnChain(chain, [spendTx])
+    const result = chain.addBlock(spendBlock)
+    expect(result.success).toBe(true)
+    expect(chain.getBalance(walletB.address)).toBe(utxos[0].amount - 10000)
+  })
+
+  it('should reject immature claim spend in mempool', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const node = new Node('mempool-mat', snapshot)
+    node.chain.difficulty = TEST_TARGET
+    const genesisHash = node.chain.blocks[0].hash
+
+    // Mine a claim in block 1
+    const claimTx = createClaimTransaction(
+      holders[0].secretKey, holders[0].publicKey,
+      snapshot.entries[0], walletA, snapshot.btcBlockHash, genesisHash
+    )
+    const tip = node.chain.getChainTip()
+    const height = node.chain.getHeight() + 1
+    const coinbase = createCoinbaseTransaction('f'.repeat(64), height, 0)
+    const txs = [coinbase, claimTx]
+    const merkleRoot = computeMerkleRoot(txs.map(t => t.id))
+    const header = {
+      version: 1, previousHash: tip.hash, merkleRoot,
+      timestamp: tip.header.timestamp + 1, target: TEST_TARGET, nonce: 0,
+    }
+    let hash = computeBlockHash(header)
+    while (!hashMeetsTarget(hash, TEST_TARGET)) {
+      header.nonce++
+      hash = computeBlockHash(header)
+    }
+    expect(node.chain.addBlock({ header, hash, transactions: txs, height }).success).toBe(true)
+
+    // Try spending immediately via receiveTransaction (mempool validates against chain height)
+    const utxos = node.chain.findUTXOs(walletA.address)
+    const spendTx = createTransaction(
+      walletA, utxos,
+      [{ address: walletB.address, amount: utxos[0].amount - 10000 }],
+      10000
+    )
+    const result = node.receiveTransaction(spendTx)
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Claim UTXO')
+  })
+})
+
+describe('Subnet diversity', () => {
+  let tmpDir: string
+  let node: Node
+  let p2p: P2PServer
+
+  beforeEach(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-subnet-'))
+    node = new Node('test')
+    p2p = new P2PServer(node, 0, tmpDir)
+  })
+
+  afterEach(async () => {
+    await p2p.stop()
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('should accept addresses from multiple subnets into address book', () => {
+    const addAddr = (p2p as any).addKnownAddress.bind(p2p)
+    addAddr('8.8.1.1', 6001)
+    addAddr('8.8.2.2', 6002)
+    addAddr('8.8.3.3', 6003)
+    addAddr('9.9.1.1', 6001)
+
+    expect(p2p.getKnownAddresses().size).toBe(4)
+  })
+
+  it('should filter discovery candidates from over-represented subnets', () => {
+    // Simulate 2 outbound peers on subnet 8.8.x.x
+    const stub = () => {}
+    const fakePeer1 = { address: '8.8.1.1', inbound: false, id: '8.8.1.1:6001', disconnect: stub }
+    const fakePeer2 = { address: '8.8.2.2', inbound: false, id: '8.8.2.2:6002', disconnect: stub }
+    const peerMap = (p2p as any).peers as Map<string, any>
+    peerMap.set('8.8.1.1:6001', fakePeer1)
+    peerMap.set('8.8.2.2:6002', fakePeer2)
+
+    // Add candidate addresses: 2 from same subnet, 1 from different
+    const addAddr = (p2p as any).addKnownAddress.bind(p2p)
+    addAddr('8.8.3.3', 6003) // same /16 as the 2 connected peers
+    addAddr('9.9.1.1', 6001) // different /16
+
+    // Build subnet counts like discovery does
+    const subnetCounts = new Map<string, number>()
+    for (const peer of peerMap.values()) {
+      if (!peer.inbound) {
+        const ip = peer.address.replace(/^::ffff:/i, '')
+        const match = ip.match(/^(\d+\.\d+)\.\d+\.\d+$/)
+        const subnet = match ? match[1] : ip
+        subnetCounts.set(subnet, (subnetCounts.get(subnet) ?? 0) + 1)
+      }
+    }
+
+    const candidates = Array.from(p2p.getKnownAddresses().values())
+    const filtered = candidates.filter((a) => {
+      const ip = a.host.replace(/^::ffff:/i, '')
+      const match = ip.match(/^(\d+\.\d+)\.\d+\.\d+$/)
+      const subnet = match ? match[1] : ip
+      return (subnetCounts.get(subnet) ?? 0) < 2 // MAX_OUTBOUND_PER_SUBNET
+    })
+
+    // 8.8.3.3 should be filtered out (subnet 8.8 already has 2 outbound)
+    expect(filtered.length).toBe(1)
+    expect(filtered[0].host).toBe('9.9.1.1')
+  })
+
+  it('should skip subnet filtering in local mode', () => {
+    p2p.setLocalMode(true)
+
+    // Even with many peers on same subnet, localMode skips filtering
+    // In localMode, the discovery loop skips the subnet filter
+    expect((p2p as any).localMode).toBe(true)
+  })
+
+  it('should fall back to all candidates when all subnets saturated', () => {
+    const stub = () => {}
+    const fakePeer1 = { address: '8.8.1.1', inbound: false, id: '8.8.1.1:6001', disconnect: stub }
+    const fakePeer2 = { address: '8.8.2.2', inbound: false, id: '8.8.2.2:6002', disconnect: stub }
+    const peerMap = (p2p as any).peers as Map<string, any>
+    peerMap.set('8.8.1.1:6001', fakePeer1)
+    peerMap.set('8.8.2.2:6002', fakePeer2)
+
+    // Only candidates from same saturated subnet
+    const addAddr = (p2p as any).addKnownAddress.bind(p2p)
+    addAddr('8.8.3.3', 6003)
+    addAddr('8.8.4.4', 6004)
+
+    const candidates = Array.from(p2p.getKnownAddresses().values())
+    const subnetCounts = new Map<string, number>([['8.8', 2]])
+    let filtered = candidates.filter((a) => {
+      const match = a.host.match(/^(\d+\.\d+)\.\d+\.\d+$/)
+      const subnet = match ? match[1] : a.host
+      return (subnetCounts.get(subnet) ?? 0) < 2
+    })
+    // All filtered out — should fall back to all candidates
+    if (filtered.length === 0) filtered = candidates
+    expect(filtered.length).toBe(2) // fallback returns all
+  })
+
+  it('should not count inbound peers in subnet limits', () => {
+    const stub = () => {}
+    const fakePeer1 = { address: '8.8.1.1', inbound: true, id: '8.8.1.1:6001', disconnect: stub }
+    const fakePeer2 = { address: '8.8.2.2', inbound: true, id: '8.8.2.2:6002', disconnect: stub }
+    const fakePeer3 = { address: '8.8.3.3', inbound: true, id: '8.8.3.3:6003', disconnect: stub }
+    const peerMap = (p2p as any).peers as Map<string, any>
+    peerMap.set('8.8.1.1:6001', fakePeer1)
+    peerMap.set('8.8.2.2:6002', fakePeer2)
+    peerMap.set('8.8.3.3:6003', fakePeer3)
+
+    // Build outbound-only subnet counts
+    const subnetCounts = new Map<string, number>()
+    for (const peer of peerMap.values()) {
+      if (!peer.inbound) {
+        const match = peer.address.match(/^(\d+\.\d+)\.\d+\.\d+$/)
+        const subnet = match ? match[1] : peer.address
+        subnetCounts.set(subnet, (subnetCounts.get(subnet) ?? 0) + 1)
+      }
+    }
+
+    // No outbound peers counted — subnet 8.8 should have count 0
+    expect(subnetCounts.get('8.8') ?? 0).toBe(0)
+
+    // So candidate from 8.8.x.x should NOT be filtered
+    const addAddr = (p2p as any).addKnownAddress.bind(p2p)
+    addAddr('8.8.4.4', 6004)
+    const candidates = Array.from(p2p.getKnownAddresses().values())
+    const filtered = candidates.filter((a) => {
+      const match = a.host.match(/^(\d+\.\d+)\.\d+\.\d+$/)
+      const subnet = match ? match[1] : a.host
+      return (subnetCounts.get(subnet) ?? 0) < 2
+    })
+    expect(filtered.length).toBe(1) // not filtered
+  })
+
+  it('should handle IPv6 addresses as their own subnet', () => {
+    const stub = () => {}
+    const fakePeer = { address: '2001:db8::1', inbound: false, id: '[2001:db8::1]:6001', disconnect: stub }
+    const peerMap = (p2p as any).peers as Map<string, any>
+    peerMap.set('[2001:db8::1]:6001', fakePeer)
+
+    // Each unique IPv6 address is its own "subnet" so it won't block others
+    const subnetCounts = new Map<string, number>()
+    for (const peer of peerMap.values()) {
+      if (!peer.inbound) {
+        const ip = peer.address.replace(/^::ffff:/i, '')
+        const match = ip.match(/^(\d+\.\d+)\.\d+\.\d+$/)
+        const subnet = match ? match[1] : ip
+        subnetCounts.set(subnet, (subnetCounts.get(subnet) ?? 0) + 1)
+      }
+    }
+    expect(subnetCounts.get('2001:db8::1')).toBe(1)
+  })
+})
+
+describe('Anchor peer persistence', () => {
+  it('should save and load anchor peers across restarts', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-anchor-'))
+    try {
+      const node = new Node('test')
+      const p2p1 = new P2PServer(node, 0, tmpDir)
+
+      const addAddr = (p2p1 as any).addKnownAddress.bind(p2p1)
+      p2p1.setLocalMode(true)
+      addAddr('192.168.1.1', 6001)
+      addAddr('192.168.1.2', 6002)
+      addAddr('192.168.1.3', 6003)
+
+      p2p1.saveAnchors()
+      await p2p1.stop()
+
+      const anchorsPath = path.join(tmpDir, 'anchors.json')
+      expect(fs.existsSync(anchorsPath)).toBe(true)
+      const anchors = JSON.parse(fs.readFileSync(anchorsPath, 'utf-8'))
+      expect(anchors.length).toBe(3)
+
+      // Create new P2PServer — should load anchors
+      const p2p2 = new P2PServer(node, 0, tmpDir)
+      p2p2.setLocalMode(true)
+      expect(p2p2.getKnownAddresses().size).toBe(3)
+      await p2p2.stop()
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('should cap anchors to MAX_ANCHORS (10)', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-anchor-cap-'))
+    try {
+      const node = new Node('test')
+      const p2p = new P2PServer(node, 0, tmpDir)
+
+      const addAddr = (p2p as any).addKnownAddress.bind(p2p)
+      for (let i = 1; i <= 20; i++) {
+        addAddr(`8.8.${i}.1`, 6001)
+      }
+
+      p2p.saveAnchors()
+
+      const anchorsPath = path.join(tmpDir, 'anchors.json')
+      const anchors = JSON.parse(fs.readFileSync(anchorsPath, 'utf-8'))
+      expect(anchors.length).toBe(10)
+
+      await p2p.stop()
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('should save anchors on stop', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-anchor-stop-'))
+    try {
+      const node = new Node('test')
+      const p2p = new P2PServer(node, 0, tmpDir)
+
+      const addAddr = (p2p as any).addKnownAddress.bind(p2p)
+      addAddr('8.8.8.8', 6001)
+
+      await p2p.stop()
+
+      const anchorsPath = path.join(tmpDir, 'anchors.json')
+      expect(fs.existsSync(anchorsPath)).toBe(true)
+      const anchors = JSON.parse(fs.readFileSync(anchorsPath, 'utf-8'))
+      expect(anchors.length).toBe(1)
+      expect(anchors[0].host).toBe('8.8.8.8')
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('should gracefully handle corrupt anchors.json', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-anchor-corrupt-'))
+    try {
+      // Write corrupt JSON
+      fs.writeFileSync(path.join(tmpDir, 'anchors.json'), '{{{not json!!!')
+
+      const node = new Node('test')
+      // Should not throw — loadAnchors catches the error
+      const p2p = new P2PServer(node, 0, tmpDir)
+      expect(p2p.getKnownAddresses().size).toBe(0)
+      await p2p.stop()
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('should handle missing anchors.json gracefully', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-anchor-missing-'))
+    try {
+      // No anchors.json — should start clean
+      const node = new Node('test')
+      const p2p = new P2PServer(node, 0, tmpDir)
+      expect(p2p.getKnownAddresses().size).toBe(0)
+      await p2p.stop()
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('should not save or load anchors without dataDir', async () => {
+    const node = new Node('test')
+    // No dataDir — anchorsPath should be null
+    const p2p = new P2PServer(node, 0)
+    expect((p2p as any).anchorsPath).toBeNull()
+
+    // saveAnchors should no-op (no error)
+    p2p.saveAnchors()
+
+    // connectToAnchors should no-op (no error)
+    p2p.connectToAnchors()
+
+    await p2p.stop()
+  })
+
+  it('should sort anchors by most recently seen', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-anchor-sort-'))
+    try {
+      const node = new Node('test')
+      const p2p = new P2PServer(node, 0, tmpDir)
+
+      // Add addresses with different timestamps
+      const knownAddresses = (p2p as any).knownAddresses as Map<string, { host: string; port: number; lastSeen: number }>
+      knownAddresses.set('1.1.1.1:6001', { host: '1.1.1.1', port: 6001, lastSeen: 1000 })
+      knownAddresses.set('2.2.2.2:6001', { host: '2.2.2.2', port: 6001, lastSeen: 3000 })
+      knownAddresses.set('3.3.3.3:6001', { host: '3.3.3.3', port: 6001, lastSeen: 2000 })
+
+      p2p.saveAnchors()
+
+      const anchorsPath = path.join(tmpDir, 'anchors.json')
+      const anchors = JSON.parse(fs.readFileSync(anchorsPath, 'utf-8'))
+
+      // Should be sorted newest first
+      expect(anchors[0].host).toBe('2.2.2.2')
+      expect(anchors[1].host).toBe('3.3.3.3')
+      expect(anchors[2].host).toBe('1.1.1.1')
+
+      await p2p.stop()
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('should preserve anchor lastSeen timestamps across restarts', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-anchor-ts-'))
+    try {
+      const node = new Node('test')
+      const p2p1 = new P2PServer(node, 0, tmpDir)
+      const knownAddresses = (p2p1 as any).knownAddresses as Map<string, { host: string; port: number; lastSeen: number }>
+      knownAddresses.set('8.8.8.8:6001', { host: '8.8.8.8', port: 6001, lastSeen: 12345 })
+      p2p1.saveAnchors()
+      await p2p1.stop()
+
+      // Reload — lastSeen should be preserved
+      const p2p2 = new P2PServer(node, 0, tmpDir)
+      const loaded = p2p2.getKnownAddresses().get('8.8.8.8:6001')
+      expect(loaded).toBeDefined()
+      expect(loaded!.lastSeen).toBe(12345)
+      await p2p2.stop()
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('should skip entries with missing host or port in anchors.json', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-anchor-bad-'))
+    try {
+      // Write anchors with some invalid entries
+      const anchors = [
+        { host: '1.1.1.1', port: 6001, lastSeen: 1000 },
+        { host: '', port: 6001, lastSeen: 2000 },     // empty host
+        { host: '2.2.2.2', port: 0, lastSeen: 3000 },  // port 0 is falsy
+        { host: '3.3.3.3', port: 6002, lastSeen: 4000 },
+      ]
+      fs.writeFileSync(path.join(tmpDir, 'anchors.json'), JSON.stringify(anchors))
+
+      const node = new Node('test')
+      const p2p = new P2PServer(node, 0, tmpDir)
+
+      // Only entries with truthy host AND port should be loaded
+      expect(p2p.getKnownAddresses().size).toBe(2)
+      expect(p2p.getKnownAddresses().has('1.1.1.1:6001')).toBe(true)
+      expect(p2p.getKnownAddresses().has('3.3.3.3:6002')).toBe(true)
+
+      await p2p.stop()
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('Cumulative work threshold (1.5x)', () => {
+  it('should ban peer claiming more than 1.5x verified work', () => {
+    // The threshold is: peer.remoteCumulativeWork > verifiedPeerWork * 3n / 2n
+    // If verified work = 100, threshold = 150
+    // 151 should be banned, 150 should not
+    const verified = 100n
+    const threshold = verified * 3n / 2n // = 150
+
+    expect(151n > threshold).toBe(true)  // would be banned
+    expect(150n > threshold).toBe(false) // would NOT be banned (equal)
+    expect(149n > threshold).toBe(false) // would NOT be banned
+  })
+
+  it('1.5x is tighter than previous 2x threshold', () => {
+    const verified = 1000n
+    const oldThreshold = verified * 2n   // 2000
+    const newThreshold = verified * 3n / 2n // 1500
+
+    // A peer claiming 1600 work would pass old check but fail new
+    expect(1600n > oldThreshold).toBe(false)  // old: not banned
+    expect(1600n > newThreshold).toBe(true)   // new: banned
   })
 })

@@ -212,6 +212,9 @@ async function main() {
   if (config.local) p2p.setLocalMode(true)
   await p2p.start()
 
+  // Connect to anchor peers (persisted good peers from previous runs)
+  p2p.connectToAnchors()
+
   // Connect to seeds
   if (config.seeds.length > 0) {
     p2p.connectToSeeds(config.seeds)
