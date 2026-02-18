@@ -441,6 +441,7 @@ export class P2PServer {
           reason: `protocol version mismatch: expected ${PROTOCOL_VERSION}, got ${payload.version}`,
         } as RejectPayload,
       })
+      peer.addMisbehavior(25)
       peer.disconnect('protocol version mismatch')
       return
     }
@@ -590,10 +591,11 @@ export class P2PServer {
     peer.clearIBDTimer()
 
     let added = 0
+    let alreadyKnown = 0
     let forkDetected = false
     for (const raw of payload.blocks) {
       const block = deserializeBlock(raw as Record<string, unknown>)
-      if (this.seenBlocks.has(block.hash)) continue
+      if (this.seenBlocks.has(block.hash)) { alreadyKnown++; continue }
       if (this.rejectedBlocks.has(block.hash)) continue
 
       // Genesis adoption: fresh node (no snapshot) receives peer's genesis block
@@ -644,8 +646,8 @@ export class P2PServer {
       return
     }
 
-    // IBD stall: peer sent blocks but none were accepted — disconnect
-    if (added === 0 && payload.blocks.length > 0 && !forkDetected) {
+    // IBD stall: peer sent blocks but none were accepted (and not just duplicates) — disconnect
+    if (added === 0 && payload.blocks.length > 0 && alreadyKnown === 0 && !forkDetected) {
       log.warn({ component: 'p2p', peer: peer.id, batchSize: payload.blocks.length }, 'All blocks rejected — disconnecting stalled peer')
       peer.addMisbehavior(25)
       peer.disconnect('all blocks rejected')

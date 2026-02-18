@@ -133,9 +133,16 @@ export function mineBlock(block: Block, verbose = true): Block {
  * Returns the mined block, or null if the AbortSignal fires (e.g. a peer
  * broadcast a new block and we need to restart with the new tip).
  */
+export interface MiningProgress {
+  nonce: number
+  elapsed: number   // seconds
+  hashrate: number  // hashes per second
+}
+
 export function mineBlockAsync(
   block: Block,
   signal?: AbortSignal,
+  onProgress?: (progress: MiningProgress) => void,
 ): Promise<Block | null> {
   return new Promise((resolve) => {
     let nonce = 0
@@ -178,6 +185,17 @@ export function mineBlockAsync(
         const idealBatch = Math.round(batchSize * TARGET_BATCH_MS / batchMs)
         const ALPHA = 0.3
         batchSize = Math.max(10_000, Math.min(500_000, Math.round(ALPHA * idealBatch + (1 - ALPHA) * batchSize)))
+      }
+
+      // Report progress every ~100k nonces
+      if (onProgress && nonce % 100_000 < batchSize) {
+        const elapsedMs = performance.now() - startTime
+        const elapsedSec = elapsedMs / 1000
+        onProgress({
+          nonce,
+          elapsed: Math.round(elapsedSec),
+          hashrate: elapsedSec > 0 ? Math.round(nonce / elapsedSec) : 0,
+        })
       }
 
       // Log progress every ~500k nonces

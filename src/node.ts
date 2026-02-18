@@ -6,7 +6,7 @@
  */
 import { Blockchain } from './chain.js'
 import { Mempool } from './mempool.js'
-import { assembleCandidateBlock, mineBlock, mineBlockAsync } from './miner.js'
+import { assembleCandidateBlock, mineBlock, mineBlockAsync, type MiningProgress } from './miner.js'
 import type { Transaction } from './transaction.js'
 import type { Block } from './block.js'
 import { TARGET_BLOCK_TIME_MS } from './block.js'
@@ -28,6 +28,9 @@ export class Node {
   /** Active mining abort controller (null when not mining) */
   private miningAbort: AbortController | null = null
   private mining = false
+
+  /** Live mining stats (null when not actively mining) */
+  miningStats: (MiningProgress & { blockHeight: number; startedAt: number }) | null = null
 
   constructor(name: string, snapshot?: BtcSnapshot, storage?: BlockStorage) {
     this.name = name
@@ -115,7 +118,15 @@ export class Node {
         message
       )
 
-      const block = await mineBlockAsync(candidate, this.miningAbort.signal)
+      const targetHeight = this.chain.getHeight() + 1
+      const startedAt = Date.now()
+      this.miningStats = { nonce: 0, elapsed: 0, hashrate: 0, blockHeight: targetHeight, startedAt }
+
+      const block = await mineBlockAsync(candidate, this.miningAbort.signal, (progress) => {
+        this.miningStats = { ...progress, blockHeight: targetHeight, startedAt }
+      })
+
+      this.miningStats = null
 
       if (block) {
         const result = this.chain.addBlock(block)
@@ -141,6 +152,7 @@ export class Node {
     this.mining = false
     this.miningAbort?.abort()
     this.miningAbort = null
+    this.miningStats = null
   }
 
   /** Get node state summary */
@@ -183,6 +195,7 @@ export class Node {
       totalTxs,
       hashrate,
       cumulativeWork: this.chain.cumulativeWork.toString(16),
+      miningStats: this.miningStats,
     }
   }
 }

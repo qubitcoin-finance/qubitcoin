@@ -814,6 +814,55 @@ describe('P2P security hardening', () => {
     }
   })
 
+  it('should not disconnect peer sending already-known blocks', async () => {
+    const storage1 = new FileBlockStorage(tmpDir1)
+    const storage2 = new FileBlockStorage(tmpDir2)
+    const node1 = new Node('alice', undefined, storage1)
+    const node2 = new Node('bob', undefined, storage2)
+    node1.chain.difficulty = TEST_TARGET
+    node2.chain.difficulty = TEST_TARGET
+
+    const p2p1 = new P2PServer(node1, 0, tmpDir1)
+    const p2p2 = new P2PServer(node2, 0, tmpDir2)
+    await p2p1.start()
+    await p2p2.start()
+
+    try {
+      // Mine blocks on node1 and sync to node2 manually
+      node1.mine(walletA.address, false)
+      node1.mine(walletA.address, false)
+      node2.chain.addBlock(node1.chain.blocks[1])
+      node2.chain.addBlock(node1.chain.blocks[2])
+
+      expect(node1.chain.getHeight()).toBe(2)
+      expect(node2.chain.getHeight()).toBe(2)
+
+      // Connect
+      const addr = (p2p1 as any).server.address()
+      const port = typeof addr === 'object' ? addr.port : 0
+      p2p2.connectOutbound('127.0.0.1', port)
+      await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
+
+      // Send already-known blocks from node2 to node1 (simulating duplicate connection IBD)
+      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0]
+      peerOnNode2.send({
+        type: 'blocks',
+        payload: { blocks: [node1.chain.blocks[1], node1.chain.blocks[2]] },
+      })
+
+      await new Promise(r => setTimeout(r, 300))
+
+      // Peer should NOT be disconnected or penalized
+      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0]
+      expect(peerOnNode1).toBeDefined()
+      expect(peerOnNode1.getMisbehaviorScore()).toBe(0)
+      expect(p2p1.getPeers().length).toBeGreaterThanOrEqual(1)
+    } finally {
+      await p2p1.stop()
+      await p2p2.stop()
+    }
+  })
+
   it('should clamp addr timestamps to prevent future-lock', () => {
     const storage = new FileBlockStorage(tmpDir1)
     const node = new Node('test', undefined, storage)
