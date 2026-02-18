@@ -34,7 +34,8 @@
     "deploy:ui": "./scripts/deploy-ui.sh",
     "deploy:backend": "./scripts/deploy-backend.sh",
     "generate-snapshot": "./scripts/generate-snapshot.sh",
-    "snapshot:activate": "./scripts/activate-snapshot.sh"
+    "snapshot:activate": "./scripts/activate-snapshot.sh",
+    "q": "node --loader ts-node/esm scripts/q.ts"
   },
   "keywords": [
     "post-quantum",

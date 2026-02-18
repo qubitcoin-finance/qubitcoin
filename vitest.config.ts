@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
-    testTimeout: 60_000, // PoW mining + PQC keygen can be slow
+    testTimeout: 5_000, // keep tests fast — slow tests indicate bad test design
     include: ['src/__tests__/**/*.test.ts'],
     env: { LOG_LEVEL: 'silent' },
     pool: 'threads',

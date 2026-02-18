@@ -10,9 +10,10 @@ import {
   type Block,
   type BlockHeader,
 } from '../block.js'
-import { createCoinbaseTransaction, type UTXO, type Transaction, CLAIM_TXID } from '../transaction.js'
+import { createCoinbaseTransaction, createTransaction, utxoKey, type UTXO, type Transaction, CLAIM_TXID } from '../transaction.js'
 import { doubleSha256Hex } from '../crypto.js'
 import { createMockSnapshot } from '../snapshot.js'
+import { walletA } from './fixtures.js'
 
 describe('computeMerkleRoot', () => {
   it('returns zeros for empty list', () => {
@@ -321,5 +322,152 @@ describe('validateBlock', () => {
     const result = validateBlock(block, genesis, new Map())
     expect(result.valid).toBe(false)
     expect(result.error).toContain('Invalid block height')
+  })
+})
+
+describe('validateBlock edge cases', () => {
+  const easyTarget = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+
+  function mineBlock(header: BlockHeader): string {
+    let hash = computeBlockHash(header)
+    while (!hashMeetsTarget(hash, easyTarget)) {
+      header.nonce++
+      hash = computeBlockHash(header)
+    }
+    return hash
+  }
+
+  it('rejects empty block (no transactions)', () => {
+    const genesis = createGenesisBlock()
+    const txs: Transaction[] = []
+    const merkleRoot = computeMerkleRoot([])
+
+    const header: BlockHeader = {
+      version: 1,
+      previousHash: genesis.hash,
+      merkleRoot,
+      timestamp: Date.now(),
+      target: easyTarget,
+      nonce: 0,
+    }
+    const hash = mineBlock(header)
+
+    const block: Block = { header, hash, transactions: txs, height: 1 }
+    const result = validateBlock(block, genesis, new Map())
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('Block has no transactions')
+  })
+
+  it('rejects block with multiple coinbase transactions', () => {
+    const genesis = createGenesisBlock()
+    const coinbase1 = createCoinbaseTransaction('c'.repeat(64), 1, 0)
+    const coinbase2 = createCoinbaseTransaction('d'.repeat(64), 1, 0)
+    const txs = [coinbase1, coinbase2]
+    const merkleRoot = computeMerkleRoot(txs.map(t => t.id))
+
+    const header: BlockHeader = {
+      version: 1,
+      previousHash: genesis.hash,
+      merkleRoot,
+      timestamp: Date.now(),
+      target: easyTarget,
+      nonce: 0,
+    }
+    const hash = mineBlock(header)
+
+    const block: Block = { header, hash, transactions: txs, height: 1 }
+    const result = validateBlock(block, genesis, new Map())
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('unexpected coinbase')
+  })
+
+  it('rejects block where coinbase exceeds subsidy+fees', () => {
+    const genesis = createGenesisBlock()
+    // Coinbase claims 1 sat in fees, but block has no fee-paying txs
+    const coinbase = createCoinbaseTransaction('c'.repeat(64), 1, 1)
+    const txs = [coinbase]
+    const merkleRoot = computeMerkleRoot(txs.map(t => t.id))
+
+    const header: BlockHeader = {
+      version: 1,
+      previousHash: genesis.hash,
+      merkleRoot,
+      timestamp: Date.now(),
+      target: easyTarget,
+      nonce: 0,
+    }
+    const hash = mineBlock(header)
+
+    const block: Block = { header, hash, transactions: txs, height: 1 }
+    const result = validateBlock(block, genesis, new Map())
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('exceeds max reward')
+  })
+
+  it('rejects block with double-spend within block', () => {
+    const genesis = createGenesisBlock()
+    const utxoId = 'a'.repeat(64)
+    const utxoSet = new Map<string, UTXO>()
+    utxoSet.set(utxoKey(utxoId, 0), {
+      txId: utxoId,
+      outputIndex: 0,
+      address: walletA.address,
+      amount: 10_000_000_000,
+    })
+
+    // Two transactions spending the same UTXO
+    const tx1 = createTransaction(
+      walletA,
+      [{ txId: utxoId, outputIndex: 0, address: walletA.address, amount: 10_000_000_000 }],
+      [{ address: 'b'.repeat(64), amount: 5_000_000_000 }],
+      10_000
+    )
+    const tx2 = createTransaction(
+      walletA,
+      [{ txId: utxoId, outputIndex: 0, address: walletA.address, amount: 10_000_000_000 }],
+      [{ address: 'c'.repeat(64), amount: 4_000_000_000 }],
+      10_000
+    )
+
+    const coinbase = createCoinbaseTransaction('c'.repeat(64), 1, 20_000)
+    const txs = [coinbase, tx1, tx2]
+    const merkleRoot = computeMerkleRoot(txs.map(t => t.id))
+
+    const header: BlockHeader = {
+      version: 1,
+      previousHash: genesis.hash,
+      merkleRoot,
+      timestamp: Date.now(),
+      target: easyTarget,
+      nonce: 0,
+    }
+    const hash = mineBlock(header)
+
+    const block: Block = { header, hash, transactions: txs, height: 1 }
+    const result = validateBlock(block, genesis, utxoSet)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('Double-spend')
+  })
+
+  it('rejects block with wrong merkle root', () => {
+    const genesis = createGenesisBlock()
+    const coinbase = createCoinbaseTransaction('c'.repeat(64), 1, 0)
+    // Use wrong merkle root (not matching the actual transactions)
+    const wrongMerkle = 'f'.repeat(64)
+
+    const header: BlockHeader = {
+      version: 1,
+      previousHash: genesis.hash,
+      merkleRoot: wrongMerkle,
+      timestamp: Date.now(),
+      target: easyTarget,
+      nonce: 0,
+    }
+    const hash = mineBlock(header)
+
+    const block: Block = { header, hash, transactions: [coinbase], height: 1 }
+    const result = validateBlock(block, genesis, new Map())
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('Merkle root mismatch')
   })
 })

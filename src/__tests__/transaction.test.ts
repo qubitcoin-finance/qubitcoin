@@ -271,4 +271,158 @@ describe('calculateFee', () => {
     }
     expect(calculateFee(tx, new Map())).toBe(0)
   })
+
+  it('returns correct fee for regular transaction', () => {
+    const wallet = walletA
+    const utxoId = 'a'.repeat(64)
+    const utxoSet = new Map<string, UTXO>()
+    utxoSet.set(utxoKey(utxoId, 0), {
+      txId: utxoId,
+      outputIndex: 0,
+      address: wallet.address,
+      amount: 1000,
+    })
+
+    const tx = createTransaction(
+      wallet,
+      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 1000 }],
+      [{ address: 'b'.repeat(64), amount: 500 }],
+      100
+    )
+
+    expect(calculateFee(tx, utxoSet)).toBe(100)
+  })
+})
+
+describe('validateTransaction additional edge cases', () => {
+  it('rejects zero amount output', () => {
+    const wallet = walletA
+    const utxoId = 'a'.repeat(64)
+    const utxoSet = new Map<string, UTXO>()
+    utxoSet.set(utxoKey(utxoId, 0), {
+      txId: utxoId,
+      outputIndex: 0,
+      address: wallet.address,
+      amount: 100,
+    })
+
+    const tx = createTransaction(
+      wallet,
+      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 100 }],
+      [{ address: 'b'.repeat(64), amount: 50 }],
+      1
+    )
+    tx.outputs[0].amount = 0
+
+    const result = validateTransaction(tx, utxoSet)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('non-positive amount')
+  })
+
+  it('rejects negative amount output', () => {
+    const wallet = walletA
+    const utxoId = 'a'.repeat(64)
+    const utxoSet = new Map<string, UTXO>()
+    utxoSet.set(utxoKey(utxoId, 0), {
+      txId: utxoId,
+      outputIndex: 0,
+      address: wallet.address,
+      amount: 100,
+    })
+
+    const tx = createTransaction(
+      wallet,
+      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 100 }],
+      [{ address: 'b'.repeat(64), amount: 50 }],
+      1
+    )
+    tx.outputs[0].amount = -10
+
+    const result = validateTransaction(tx, utxoSet)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('non-positive amount')
+  })
+
+  it('rejects duplicate inputs', () => {
+    const wallet = walletA
+    const utxoId = 'a'.repeat(64)
+    const utxoSet = new Map<string, UTXO>()
+    utxoSet.set(utxoKey(utxoId, 0), {
+      txId: utxoId,
+      outputIndex: 0,
+      address: wallet.address,
+      amount: 100,
+    })
+
+    const tx = createTransaction(
+      wallet,
+      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 100 }],
+      [{ address: 'b'.repeat(64), amount: 50 }],
+      1
+    )
+    // Duplicate the first input
+    tx.inputs.push({ ...tx.inputs[0] })
+
+    const result = validateTransaction(tx, utxoSet)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('Duplicate input')
+  })
+
+  it('rejects tampered transaction ID', () => {
+    const wallet = walletA
+    const utxoId = 'a'.repeat(64)
+    const utxoSet = new Map<string, UTXO>()
+    utxoSet.set(utxoKey(utxoId, 0), {
+      txId: utxoId,
+      outputIndex: 0,
+      address: wallet.address,
+      amount: 100,
+    })
+
+    const tx = createTransaction(
+      wallet,
+      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 100 }],
+      [{ address: 'b'.repeat(64), amount: 50 }],
+      1
+    )
+    tx.id = 'f'.repeat(64) // tamper the ID
+
+    const result = validateTransaction(tx, utxoSet)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('Transaction ID mismatch')
+  })
+
+  it('rejects outputs exceeding inputs', () => {
+    const wallet = walletA
+    const utxoId = 'a'.repeat(64)
+    // Set UTXO amount lower than what tx outputs claim
+    const utxoSet = new Map<string, UTXO>()
+    utxoSet.set(utxoKey(utxoId, 0), {
+      txId: utxoId,
+      outputIndex: 0,
+      address: wallet.address,
+      amount: 10, // tiny amount
+    })
+
+    // Create tx that tries to send 50 from a 10-sat UTXO
+    const tx = createTransaction(
+      wallet,
+      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 10 }],
+      [{ address: 'b'.repeat(64), amount: 9 }],
+      1
+    )
+
+    // Lie about the UTXO amount to make output > input
+    // The tx was signed expecting 10 sat input, but we set UTXO to 5
+    utxoSet.set(utxoKey(utxoId, 0), {
+      txId: utxoId,
+      outputIndex: 0,
+      address: wallet.address,
+      amount: 5, // less than output (9)
+    })
+
+    const result = validateTransaction(tx, utxoSet)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('exceed inputs')
+  })
 })

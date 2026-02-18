@@ -374,6 +374,120 @@ describe('Mempool claims', () => {
     expect(mempool.size()).toBe(MAX_CLAIM_COUNT + 1)
   })
 
+  it('revalidate removes tx when UTXO disappears', () => {
+    const mempool = new Mempool()
+    const wallet = walletA
+    const utxoSet = makeUtxoSet(wallet)
+
+    const tx = createTransaction(
+      wallet,
+      [{ txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: DEFAULT_AMOUNT }],
+      [{ address: 'b'.repeat(64), amount: 5_000_000_000 }],
+      DEFAULT_FEE
+    )
+    mempool.addTransaction(tx, utxoSet)
+    expect(mempool.size()).toBe(1)
+
+    // Revalidate with empty UTXO set — tx should be removed
+    mempool.revalidate(new Map(), new Set())
+    expect(mempool.size()).toBe(0)
+  })
+
+  it('revalidate keeps valid tx when UTXO present', () => {
+    const mempool = new Mempool()
+    const wallet = walletA
+    const utxoSet = makeUtxoSet(wallet)
+
+    const tx = createTransaction(
+      wallet,
+      [{ txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: DEFAULT_AMOUNT }],
+      [{ address: 'b'.repeat(64), amount: 5_000_000_000 }],
+      DEFAULT_FEE
+    )
+    mempool.addTransaction(tx, utxoSet)
+    expect(mempool.size()).toBe(1)
+
+    // Revalidate with UTXOs still present — tx should survive
+    mempool.revalidate(utxoSet, new Set())
+    expect(mempool.size()).toBe(1)
+  })
+
+  it('revalidate removes mined claims', () => {
+    const mempool = new Mempool()
+    const { snapshot, holders } = createMockSnapshot()
+    const qbtcWallet = walletB
+
+    const claimTx = createClaimTransaction(
+      holders[0].secretKey,
+      holders[0].publicKey,
+      snapshot.entries[0],
+      qbtcWallet,
+      snapshot.btcBlockHash
+    )
+    mempool.addTransaction(claimTx, new Map())
+    expect(mempool.size()).toBe(1)
+
+    // Revalidate with the claim marked as already on-chain
+    const claimedSet = new Set<string>()
+    claimedSet.add(snapshot.entries[0].btcAddress)
+    mempool.revalidate(new Map(), claimedSet)
+    expect(mempool.size()).toBe(0)
+  })
+
+  it('revalidate keeps pending claims not yet on-chain', () => {
+    const mempool = new Mempool()
+    const { snapshot, holders } = createMockSnapshot()
+    const qbtcWallet = walletB
+
+    const claimTx = createClaimTransaction(
+      holders[0].secretKey,
+      holders[0].publicKey,
+      snapshot.entries[0],
+      qbtcWallet,
+      snapshot.btcBlockHash
+    )
+    mempool.addTransaction(claimTx, new Map())
+    expect(mempool.size()).toBe(1)
+
+    // Revalidate with empty claimed set — claim should survive
+    mempool.revalidate(new Map(), new Set())
+    expect(mempool.size()).toBe(1)
+  })
+
+  it('revalidate rebuilds pendingBtcClaims set', () => {
+    const mempool = new Mempool()
+    const { snapshot, holders } = createMockSnapshot()
+
+    // Add two claims
+    const claimTx1 = createClaimTransaction(
+      holders[0].secretKey,
+      holders[0].publicKey,
+      snapshot.entries[0],
+      walletB,
+      snapshot.btcBlockHash
+    )
+    const claimTx2 = createClaimTransaction(
+      holders[1].secretKey,
+      holders[1].publicKey,
+      snapshot.entries[1],
+      walletC,
+      snapshot.btcBlockHash
+    )
+    mempool.addTransaction(claimTx1, new Map())
+    mempool.addTransaction(claimTx2, new Map())
+    expect(mempool.size()).toBe(2)
+
+    // Remove one claim via revalidate (mark first as on-chain)
+    const claimedSet = new Set<string>()
+    claimedSet.add(snapshot.entries[0].btcAddress)
+    mempool.revalidate(new Map(), claimedSet)
+    expect(mempool.size()).toBe(1)
+
+    // Verify pendingBtcClaims was rebuilt — should only have the second claim
+    expect((mempool as any).pendingBtcClaims.size).toBe(1)
+    expect((mempool as any).pendingBtcClaims.has(snapshot.entries[1].btcAddress)).toBe(true)
+  })
+
   it('allows claims again after removeTransactions frees slots', () => {
     const mempool = new Mempool()
 

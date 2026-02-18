@@ -6,8 +6,9 @@ import {
   verifyClaimProof,
   serializeClaimMessage,
 } from '../claim.js'
-import { createMockSnapshot } from '../snapshot.js'
-import { generateWallet, generateBtcKeypair, bytesToHex, hash160, deriveP2shP2wpkhAddress, deriveP2shMultisigAddress, getSchnorrPublicKey, deriveP2trAddress, buildMultisigScript, deriveP2wshAddress, parseWitnessScript } from '../crypto.js'
+import { createMockSnapshot, computeSnapshotMerkleRoot, type BtcAddressBalance, type BtcSnapshot } from '../snapshot.js'
+import { generateWallet, generateBtcKeypair, bytesToHex, hash160, doubleSha256Hex, deriveP2shP2wpkhAddress, deriveP2shMultisigAddress, getSchnorrPublicKey, deriveP2trAddress, buildMultisigScript, deriveP2wshAddress, parseWitnessScript } from '../crypto.js'
+import { sha256 } from '@noble/hashes/sha2.js'
 import { secp256k1 } from '@noble/curves/secp256k1.js'
 import { isClaimTransaction, CLAIM_TXID } from '../transaction.js'
 import { Blockchain } from '../chain.js'
@@ -908,5 +909,109 @@ describe('P2SH multisig claims', () => {
 
     expect(chain.getBalance(recipient.address)).toBe(10_000_000_000)
     expect(chain.getBalance(qbtcWallet.address)).toBe(p2shMultisigHolder.amount - 10_000_000_000 - 100_000_000)
+  })
+})
+
+describe('Bare multisig claims', () => {
+  // Build a custom snapshot with a bare multisig entry
+  function createMultisigSnapshot() {
+    const kp1 = generateBtcKeypair()
+    const kp2 = generateBtcKeypair()
+    const kp3 = generateBtcKeypair()
+    const script = buildMultisigScript(2, [kp1.publicKey, kp2.publicKey, kp3.publicKey])
+    // Bare multisig: SHA256(script) as address
+    const address = bytesToHex(sha256(script))
+    const amount = 15_000_000_000
+
+    const entry: BtcAddressBalance = {
+      btcAddress: address,
+      amount,
+      type: 'multisig',
+    }
+
+    const merkleRoot = computeSnapshotMerkleRoot([entry])
+    const snapshot: BtcSnapshot = {
+      btcBlockHeight: 850_000,
+      btcBlockHash: doubleSha256Hex(new TextEncoder().encode('mock-multisig-block')),
+      btcTimestamp: 1739482182,
+      entries: [entry],
+      merkleRoot,
+    }
+
+    return { snapshot, entry, script, keys: [kp1, kp2, kp3] }
+  }
+
+  it('accepts valid bare multisig claim (2-of-3)', () => {
+    const { snapshot, entry, script, keys } = createMultisigSnapshot()
+    const qbtcWallet = qbtcWalletA
+
+    const tx = createP2wshClaimTransaction(
+      [keys[0].secretKey, keys[1].secretKey],
+      script,
+      entry,
+      qbtcWallet,
+      snapshot.btcBlockHash
+    )
+
+    const result = verifyClaimProof(tx, snapshot)
+    expect(result.valid).toBe(true)
+  })
+
+  it('rejects wrong script for bare multisig', () => {
+    const { snapshot, entry, script, keys } = createMultisigSnapshot()
+    const qbtcWallet = qbtcWalletA
+
+    const tx = createP2wshClaimTransaction(
+      [keys[0].secretKey, keys[1].secretKey],
+      script,
+      entry,
+      qbtcWallet,
+      snapshot.btcBlockHash
+    )
+
+    // Tamper: replace witness script with a different one
+    const wrongKeys = [generateBtcKeypair(), generateBtcKeypair(), generateBtcKeypair()]
+    tx.claimData!.witnessScript = buildMultisigScript(2, wrongKeys.map(k => k.publicKey))
+
+    const result = verifyClaimProof(tx, snapshot)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('does not match Bare multisig address')
+  })
+
+  it('rejects insufficient signatures for bare multisig', () => {
+    const { snapshot, entry, script, keys } = createMultisigSnapshot()
+    const qbtcWallet = qbtcWalletA
+
+    // Only provide 1 signature for a 2-of-3
+    const tx = createP2wshClaimTransaction(
+      [keys[0].secretKey],
+      script,
+      entry,
+      qbtcWallet,
+      snapshot.btcBlockHash
+    )
+
+    const result = verifyClaimProof(tx, snapshot)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('requires exactly 2 signatures')
+  })
+
+  it('rejects invalid signature for bare multisig', () => {
+    const { snapshot, entry, script, keys } = createMultisigSnapshot()
+    const qbtcWallet = qbtcWalletA
+
+    // Sign with one valid key and one wrong key
+    const wrongKey = generateBtcKeypair()
+    const tx = createP2wshClaimTransaction(
+      [keys[0].secretKey, wrongKey.secretKey],
+      script,
+      entry,
+      qbtcWallet,
+      snapshot.btcBlockHash
+    )
+
+    const result = verifyClaimProof(tx, snapshot)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('signatures verified')
   })
 })
