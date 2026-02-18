@@ -251,6 +251,16 @@ export function validateTransaction(
     return { valid: false, error: 'Transaction has no outputs' }
   }
 
+  // Check all outputs are positive integers (reject fractional amounts from old/rogue peers)
+  for (let i = 0; i < tx.outputs.length; i++) {
+    if (tx.outputs[i].amount <= 0) {
+      return { valid: false, error: `Output ${i} has non-positive amount` }
+    }
+    if (!Number.isInteger(tx.outputs[i].amount)) {
+      return { valid: false, error: `Output ${i} has non-integer amount` }
+    }
+  }
+
   // Check for duplicate inputs
   const inputKeys = new Set<string>()
   for (const input of tx.inputs) {
@@ -306,13 +316,6 @@ export function validateTransaction(
     return {
       valid: false,
       error: `Outputs (${totalOut}) exceed inputs (${totalIn})`,
-    }
-  }
-
-  // Check all outputs are positive
-  for (let i = 0; i < tx.outputs.length; i++) {
-    if (tx.outputs[i].amount <= 0) {
-      return { valid: false, error: `Output ${i} has non-positive amount` }
     }
   }
 

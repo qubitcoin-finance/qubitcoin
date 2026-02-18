@@ -115,6 +115,9 @@ export class Blockchain {
   replaceGenesis(genesis: Block): boolean {
     if (this.getHeight() !== 0) return false
     if (this.btcSnapshot) return false
+    // Validate PoW: verify hash matches header and meets target
+    if (computeBlockHash(genesis.header) !== genesis.hash) return false
+    if (!hashMeetsTarget(genesis.hash, genesis.header.target)) return false
     this.blocksByHash.delete(this.blocks[0].hash)
     this.blocks[0] = genesis
     this.blocksByHash.set(genesis.hash, genesis)

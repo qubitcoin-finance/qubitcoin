@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { Mempool } from '../mempool.js'
+import { Mempool, MAX_CLAIM_COUNT } from '../mempool.js'
 import {
   createTransaction,
   createCoinbaseTransaction,
@@ -10,7 +10,7 @@ import {
 } from '../transaction.js'
 import { createMockSnapshot } from '../snapshot.js'
 import { createClaimTransaction } from '../claim.js'
-import { generateBtcKeypair } from '../crypto.js'
+import { generateBtcKeypair, doubleSha256Hex } from '../crypto.js'
 import { walletA, walletB, walletC } from './fixtures.js'
 
 // ML-DSA-65 txs are ~5KB, so we need fee >= ~5 sat to meet 1 sat/KB minimum
@@ -297,6 +297,122 @@ describe('Mempool claims', () => {
       snapshot.btcBlockHash
     )
     const result = mempool.addTransaction(claimTx2, new Map())
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects claims when MAX_CLAIM_COUNT is reached', () => {
+    const mempool = new Mempool()
+
+    // Fill the mempool with fake claim txs up to the limit
+    for (let i = 0; i < MAX_CLAIM_COUNT; i++) {
+      const fakeClaim: Transaction = {
+        id: doubleSha256Hex(new TextEncoder().encode(`claim-${i}`)),
+        inputs: [{ txId: CLAIM_TXID, outputIndex: 0, publicKey: new Uint8Array(0), signature: new Uint8Array(0) }],
+        outputs: [{ address: 'a'.repeat(64), amount: 100 }],
+        timestamp: Date.now(),
+        claimData: {
+          btcAddress: `addr${i.toString().padStart(36, '0')}`,
+          ecdsaPublicKey: new Uint8Array(33),
+          ecdsaSignature: new Uint8Array(64),
+          qbtcAddress: 'a'.repeat(64),
+        },
+      }
+      const r = mempool.addTransaction(fakeClaim, new Map())
+      expect(r.success).toBe(true)
+    }
+
+    expect(mempool.size()).toBe(MAX_CLAIM_COUNT)
+
+    // One more claim should be rejected
+    const extraClaim: Transaction = {
+      id: doubleSha256Hex(new TextEncoder().encode('claim-overflow')),
+      inputs: [{ txId: CLAIM_TXID, outputIndex: 0, publicKey: new Uint8Array(0), signature: new Uint8Array(0) }],
+      outputs: [{ address: 'a'.repeat(64), amount: 100 }],
+      timestamp: Date.now(),
+      claimData: {
+        btcAddress: 'overflow_address'.padEnd(40, '0'),
+        ecdsaPublicKey: new Uint8Array(33),
+        ecdsaSignature: new Uint8Array(64),
+        qbtcAddress: 'a'.repeat(64),
+      },
+    }
+    const result = mempool.addTransaction(extraClaim, new Map())
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('claim limit')
+  })
+
+  it('allows regular (non-claim) transactions when claim limit is reached', () => {
+    const mempool = new Mempool()
+
+    // Fill claims to the limit
+    for (let i = 0; i < MAX_CLAIM_COUNT; i++) {
+      const fakeClaim: Transaction = {
+        id: doubleSha256Hex(new TextEncoder().encode(`claim-reg-${i}`)),
+        inputs: [{ txId: CLAIM_TXID, outputIndex: 0, publicKey: new Uint8Array(0), signature: new Uint8Array(0) }],
+        outputs: [{ address: 'a'.repeat(64), amount: 100 }],
+        timestamp: Date.now(),
+        claimData: {
+          btcAddress: `regaddr${i.toString().padStart(33, '0')}`,
+          ecdsaPublicKey: new Uint8Array(33),
+          ecdsaSignature: new Uint8Array(64),
+          qbtcAddress: 'a'.repeat(64),
+        },
+      }
+      mempool.addTransaction(fakeClaim, new Map())
+    }
+
+    // Regular (fee-paying) transactions should still be accepted
+    const utxoSet = makeUtxoSet(walletA)
+    const tx = createTransaction(
+      walletA,
+      [{ txId: 'a'.repeat(64), outputIndex: 0, address: walletA.address, amount: DEFAULT_AMOUNT }],
+      [{ address: 'b'.repeat(64), amount: 5_000_000_000 }],
+      DEFAULT_FEE
+    )
+    const result = mempool.addTransaction(tx, utxoSet)
+    expect(result.success).toBe(true)
+    expect(mempool.size()).toBe(MAX_CLAIM_COUNT + 1)
+  })
+
+  it('allows claims again after removeTransactions frees slots', () => {
+    const mempool = new Mempool()
+
+    // Fill to the limit
+    const claimIds: string[] = []
+    for (let i = 0; i < MAX_CLAIM_COUNT; i++) {
+      const fakeClaim: Transaction = {
+        id: doubleSha256Hex(new TextEncoder().encode(`claim-free-${i}`)),
+        inputs: [{ txId: CLAIM_TXID, outputIndex: 0, publicKey: new Uint8Array(0), signature: new Uint8Array(0) }],
+        outputs: [{ address: 'a'.repeat(64), amount: 100 }],
+        timestamp: Date.now(),
+        claimData: {
+          btcAddress: `freeaddr${i.toString().padStart(32, '0')}`,
+          ecdsaPublicKey: new Uint8Array(33),
+          ecdsaSignature: new Uint8Array(64),
+          qbtcAddress: 'a'.repeat(64),
+        },
+      }
+      mempool.addTransaction(fakeClaim, new Map())
+      claimIds.push(fakeClaim.id)
+    }
+
+    // Remove some claims (simulating them being mined)
+    mempool.removeTransactions(claimIds.slice(0, 10))
+
+    // Now a new claim should be accepted
+    const newClaim: Transaction = {
+      id: doubleSha256Hex(new TextEncoder().encode('claim-after-free')),
+      inputs: [{ txId: CLAIM_TXID, outputIndex: 0, publicKey: new Uint8Array(0), signature: new Uint8Array(0) }],
+      outputs: [{ address: 'a'.repeat(64), amount: 100 }],
+      timestamp: Date.now(),
+      claimData: {
+        btcAddress: 'newaddr_after_free'.padEnd(40, '0'),
+        ecdsaPublicKey: new Uint8Array(33),
+        ecdsaSignature: new Uint8Array(64),
+        qbtcAddress: 'a'.repeat(64),
+      },
+    }
+    const result = mempool.addTransaction(newClaim, new Map())
     expect(result.success).toBe(true)
   })
 })

@@ -13,6 +13,7 @@ import {
   decodeMessages,
   type Message,
   MAX_MESSAGE_SIZE,
+  PROTOCOL_VERSION,
 } from '../p2p/protocol.js'
 
 /** Wait for a condition to become true, polling every `interval` ms */
@@ -44,7 +45,7 @@ describe('protocol encoding', () => {
   })
 
   it('should handle partial data (incomplete frame)', () => {
-    const msg: Message = { type: 'version', payload: { version: 1, height: 10, genesisHash: 'a'.repeat(64), userAgent: 'test' } }
+    const msg: Message = { type: 'version', payload: { version: PROTOCOL_VERSION, height: 10, genesisHash: 'a'.repeat(64), userAgent: 'test' } }
     const buf = encodeMessage(msg)
     const partial = buf.subarray(0, buf.length - 5)
 
@@ -122,6 +123,42 @@ describe('P2P server integration', () => {
 
     expect(p2p1.getPeers().length).toBeGreaterThanOrEqual(1)
     expect(p2p2.getPeers().length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('should reject peer with wrong protocol version', async () => {
+    const addr = (p2p1 as any).server.address()
+    const port = typeof addr === 'object' ? addr.port : 0
+
+    // Connect a raw TCP socket and send a version message with wrong protocol version
+    const socket = net.createConnection({ host: '127.0.0.1', port })
+    await new Promise<void>((resolve) => socket.once('connect', resolve))
+
+    const versionMsg = encodeMessage({
+      type: 'version',
+      payload: {
+        version: 1, // old version, current is 2
+        height: 0,
+        genesisHash: node1.chain.blocks[0].hash,
+        userAgent: 'old-node',
+      },
+    })
+    socket.write(versionMsg)
+
+    // Should receive a reject message and then the connection should close
+    const data = await new Promise<Buffer>((resolve, reject) => {
+      const chunks: Buffer[] = []
+      socket.on('data', (chunk) => chunks.push(chunk))
+      socket.on('close', () => resolve(Buffer.concat(chunks)))
+      setTimeout(() => reject(new Error('timeout')), 5_000)
+    })
+
+    // Decode the response — should contain a reject message
+    const { messages } = decodeMessages(data)
+    const rejectMsg = messages.find((m) => m.type === 'reject')
+    expect(rejectMsg).toBeDefined()
+    expect((rejectMsg!.payload as any).reason).toContain('protocol version mismatch')
+
+    socket.destroy()
   })
 
   it('should sync blocks via IBD', async () => {
@@ -546,5 +583,254 @@ describe('P2P waitForSync', () => {
   it('waitForSync rejects on timeout with no peers', async () => {
     // Node has no peers connected — waitForSync should reject after timeout
     await expect(p2p.waitForSync(1_000)).rejects.toThrow(/sync/)
+  })
+})
+
+describe('P2P security hardening', () => {
+  let tmpDir1: string
+  let tmpDir2: string
+
+  const TEST_TARGET = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+
+  beforeEach(() => {
+    tmpDir1 = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-sec-1-'))
+    tmpDir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-sec-2-'))
+  })
+
+  afterEach(() => {
+    fs.rmSync(tmpDir1, { recursive: true, force: true })
+    fs.rmSync(tmpDir2, { recursive: true, force: true })
+  })
+
+  it('should add misbehavior for invalid blocks sent by peer', async () => {
+    const storage1 = new FileBlockStorage(tmpDir1)
+    const storage2 = new FileBlockStorage(tmpDir2)
+    const node1 = new Node('alice', undefined, storage1)
+    const node2 = new Node('bob', undefined, storage2)
+    node1.chain.difficulty = TEST_TARGET
+    node2.chain.difficulty = TEST_TARGET
+
+    const p2p1 = new P2PServer(node1, 0, tmpDir1)
+    const p2p2 = new P2PServer(node2, 0, tmpDir2)
+    await p2p1.start()
+    await p2p2.start()
+
+    try {
+      const addr = (p2p1 as any).server.address()
+      const port = typeof addr === 'object' ? addr.port : 0
+      p2p2.connectOutbound('127.0.0.1', port)
+      await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
+
+      // Send an invalid block FROM node2 TO node1
+      const invalidBlock = {
+        header: {
+          version: 1,
+          previousHash: node1.chain.blocks[0].hash,
+          merkleRoot: 'a'.repeat(64),
+          timestamp: Date.now(),
+          target: TEST_TARGET,
+          nonce: 0,
+        },
+        hash: 'b'.repeat(64), // fake hash
+        transactions: [],
+        height: 1,
+      }
+
+      // Get node1's view of the peer (to check misbehavior score)
+      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0]
+      const scoreBefore = peerOnNode1.getMisbehaviorScore()
+
+      // Get node2's peer (sends TO node1) and send the invalid block
+      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0]
+      peerOnNode2.send({
+        type: 'blocks',
+        payload: { blocks: [invalidBlock] },
+      })
+
+      await new Promise(r => setTimeout(r, 300))
+
+      // Node1's view of this peer should have misbehavior points (+25 for invalid block)
+      const scoreAfter = peerOnNode1.getMisbehaviorScore()
+      expect(scoreAfter).toBeGreaterThan(scoreBefore)
+    } finally {
+      await p2p1.stop()
+      await p2p2.stop()
+    }
+  })
+
+  it('should add misbehavior for invalid transactions', async () => {
+    const storage1 = new FileBlockStorage(tmpDir1)
+    const storage2 = new FileBlockStorage(tmpDir2)
+    const node1 = new Node('alice', undefined, storage1)
+    const node2 = new Node('bob', undefined, storage2)
+
+    const p2p1 = new P2PServer(node1, 0, tmpDir1)
+    const p2p2 = new P2PServer(node2, 0, tmpDir2)
+    await p2p1.start()
+    await p2p2.start()
+
+    try {
+      const addr = (p2p1 as any).server.address()
+      const port = typeof addr === 'object' ? addr.port : 0
+      p2p2.connectOutbound('127.0.0.1', port)
+      await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
+
+      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0]
+      const scoreBefore = peerOnNode1.getMisbehaviorScore()
+
+      // Send an invalid tx FROM node2 TO node1
+      const invalidTx = {
+        id: 'c'.repeat(64),
+        inputs: [{ txId: 'd'.repeat(64), outputIndex: 0, publicKey: '', signature: '' }],
+        outputs: [{ address: 'e'.repeat(64), amount: 100 }],
+        timestamp: Date.now(),
+      }
+      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0]
+      peerOnNode2.send({
+        type: 'tx',
+        payload: { tx: invalidTx },
+      })
+
+      await new Promise(r => setTimeout(r, 300))
+
+      const scoreAfter = peerOnNode1.getMisbehaviorScore()
+      expect(scoreAfter).toBeGreaterThan(scoreBefore)
+    } finally {
+      await p2p1.stop()
+      await p2p2.stop()
+    }
+  })
+
+  it('should penalize oversized addr messages and cap entries', async () => {
+    const storage1 = new FileBlockStorage(tmpDir1)
+    const storage2 = new FileBlockStorage(tmpDir2)
+    const node1 = new Node('alice', undefined, storage1)
+    const node2 = new Node('bob', undefined, storage2)
+
+    const p2p1 = new P2PServer(node1, 0, tmpDir1)
+    const p2p2 = new P2PServer(node2, 0, tmpDir2)
+    p2p1.setLocalMode(true)
+    p2p2.setLocalMode(true)
+    await p2p1.start()
+    await p2p2.start()
+
+    try {
+      const addr = (p2p1 as any).server.address()
+      const port = typeof addr === 'object' ? addr.port : 0
+      p2p2.connectOutbound('127.0.0.1', port)
+      await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
+
+      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0]
+
+      // Send oversized addr FROM node2 TO node1 (200 entries, limit is 100)
+      const addresses = Array.from({ length: 200 }, (_, i) => ({
+        host: `10.0.${Math.floor(i / 256)}.${i % 256}`,
+        port: 6001,
+        lastSeen: Date.now(),
+      }))
+      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0]
+      peerOnNode2.send({
+        type: 'addr',
+        payload: { addresses },
+      })
+
+      await new Promise(r => setTimeout(r, 300))
+
+      // Node1 should have penalized the peer for oversized addr (+25)
+      expect(peerOnNode1.getMisbehaviorScore()).toBeGreaterThanOrEqual(25)
+
+      // Only up to 100 entries from this message should have been processed
+      // (plus a few from handshake's own address and getaddr response)
+      const knownAddrs = p2p1.getKnownAddresses()
+      expect(knownAddrs.size).toBeLessThanOrEqual(105) // 100 from addr + small overhead
+    } finally {
+      await p2p1.stop()
+      await p2p2.stop()
+    }
+  })
+
+  it('should cache rejected block hashes and skip re-validation', async () => {
+    const storage1 = new FileBlockStorage(tmpDir1)
+    const storage2 = new FileBlockStorage(tmpDir2)
+    const node1 = new Node('alice', undefined, storage1)
+    const node2 = new Node('bob', undefined, storage2)
+    node1.chain.difficulty = TEST_TARGET
+    node2.chain.difficulty = TEST_TARGET
+
+    const p2p1 = new P2PServer(node1, 0, tmpDir1)
+    const p2p2 = new P2PServer(node2, 0, tmpDir2)
+    await p2p1.start()
+    await p2p2.start()
+
+    try {
+      const addr = (p2p1 as any).server.address()
+      const port = typeof addr === 'object' ? addr.port : 0
+      p2p2.connectOutbound('127.0.0.1', port)
+      await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
+
+      // Send an invalid block FROM node2 TO node1
+      const invalidBlock = {
+        header: {
+          version: 1,
+          previousHash: node1.chain.blocks[0].hash,
+          merkleRoot: 'a'.repeat(64),
+          timestamp: Date.now(),
+          target: TEST_TARGET,
+          nonce: 0,
+        },
+        hash: 'b'.repeat(64),
+        transactions: [],
+        height: 1,
+      }
+
+      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0]
+      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0]
+
+      // Send first time
+      peerOnNode2.send({
+        type: 'blocks',
+        payload: { blocks: [invalidBlock] },
+      })
+      await new Promise(r => setTimeout(r, 300))
+      const scoreAfterFirst = peerOnNode1.getMisbehaviorScore()
+      expect(scoreAfterFirst).toBeGreaterThan(0) // should have gotten +25
+
+      // Verify the rejected cache has the hash
+      expect((p2p1 as any).rejectedBlocks.has('b'.repeat(64))).toBe(true)
+
+      // Send same block again — should be skipped via rejected cache (no extra misbehavior)
+      peerOnNode2.send({
+        type: 'blocks',
+        payload: { blocks: [invalidBlock] },
+      })
+      await new Promise(r => setTimeout(r, 300))
+      const scoreAfterSecond = peerOnNode1.getMisbehaviorScore()
+
+      // Second send should NOT add more misbehavior (block was cached as rejected)
+      expect(scoreAfterSecond).toBe(scoreAfterFirst)
+    } finally {
+      await p2p1.stop()
+      await p2p2.stop()
+    }
+  })
+
+  it('should clamp addr timestamps to prevent future-lock', () => {
+    const storage = new FileBlockStorage(tmpDir1)
+    const node = new Node('test', undefined, storage)
+    const p2p = new P2PServer(node, 0, tmpDir1)
+    p2p.setLocalMode(true)
+
+    // Directly test addKnownAddress via the private method
+    const addAddr = (p2p as any).addKnownAddress.bind(p2p)
+
+    // Add an address with a far-future timestamp
+    const farFuture = Date.now() + 365 * 24 * 3600_000 // 1 year in the future
+    addAddr('10.0.0.1', 6001, farFuture)
+
+    const known = p2p.getKnownAddresses()
+    const entry = known.get('10.0.0.1:6001')
+    expect(entry).toBeDefined()
+    // Should be clamped to at most ~2 hours in the future
+    expect(entry!.lastSeen).toBeLessThan(Date.now() + 3 * 3600_000)
   })
 })

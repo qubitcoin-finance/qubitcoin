@@ -27,7 +27,7 @@ import {
 import type { Node } from '../node.js'
 import { sanitizeForStorage } from '../storage.js'
 import { hexToBytes, bytesToHex } from '../crypto.js'
-import type { Block } from '../block.js'
+import { type Block, computeBlockHash, hashMeetsTarget, blockWork } from '../block.js'
 import type { Transaction, TransactionInput, ClaimData } from '../transaction.js'
 import { log } from '../log.js'
 
@@ -147,6 +147,10 @@ export class P2PServer {
   private knownAddresses: Map<string, { host: string; port: number; lastSeen: number }> = new Map()
   private seedBackoff: Map<string, number> = new Map() // seed key -> current delay ms
   private orphanBlocks: Map<string, OrphanBlock> = new Map() // parentHash -> orphan
+  private rejectedBlocks: Set<string> = new Set()
+  private rejectedTxs: Set<string> = new Set()
+  /** Per-peer last getblocks response timestamp (rate limiting) */
+  private lastGetblocksTime: Map<string, number> = new Map()
 
   private localMode = false
 
@@ -333,6 +337,7 @@ export class P2PServer {
     }
 
     this.peers.delete(peer.id)
+    this.lastGetblocksTime.delete(peer.id)
     if (peer.inbound) this.inboundCount--
     else this.outboundCount--
 
@@ -425,6 +430,18 @@ export class P2PServer {
   private handleVersion(peer: Peer, payload: VersionPayload): void {
     if (!payload || typeof payload.height !== 'number' || typeof payload.genesisHash !== 'string') {
       peer.addMisbehavior(25)
+      return
+    }
+
+    // Protocol version check: reject peers running incompatible versions
+    if (payload.version !== PROTOCOL_VERSION) {
+      peer.send({
+        type: 'reject',
+        payload: {
+          reason: `protocol version mismatch: expected ${PROTOCOL_VERSION}, got ${payload.version}`,
+        } as RejectPayload,
+      })
+      peer.disconnect('protocol version mismatch')
       return
     }
 
@@ -540,6 +557,15 @@ export class P2PServer {
       return
     }
 
+    // Rate limit: penalize rapid getblocks to discourage amplification attacks.
+    // Don't drop the request — fork resolution may send rapid legitimate requests.
+    const now = Date.now()
+    const lastTime = this.lastGetblocksTime.get(peer.id) ?? 0
+    if (now - lastTime < 100) {
+      peer.addMisbehavior(5) // sustained abuse reaches ban threshold after 20 rapid requests
+    }
+    this.lastGetblocksTime.set(peer.id, now)
+
     const from = Math.max(0, payload.fromHeight) // include genesis if requested
     const to = Math.min(from + IBD_BATCH_SIZE, this.node.chain.blocks.length)
     const blocks = this.node.chain.blocks.slice(from, to)
@@ -568,6 +594,7 @@ export class P2PServer {
     for (const raw of payload.blocks) {
       const block = deserializeBlock(raw as Record<string, unknown>)
       if (this.seenBlocks.has(block.hash)) continue
+      if (this.rejectedBlocks.has(block.hash)) continue
 
       // Genesis adoption: fresh node (no snapshot) receives peer's genesis block
       if (block.height === 0 && block.hash !== this.node.chain.blocks[0].hash) {
@@ -587,9 +614,9 @@ export class P2PServer {
         added++
         // Try to connect any orphans that were waiting for this block
         added += this.processOrphans(block.hash)
-      } else if (result.error?.includes('Previous hash') && !this.forkResolutionInProgress) {
-        // During IBD (batch of blocks), "Previous hash" mismatch means fork
+      } else if (result.error?.includes('Previous hash')) {
         // For single blocks (relay/getdata), check if it's an orphan (parent unknown)
+        // Always allow orphan storage even during fork resolution
         if (payload.blocks.length === 1) {
           const parentInChain = this.node.chain.blocksByHash.has(block.header.previousHash)
           if (!parentInChain) {
@@ -598,18 +625,30 @@ export class P2PServer {
             continue
           }
         }
-        // Fork detected — peer has a different chain at this height
-        log.warn({ component: 'p2p', peer: peer.id, height: block.height, error: result.error }, 'Fork detected — initiating resolution')
-        forkDetected = true
-        break
+        // During IBD (batch of blocks), "Previous hash" mismatch means fork
+        if (!this.forkResolutionInProgress) {
+          log.warn({ component: 'p2p', peer: peer.id, height: block.height, error: result.error }, 'Fork detected — initiating resolution')
+          forkDetected = true
+          break
+        }
       } else {
         log.warn({ component: 'p2p', peer: peer.id, height: block.height, hash: block.hash?.slice(0, 16), error: result.error }, 'Rejected block from peer')
         peer.send({ type: 'reject', payload: { reason: `block ${block.height} rejected: ${result.error}` } as RejectPayload })
+        this.addSeen(this.rejectedBlocks, block.hash)
+        peer.addMisbehavior(25)
       }
     }
 
     if (forkDetected) {
       this.initiateForkResolution(peer)
+      return
+    }
+
+    // IBD stall: peer sent blocks but none were accepted — disconnect
+    if (added === 0 && payload.blocks.length > 0 && !forkDetected) {
+      log.warn({ component: 'p2p', peer: peer.id, batchSize: payload.blocks.length }, 'All blocks rejected — disconnecting stalled peer')
+      peer.addMisbehavior(25)
+      peer.disconnect('all blocks rejected')
       return
     }
 
@@ -641,6 +680,7 @@ export class P2PServer {
 
     const tx = deserializeTransaction(payload.tx as Record<string, unknown>)
     if (this.seenTxs.has(tx.id)) return
+    if (this.rejectedTxs.has(tx.id)) return
 
     const result = this.node.receiveTransaction(tx)
     if (result.success) {
@@ -652,6 +692,8 @@ export class P2PServer {
       })
     } else {
       log.warn({ component: 'p2p', peer: peer.id, txid: tx.id?.slice(0, 16), error: result.error }, 'Rejected tx from peer')
+      this.addSeen(this.rejectedTxs, tx.id)
+      peer.addMisbehavior(10)
     }
   }
 
@@ -771,11 +813,15 @@ export class P2PServer {
       return
     }
 
+    // Cap locator length to prevent CPU abuse (Bitcoin Core uses 101)
+    const MAX_LOCATOR_HASHES = 101
+    const locator = payload.locatorHashes.slice(0, MAX_LOCATOR_HASHES)
+
     const chain = this.node.chain
 
     // Find the first locator hash that matches a block in our chain
     let forkPoint = 0 // default to genesis
-    for (const hash of payload.locatorHashes) {
+    for (const hash of locator) {
       const block = chain.blocksByHash.get(hash)
       if (block) {
         forkPoint = block.height
@@ -849,6 +895,25 @@ export class P2PServer {
     const effectivePeerHeight = Math.max(peerHeight, peer.remoteHeight)
 
     if (peer.remoteCumulativeWork > 0n) {
+      // Verify claimed work against header targets: compute minimum work from headers
+      // Work up to fork point (our chain) + work from peer's headers after fork
+      let verifiedPeerWork = 0n
+      for (let i = 0; i <= forkPoint; i++) {
+        verifiedPeerWork += blockWork(chain.blocks[i].header.target)
+      }
+      for (const h of payload.headers) {
+        // Headers only have hash/height/previousHash — estimate work from our difficulty
+        // Full verification happens when blocks arrive; this is a sanity check
+        verifiedPeerWork += blockWork(chain.getDifficulty())
+      }
+      // If peer claims more work than headers can justify, ban them
+      if (peer.remoteCumulativeWork > verifiedPeerWork * 2n) {
+        log.warn({ component: 'p2p', peer: peer.id, claimed: peer.remoteCumulativeWork.toString(16).slice(0, 16), verified: verifiedPeerWork.toString(16).slice(0, 16) }, 'Peer claims impossibly high cumulative work — banning')
+        peer.addMisbehavior(100)
+        this.clearForkResolution()
+        return
+      }
+
       // Use cumulative work comparison (more accurate)
       if (peer.remoteCumulativeWork <= chain.cumulativeWork) {
         log.info({ component: 'p2p', peer: peer.id, ourWork: chain.cumulativeWork.toString(16).slice(0, 16), peerWork: peer.remoteCumulativeWork.toString(16).slice(0, 16) }, 'Peer chain has less work — no reorg')
@@ -1003,6 +1068,13 @@ export class P2PServer {
       return
     }
 
+    // Cap incoming addr entries to prevent address book flooding
+    if (payload.addresses.length > MAX_ADDR_RESPONSE) {
+      log.warn({ component: 'p2p', peer: peer.id, count: payload.addresses.length }, 'Oversized addr message')
+      peer.addMisbehavior(25)
+      payload.addresses = payload.addresses.slice(0, MAX_ADDR_RESPONSE)
+    }
+
     const newAddresses: Array<{ host: string; port: number; lastSeen?: number }> = []
     for (const entry of payload.addresses) {
       if (!entry.host || typeof entry.port !== 'number' || entry.port <= 0 || entry.port > 65535) continue
@@ -1038,7 +1110,9 @@ export class P2PServer {
 
     const key = `${host}:${port}`
     const existing = this.knownAddresses.get(key)
-    const now = lastSeen ?? Date.now()
+    // Clamp lastSeen to at most 2 hours in the future to prevent permanent stale entries
+    const maxFuture = Date.now() + 2 * 3600_000
+    const now = Math.min(lastSeen ?? Date.now(), maxFuture)
     if (existing && existing.lastSeen >= now) return
     this.knownAddresses.set(key, { host, port, lastSeen: now })
 
@@ -1084,8 +1158,12 @@ export class P2PServer {
     return this.knownAddresses
   }
 
-  /** Add a block to the orphan pool */
+  /** Add a block to the orphan pool (validates PoW before caching) */
   private addOrphan(block: Block): void {
+    // Validate PoW before storing — prevents filling orphan cache with junk
+    if (computeBlockHash(block.header) !== block.hash) return
+    if (!hashMeetsTarget(block.hash, block.header.target)) return
+
     // Expire old orphans first
     this.expireOrphans()
 

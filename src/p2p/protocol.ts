@@ -6,7 +6,7 @@
  */
 
 export const MAX_MESSAGE_SIZE = 5 * 1024 * 1024 // 5 MB
-export const PROTOCOL_VERSION = 1
+export const PROTOCOL_VERSION = 2
 
 export type MessageType =
   | 'version'

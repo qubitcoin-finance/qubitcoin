@@ -324,6 +324,10 @@ export function validateBlock(
     if (block.header.previousHash !== previousBlock.hash) {
       return { valid: false, error: 'Previous hash does not match' }
     }
+    // Verify block height is sequential
+    if (block.height !== previousBlock.height + 1) {
+      return { valid: false, error: `Invalid block height: expected ${previousBlock.height + 1}, got ${block.height}` }
+    }
   } else {
     if (block.header.previousHash !== '0'.repeat(64)) {
       return { valid: false, error: 'Genesis block must have zero previous hash' }
@@ -390,6 +394,9 @@ export function validateBlock(
       }
       if (tx.outputs[0].amount <= 0) {
         return { valid: false, error: `Transaction ${i}: claim tx must have positive amount` }
+      }
+      if (!Number.isInteger(tx.outputs[0].amount)) {
+        return { valid: false, error: `Transaction ${i}: claim tx must have integer amount` }
       }
       continue // skip regular UTXO validation
     }

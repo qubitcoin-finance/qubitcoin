@@ -7,6 +7,8 @@ import {
   createForkGenesisBlock,
   validateBlock,
   INITIAL_TARGET,
+  type Block,
+  type BlockHeader,
 } from '../block.js'
 import { createCoinbaseTransaction, type UTXO, type Transaction, CLAIM_TXID } from '../transaction.js'
 import { doubleSha256Hex } from '../crypto.js'
@@ -124,6 +126,77 @@ describe('validateBlock', () => {
     expect(result.error).toContain('hash mismatch')
   })
 
+  it('rejects block with fractional claim output', () => {
+    const genesis = createGenesisBlock()
+
+    const claimTx: Transaction = {
+      id: doubleSha256Hex(new TextEncoder().encode('claim-frac')),
+      inputs: [{ txId: CLAIM_TXID, outputIndex: 0, publicKey: new Uint8Array(0), signature: new Uint8Array(0) }],
+      outputs: [{ address: 'a'.repeat(64), amount: 1.5 }],
+      timestamp: Date.now(),
+      claimData: {
+        btcAddress: 'b'.repeat(40),
+        ecdsaPublicKey: new Uint8Array(33),
+        ecdsaSignature: new Uint8Array(64),
+        qbtcAddress: 'a'.repeat(64),
+      },
+    }
+
+    const easyTarget = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+    const coinbase = createCoinbaseTransaction('c'.repeat(64), 1, 0)
+    const txs = [coinbase, claimTx]
+    const merkleRoot = computeMerkleRoot(txs.map((t) => t.id))
+
+    const header = {
+      version: 1,
+      previousHash: genesis.hash,
+      merkleRoot,
+      timestamp: Date.now(),
+      target: easyTarget,
+      nonce: 0,
+    }
+
+    let hash = computeBlockHash(header)
+    while (!hashMeetsTarget(hash, easyTarget)) {
+      header.nonce++
+      hash = computeBlockHash(header)
+    }
+
+    const block = { header, hash, transactions: txs, height: 1 }
+    const result = validateBlock(block, genesis, new Map())
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('integer amount')
+  })
+
+  it('rejects block with wrong height', () => {
+    const genesis = createGenesisBlock()
+    const easyTarget = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+    const coinbase = createCoinbaseTransaction('c'.repeat(64), 1, 0)
+    const txs = [coinbase]
+    const merkleRoot = computeMerkleRoot(txs.map((t) => t.id))
+
+    const header = {
+      version: 1,
+      previousHash: genesis.hash,
+      merkleRoot,
+      timestamp: Date.now(),
+      target: easyTarget,
+      nonce: 0,
+    }
+
+    let hash = computeBlockHash(header)
+    while (!hashMeetsTarget(hash, easyTarget)) {
+      header.nonce++
+      hash = computeBlockHash(header)
+    }
+
+    // Set wrong height (5 instead of 1)
+    const block = { header, hash, transactions: txs, height: 5 }
+    const result = validateBlock(block, genesis, new Map())
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('Invalid block height')
+  })
+
   it('validates claim tx structure in block', () => {
     // A claim tx with correct structure should pass block structural validation
     const genesis = createGenesisBlock()
@@ -168,5 +241,85 @@ describe('validateBlock', () => {
     const block = { header, hash, transactions: txs, height: 1 }
     const result = validateBlock(block, genesis, new Map())
     expect(result.valid).toBe(true)
+  })
+
+  it('accepts block with correct sequential height', () => {
+    const genesis = createGenesisBlock()
+    const easyTarget = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+    const coinbase = createCoinbaseTransaction('c'.repeat(64), 1, 0)
+    const txs = [coinbase]
+    const merkleRoot = computeMerkleRoot(txs.map((t) => t.id))
+
+    const header: BlockHeader = {
+      version: 1,
+      previousHash: genesis.hash,
+      merkleRoot,
+      timestamp: Date.now(),
+      target: easyTarget,
+      nonce: 0,
+    }
+    let hash = computeBlockHash(header)
+    while (!hashMeetsTarget(hash, easyTarget)) {
+      header.nonce++
+      hash = computeBlockHash(header)
+    }
+
+    const block: Block = { header, hash, transactions: txs, height: 1 }
+    expect(validateBlock(block, genesis, new Map()).valid).toBe(true)
+  })
+
+  it('rejects block with height 0 when it has a previous block', () => {
+    const genesis = createGenesisBlock()
+    const easyTarget = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+    const coinbase = createCoinbaseTransaction('c'.repeat(64), 1, 0)
+    const txs = [coinbase]
+    const merkleRoot = computeMerkleRoot(txs.map((t) => t.id))
+
+    const header: BlockHeader = {
+      version: 1,
+      previousHash: genesis.hash,
+      merkleRoot,
+      timestamp: Date.now(),
+      target: easyTarget,
+      nonce: 0,
+    }
+    let hash = computeBlockHash(header)
+    while (!hashMeetsTarget(hash, easyTarget)) {
+      header.nonce++
+      hash = computeBlockHash(header)
+    }
+
+    // Height 0 with a non-null previous block — should be rejected
+    const block: Block = { header, hash, transactions: txs, height: 0 }
+    const result = validateBlock(block, genesis, new Map())
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('Invalid block height')
+  })
+
+  it('rejects block that skips heights (height 3 after height 0)', () => {
+    const genesis = createGenesisBlock()
+    const easyTarget = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+    const coinbase = createCoinbaseTransaction('c'.repeat(64), 3, 0)
+    const txs = [coinbase]
+    const merkleRoot = computeMerkleRoot(txs.map((t) => t.id))
+
+    const header: BlockHeader = {
+      version: 1,
+      previousHash: genesis.hash,
+      merkleRoot,
+      timestamp: Date.now(),
+      target: easyTarget,
+      nonce: 0,
+    }
+    let hash = computeBlockHash(header)
+    while (!hashMeetsTarget(hash, easyTarget)) {
+      header.nonce++
+      hash = computeBlockHash(header)
+    }
+
+    const block: Block = { header, hash, transactions: txs, height: 3 }
+    const result = validateBlock(block, genesis, new Map())
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('Invalid block height')
   })
 })

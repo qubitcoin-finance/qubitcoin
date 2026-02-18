@@ -100,7 +100,9 @@ function deserializeTransaction(raw: Record<string, unknown>): Transaction {
 
 export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, bindAddress: string = '127.0.0.1') {
   const app = express();
-  app.use(cors());
+  app.set('trust proxy', 1);
+  app.disable('x-powered-by');
+  app.use(cors({ origin: bindAddress === '127.0.0.1' ? true : false }));
   app.use(express.json({ limit: MAX_BODY_SIZE }));
 
   // Rate limiting
@@ -139,7 +141,12 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
 
   // Endpoint to get the latest blocks
   app.get('/api/v1/blocks', (req, res) => {
-    const count = req.query.count ? parseInt(req.query.count as string, 10) : 10;
+    const parsed = req.query.count ? parseInt(req.query.count as string, 10) : 10;
+    if (isNaN(parsed) || parsed < 0) {
+      res.status(400).json({ error: 'Invalid count parameter' });
+      return;
+    }
+    const count = Math.min(parsed, 100);
     const blocks = [...node.chain.blocks].reverse().slice(0, count);
     res.json(sanitize(blocks));
   });
@@ -179,7 +186,8 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
 
   // Endpoint to get mempool transactions (lightweight: no signatures/publicKeys, includes sender)
   app.get('/api/v1/mempool/txs', (req, res) => {
-    const limit = Math.min(parseInt(req.query.limit as string, 10) || 1000, 1000);
+    const parsedLimit = parseInt(req.query.limit as string, 10);
+    const limit = Math.min(isNaN(parsedLimit) || parsedLimit < 0 ? 1000 : parsedLimit, 1000);
     const txs = node.mempool.getTransactionsForBlock().slice(0, limit);
     const summaries = txs.map(tx => {
       const isCoinbase = tx.inputs.length === 1 && tx.inputs[0].txId === COINBASE_TXID;

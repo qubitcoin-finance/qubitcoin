@@ -16,6 +16,9 @@ import { verifyClaimProof } from './claim.js'
 /** Maximum mempool size in bytes (50 MB) */
 export const MAX_MEMPOOL_BYTES = 50 * 1024 * 1024
 
+/** Maximum number of pending claim transactions in mempool */
+export const MAX_CLAIM_COUNT = 5000
+
 /**
  * Minimum relay fee rate (satoshis per kilobyte).
  * ML-DSA-65 txs are ~5 KB, so 1 sat/KB means min fee ≈ 5 sat per tx.
@@ -83,6 +86,11 @@ export class Mempool {
       // Already pending in mempool?
       if (this.pendingBtcClaims.has(claimKey)) {
         return { success: false, error: `BTC address already pending claim: ${claimKey}` }
+      }
+
+      // Cap pending claims to prevent free claim txs from crowding out fee-paying transactions
+      if (this.pendingBtcClaims.size >= MAX_CLAIM_COUNT) {
+        return { success: false, error: 'Mempool claim limit reached — wait for claims to be mined' }
       }
 
       // Verify claim proof (ECDSA/Schnorr signature) before accepting

@@ -166,6 +166,32 @@ describe('validateTransaction', () => {
     expect(result.error).toContain('does not match UTXO owner')
   })
 
+  it('rejects fractional output amount', () => {
+    const wallet = walletA
+    const utxoId = 'a'.repeat(64)
+    const utxoSet = new Map<string, UTXO>()
+    utxoSet.set(utxoKey(utxoId, 0), {
+      txId: utxoId,
+      outputIndex: 0,
+      address: wallet.address,
+      amount: 100,
+    })
+
+    const tx = createTransaction(
+      wallet,
+      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 100 }],
+      [{ address: 'b'.repeat(64), amount: 50 }],
+      1
+    )
+
+    // Tamper: set output amount to a float
+    tx.outputs[0].amount = 49.5
+
+    const result = validateTransaction(tx, utxoSet)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('non-integer amount')
+  })
+
   it('passes coinbase through', () => {
     const tx = createCoinbaseTransaction('a'.repeat(64), 0, 0)
     const result = validateTransaction(tx, new Map())

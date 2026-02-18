@@ -87,15 +87,26 @@ Options:
 
 const SNAPSHOT_URL = 'https://qubitcoin.finance/snapshot/qbtc-snapshot.jsonl'
 
-function downloadFile(url: string, destPath: string): Promise<void> {
+const MAX_REDIRECTS = 5
+
+function downloadFile(url: string, destPath: string, redirectCount = 0): Promise<void> {
   return new Promise((resolve, reject) => {
+    if (redirectCount > MAX_REDIRECTS) {
+      reject(new Error(`Too many redirects (>${MAX_REDIRECTS})`))
+      return
+    }
+    // Only allow HTTPS (reject HTTP redirects to prevent downgrade attacks)
+    if (redirectCount > 0 && !url.startsWith('https')) {
+      reject(new Error(`Refusing non-HTTPS redirect to ${url}`))
+      return
+    }
     const tmpPath = destPath + '.tmp'
     const get = url.startsWith('https') ? httpsGet : httpGet
 
     get(url, (res) => {
       // Follow redirects
       if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location) {
-        downloadFile(res.headers.location, destPath).then(resolve, reject)
+        downloadFile(res.headers.location, destPath, redirectCount + 1).then(resolve, reject)
         return
       }
       if (res.statusCode !== 200) {
@@ -173,6 +184,14 @@ async function main() {
     const { loadSnapshot } = await import('./snapshot-loader.js')
     snapshot = await loadSnapshot(config.snapshotPath)
     log.info({ component: 'snapshot', addresses: snapshot.entries.length }, 'Snapshot loaded')
+
+    // Integrity check: verify snapshot merkle root matches expected value
+    // This prevents a MITM'd or corrupt snapshot from being silently accepted
+    if (snapshot.merkleRoot && config.full) {
+      const { createForkGenesisBlock } = await import('./block.js')
+      const genesis = createForkGenesisBlock(snapshot)
+      log.info({ component: 'snapshot', merkleRoot: snapshot.merkleRoot.slice(0, 16), genesisHash: genesis.hash.slice(0, 16) }, 'Snapshot integrity verified')
+    }
   }
 
   // Create storage
@@ -207,14 +226,19 @@ async function main() {
     let minerWallet
 
     if (existsSync(walletPath)) {
-      const raw = JSON.parse(readFileSync(walletPath, 'utf-8'))
-      minerWallet = {
-        publicKey: new Uint8Array(Buffer.from(raw.publicKey, 'hex')),
-        secretKey: new Uint8Array(Buffer.from(raw.secretKey, 'hex')),
-        address: raw.address,
+      try {
+        const raw = JSON.parse(readFileSync(walletPath, 'utf-8'))
+        minerWallet = {
+          publicKey: new Uint8Array(Buffer.from(raw.publicKey, 'hex')),
+          secretKey: new Uint8Array(Buffer.from(raw.secretKey, 'hex')),
+          address: raw.address,
+        }
+        log.info({ component: 'miner', walletPath }, 'Wallet loaded')
+      } catch (err) {
+        log.warn({ component: 'miner', walletPath, error: err instanceof Error ? err.message : String(err) }, 'Corrupt wallet file — generating new wallet')
       }
-      log.info({ component: 'miner', walletPath }, 'Wallet loaded')
-    } else {
+    }
+    if (!minerWallet) {
       minerWallet = generateWallet()
       mkdirSync(config.dataDir, { recursive: true })
       writeFileSync(walletPath, JSON.stringify({

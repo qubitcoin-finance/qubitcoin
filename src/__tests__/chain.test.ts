@@ -488,6 +488,92 @@ describe('Blockchain undo data', () => {
   })
 })
 
+describe('Blockchain replaceGenesis', () => {
+  it('rejects genesis with invalid PoW (hash mismatch)', () => {
+    const chain = new Blockchain()
+    const fakeGenesis: Block = {
+      header: {
+        version: 2,
+        previousHash: '0'.repeat(64),
+        merkleRoot: 'a'.repeat(64),
+        timestamp: 0,
+        target: STARTING_DIFFICULTY,
+        nonce: 0,
+      },
+      hash: 'ff'.repeat(32), // invalid hash — doesn't match header
+      transactions: [],
+      height: 0,
+    }
+    expect(chain.replaceGenesis(fakeGenesis)).toBe(false)
+    // Original genesis should be preserved
+    expect(chain.blocks[0].hash).not.toBe(fakeGenesis.hash)
+  })
+
+  it('rejects genesis with hash that does not meet target', () => {
+    const chain = new Blockchain()
+    const impossibleTarget = '0000000000000000000000000000000000000000000000000000000000000001'
+    const header: BlockHeader = {
+      version: 2,
+      previousHash: '0'.repeat(64),
+      merkleRoot: 'a'.repeat(64),
+      timestamp: 0,
+      target: impossibleTarget,
+      nonce: 42,
+    }
+    const hash = computeBlockHash(header)
+    const fakeGenesis: Block = { header, hash, transactions: [], height: 0 }
+    expect(chain.replaceGenesis(fakeGenesis)).toBe(false)
+  })
+
+  it('rejects replaceGenesis when chain has blocks beyond genesis', () => {
+    const chain = new Blockchain()
+    const block = mineOnChain(chain, walletA.address)
+    chain.addBlock(block)
+
+    const validGenesis = chain.blocks[0]
+    expect(chain.replaceGenesis(validGenesis)).toBe(false)
+  })
+
+  it('rejects replaceGenesis when snapshot is loaded', () => {
+    const { snapshot } = createMockSnapshot()
+    const chain = new Blockchain(snapshot)
+    const genesis = chain.blocks[0]
+    expect(chain.replaceGenesis(genesis)).toBe(false)
+  })
+})
+
+describe('Block height validation in chain', () => {
+  it('rejects block with forged height to bypass coinbase maturity', () => {
+    const chain = new Blockchain()
+    // Mine a block to get a coinbase UTXO
+    chain.addBlock(mineOnChain(chain, walletA.address))
+
+    // Try to create a block claiming height 200 (would make coinbase mature)
+    // but the actual chain is only at height 1
+    const tip = chain.getChainTip()
+    const coinbase = createCoinbaseTransaction('f'.repeat(64), 200, 0)
+    const txs = [coinbase]
+    const merkleRoot = computeMerkleRoot(txs.map(t => t.id))
+    const header: BlockHeader = {
+      version: 1,
+      previousHash: tip.hash,
+      merkleRoot,
+      timestamp: tip.header.timestamp + 1,
+      target: chain.getDifficulty(),
+      nonce: 0,
+    }
+    let hash = computeBlockHash(header)
+    while (!hashMeetsTarget(hash, header.target)) {
+      header.nonce++
+      hash = computeBlockHash(header)
+    }
+    const block: Block = { header, hash, transactions: txs, height: 200 }
+    const result = chain.addBlock(block)
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Invalid block height')
+  })
+})
+
 describe('Blockchain getBlockHash', () => {
   it('returns hash for valid heights', () => {
     const chain = new Blockchain()
