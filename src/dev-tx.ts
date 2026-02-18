@@ -61,6 +61,7 @@ async function main() {
 
   // Track UTXOs we've already spent in the mempool
   const pendingSpent = new Set<string>()
+  let waitingForMaturity = false
 
   async function sendTx() {
     try {
@@ -119,6 +120,7 @@ async function main() {
       })
 
       pendingSpent.add(`${utxo.txId}:${utxo.outputIndex}`)
+      waitingForMaturity = false
 
       const totalSat = outputs.reduce((s, o) => s + o.amount, 0)
       console.log(`TX ${result.txid.slice(0, 16)}... → ${numOutputs} outputs (${(totalSat / 1e8).toFixed(8)} QBTC, fee ${(fee / 1e8).toFixed(8)} QBTC)`)
@@ -126,6 +128,11 @@ async function main() {
       if (err.message?.includes('already claimed')) {
         const match = err.message.match(/UTXO ([0-9a-f]+:\d+)/)
         if (match) pendingSpent.add(match[1])
+      } else if (err.message?.includes('not mature')) {
+        if (!waitingForMaturity) {
+          console.log('Waiting for UTXOs to mature...')
+          waitingForMaturity = true
+        }
       } else {
         console.log(`Error: ${err.message}`)
       }
