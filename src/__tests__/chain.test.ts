@@ -915,3 +915,143 @@ describe('Undo data pruning', () => {
     expect(chain.undoData.length).toBe(1)
   })
 })
+
+describe('addBlock edge cases', () => {
+  it('rejects block with wrong target (too easy)', () => {
+    const chain = new Blockchain()
+    chain.difficulty = TEST_TARGET
+
+    const block = mineOnChain(chain, walletA.address)
+    // Tamper the target to be easier than current difficulty
+    block.header.target = 'f'.repeat(64)
+    block.hash = computeBlockHash(block.header)
+
+    const result = chain.addBlock(block)
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('target mismatch')
+  })
+
+  it('rejects claim tx when no snapshot is loaded', () => {
+    const chain = new Blockchain() // no snapshot
+    chain.difficulty = TEST_TARGET
+
+    // Mine a block to get past genesis
+    chain.addBlock(mineOnChain(chain, walletA.address))
+
+    // Create a claim tx
+    const { snapshot, holders } = createMockSnapshot()
+    const claimTx = createClaimTransaction(
+      holders[0].secretKey,
+      holders[0].publicKey,
+      snapshot.entries[0],
+      walletA,
+      snapshot.btcBlockHash
+    )
+
+    // Try to mine a block with the claim tx
+    const tip = chain.getChainTip()
+    const height = chain.getHeight() + 1
+    const coinbase = createCoinbaseTransaction(walletA.address, height, 0)
+    const txs = [coinbase, claimTx]
+    const merkleRoot = computeMerkleRoot(txs.map(t => t.id))
+
+    const header: BlockHeader = {
+      version: 1,
+      previousHash: tip.hash,
+      merkleRoot,
+      timestamp: tip.header.timestamp + 1,
+      target: TEST_TARGET,
+      nonce: 0,
+    }
+
+    let hash = computeBlockHash(header)
+    while (!hashMeetsTarget(hash, header.target)) {
+      header.nonce++
+      hash = computeBlockHash(header)
+    }
+
+    const result = chain.addBlock({ header, hash, transactions: txs, height })
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('No BTC snapshot')
+  })
+
+  it('getClaimStats returns zeros when no snapshot', () => {
+    const chain = new Blockchain()
+    const stats = chain.getClaimStats()
+    expect(stats.claimed).toBe(0)
+    expect(stats.totalEntries).toBe(0)
+    expect(stats.claimedAmount).toBe(0)
+  })
+
+  it('findUTXOs with amount returns subset when sufficient', () => {
+    // Directly inject multiple UTXOs to test the early-exit logic
+    const chain = new Blockchain()
+    chain.difficulty = TEST_TARGET
+    const addr = 'test_addr_' + 'a'.repeat(54)
+
+    // Manually add 3 UTXOs for the address
+    for (let i = 0; i < 3; i++) {
+      const key = utxoKey('f'.repeat(63) + i.toString(), 0)
+      const utxo: UTXO = { txId: 'f'.repeat(63) + i.toString(), outputIndex: 0, address: addr, amount: 100_000 }
+      chain.utxoSet.set(key, utxo)
+      // Also update the address index
+      if (!(chain as any).utxosByAddress.has(addr)) {
+        ;(chain as any).utxosByAddress.set(addr, new Set())
+      }
+      ;(chain as any).utxosByAddress.get(addr).add(key)
+    }
+
+    const allUtxos = chain.findUTXOs(addr)
+    expect(allUtxos.length).toBe(3)
+
+    // With a small amount, should return just 1 UTXO (100_000 >= 1)
+    const partial = chain.findUTXOs(addr, 1)
+    expect(partial.length).toBe(1)
+  })
+
+  it('getState at height 0 returns zero hashrate and avgBlockTime', async () => {
+    const { Node } = await import('../node.js')
+    const node = new Node('test')
+    const state = node.getState()
+    expect(state.height).toBe(0)
+    expect(state.avgBlockTime).toBe(0)
+    expect(state.hashrate).toBe(0)
+  })
+})
+
+describe('resetToHeight with storage', () => {
+  it('persists correctly — replay from storage matches', async () => {
+    const fs = await import('node:fs')
+    const path = await import('node:path')
+    const os = await import('node:os')
+    const { FileBlockStorage } = await import('../storage.js')
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-reset-'))
+
+    try {
+      const storage = new FileBlockStorage(tmpDir)
+      const chain = new Blockchain(undefined, storage)
+      chain.difficulty = TEST_TARGET
+
+      // Mine 5 blocks
+      for (let i = 0; i < 5; i++) {
+        chain.addBlock(mineOnChain(chain, walletA.address))
+      }
+      expect(chain.getHeight()).toBe(5)
+
+      // Reset to height 2
+      chain.resetToHeight(2)
+      expect(chain.getHeight()).toBe(2)
+
+      // Create a new chain from the same storage — should replay to height 2
+      const chain2 = new Blockchain(undefined, new FileBlockStorage(tmpDir))
+      expect(chain2.getHeight()).toBe(2)
+      expect(chain2.getChainTip().hash).toBe(chain.getChainTip().hash)
+
+      // UTXOs should match
+      expect(chain2.utxoSet.size).toBe(chain.utxoSet.size)
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+})

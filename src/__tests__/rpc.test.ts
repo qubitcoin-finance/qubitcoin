@@ -1,7 +1,9 @@
 import { describe, it, expect, afterAll, beforeAll } from 'vitest'
 import { Node } from '../node.js'
 import { startRpcServer } from '../rpc.js'
-import { walletA } from './fixtures.js'
+import { walletA, walletB } from './fixtures.js'
+import { createMockSnapshot } from '../snapshot.js'
+import { createClaimTransaction } from '../claim.js'
 import type { AddressInfo } from 'node:net'
 import type { Server } from 'node:http'
 
@@ -118,5 +120,114 @@ describe('RPC endpoints', () => {
     const body = await res.json()
     expect(Array.isArray(body)).toBe(true)
     expect(body.length).toBe(0)
+  })
+
+  it('GET /address/:addr/utxos returns UTXOs', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/address/${walletA.address}/utxos`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(Array.isArray(body)).toBe(true)
+    expect(body.length).toBeGreaterThan(0)
+    expect(body[0]).toHaveProperty('txId')
+    expect(body[0]).toHaveProperty('amount')
+  })
+
+  it('GET /address/:addr/utxos returns empty array for unknown address', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/address/${'f'.repeat(64)}/utxos`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(Array.isArray(body)).toBe(true)
+    expect(body.length).toBe(0)
+  })
+
+  it('GET /status returns node state', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/status`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.height).toBe(3)
+    expect(typeof body.hashrate).toBe('number')
+    expect(typeof body.mempoolSize).toBe('number')
+    expect(typeof body.utxoCount).toBe('number')
+    expect(typeof body.cumulativeWork).toBe('string')
+  })
+
+  it('GET /blocks returns latest blocks with count cap', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/blocks?count=2`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(Array.isArray(body)).toBe(true)
+    expect(body.length).toBe(2)
+    // Should be in reverse order (newest first)
+    expect(body[0].height).toBeGreaterThan(body[1].height)
+  })
+
+  it('GET /blocks returns 400 for NaN count', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/blocks?count=abc`)
+    expect(res.status).toBe(400)
+  })
+
+  it('GET /difficulty returns difficulty history', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/difficulty`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(Array.isArray(body)).toBe(true)
+    expect(body.length).toBeGreaterThan(0)
+    expect(body[0]).toHaveProperty('height')
+    expect(body[0]).toHaveProperty('target')
+  })
+})
+
+describe('RPC transaction endpoints', () => {
+  let node: Node
+  let server: Server
+  let baseUrl: string
+
+  beforeAll(() => {
+    const { snapshot, holders } = createMockSnapshot()
+    node = new Node('rpc-tx-test', snapshot)
+    node.chain.difficulty = TEST_TARGET
+
+    // Mine blocks for data
+    for (let i = 0; i < 3; i++) {
+      node.mine(walletA.address, false)
+    }
+
+    const app = startRpcServer(node, 0)
+    server = app.listen(0)
+    const addr = server.address() as AddressInfo
+    baseUrl = `http://127.0.0.1:${addr.port}`
+  })
+
+  afterAll(() => {
+    server.close()
+  })
+
+  it('GET /tx/:txid finds transaction in mempool', async () => {
+    // Add a claim tx to the mempool
+    const { snapshot, holders } = createMockSnapshot()
+    const genesisHash = node.chain.blocks[0].hash
+    const claimTx = createClaimTransaction(
+      holders[0].secretKey,
+      holders[0].publicKey,
+      snapshot.entries[0],
+      walletB,
+      snapshot.btcBlockHash,
+      genesisHash
+    )
+
+    node.receiveTransaction(claimTx)
+
+    const res = await fetch(`${baseUrl}/api/v1/tx/${claimTx.id}`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.id).toBe(claimTx.id)
+  })
+
+  it('GET /mempool/txs returns transaction summaries', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/mempool/txs`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(Array.isArray(body)).toBe(true)
+    expect(body.length).toBeGreaterThan(0)
   })
 })

@@ -19,7 +19,7 @@ import {
   utxoKey,
   CLAIM_TXID,
 } from '../transaction.js'
-import { assembleCandidateBlock, mineBlock, mineBlockAsync } from '../miner.js'
+import { assembleCandidateBlock, mineBlock, mineBlockAsync, type MiningProgress } from '../miner.js'
 import { Blockchain } from '../chain.js'
 import { Mempool } from '../mempool.js'
 import { doubleSha256Hex } from '../crypto.js'
@@ -363,6 +363,99 @@ describe('mineBlockAsync', () => {
     expect(result!.hash).toBeTruthy()
     expect(hashMeetsTarget(result!.hash, TEST_TARGET)).toBe(true)
     expect(computeBlockHash(result!.header)).toBe(result!.hash)
+  })
+
+  it('calls onProgress callback with mining stats', async () => {
+    const chain = new Blockchain()
+
+    // Use a very hard target so mining won't finish — we abort after getting progress
+    const hardTarget = '0000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+
+    const tip = chain.getChainTip()
+    const height = chain.getHeight() + 1
+    const coinbase = createCoinbaseTransaction(walletA.address, height, 0)
+    const merkleRoot = computeMerkleRoot([coinbase.id])
+
+    const block: Block = {
+      header: {
+        version: 1,
+        previousHash: tip.hash,
+        merkleRoot,
+        timestamp: Date.now(),
+        target: hardTarget,
+        nonce: 0,
+      },
+      hash: '',
+      transactions: [coinbase],
+      height,
+    }
+
+    const progressUpdates: MiningProgress[] = []
+    const abort = new AbortController()
+
+    const promise = mineBlockAsync(block, abort.signal, (progress) => {
+      progressUpdates.push({ ...progress })
+      // Abort after we have enough data points
+      if (progressUpdates.length >= 3) abort.abort()
+    })
+
+    const result = await promise
+    expect(result).toBeNull() // aborted
+
+    // Should have received progress updates
+    expect(progressUpdates.length).toBeGreaterThanOrEqual(3)
+
+    // Verify progress fields are sensible
+    const last = progressUpdates[progressUpdates.length - 1]
+    expect(last.nonce).toBeGreaterThan(0)
+    expect(last.elapsed).toBeGreaterThanOrEqual(0)
+    expect(last.hashrate).toBeGreaterThan(0)
+
+    // Nonces should increase across updates
+    for (let i = 1; i < progressUpdates.length; i++) {
+      expect(progressUpdates[i].nonce).toBeGreaterThan(progressUpdates[i - 1].nonce)
+    }
+  })
+
+  it('does not call onProgress after abort', async () => {
+    const chain = new Blockchain()
+    const hardTarget = '0000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+
+    const tip = chain.getChainTip()
+    const height = chain.getHeight() + 1
+    const coinbase = createCoinbaseTransaction(walletA.address, height, 0)
+    const merkleRoot = computeMerkleRoot([coinbase.id])
+
+    const block: Block = {
+      header: {
+        version: 1,
+        previousHash: tip.hash,
+        merkleRoot,
+        timestamp: Date.now(),
+        target: hardTarget,
+        nonce: 0,
+      },
+      hash: '',
+      transactions: [coinbase],
+      height,
+    }
+
+    let callsAfterAbort = 0
+    let aborted = false
+    const abort = new AbortController()
+
+    const promise = mineBlockAsync(block, abort.signal, () => {
+      if (aborted) callsAfterAbort++
+    })
+
+    // Let it mine for a bit, then abort
+    setTimeout(() => { aborted = true; abort.abort() }, 200)
+    const result = await promise
+
+    expect(result).toBeNull()
+    // After abort, no more progress callbacks should fire
+    await new Promise(r => setTimeout(r, 100))
+    expect(callsAfterAbort).toBe(0)
   })
 
   it('returns null when aborted', async () => {

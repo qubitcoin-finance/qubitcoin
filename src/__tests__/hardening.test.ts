@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { Node } from '../node.js'
+import { Blockchain } from '../chain.js'
 import { P2PServer } from '../p2p/server.js'
 import { Peer } from '../p2p/peer.js'
 import { FileBlockStorage } from '../storage.js'
@@ -993,5 +994,203 @@ describe('Orphan block PoW validation', () => {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true })
     }
+  })
+})
+
+describe('Node receiveBlock', () => {
+  const TEST_TARGET = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+
+  it('aborts in-progress mining when a valid block arrives', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-abort-'))
+    try {
+      const storage = new FileBlockStorage(tmpDir)
+      const node = new Node('miner', undefined, storage)
+      // Use extremely hard target so miner cannot find a block during the test
+      node.chain.difficulty = '0000000000000fffffffffffffffffffffffffffffffffffffffffffffffffff'
+
+      let aborted = false
+      const miningPromise = node.startMining(walletA.address)
+
+      // Wait for mining to start
+      await waitFor(() => node.miningStats !== null, 10_000)
+
+      // Mine a block externally and feed it via receiveBlock
+      const { assembleCandidateBlock, mineBlock } = await import('../miner.js')
+      node.chain.difficulty = TEST_TARGET
+      const candidate = assembleCandidateBlock(node.chain, node.mempool, walletB.address)
+      const externalBlock = mineBlock(candidate, false)
+
+      const result = node.receiveBlock(externalBlock)
+      expect(result.success).toBe(true)
+
+      // Mining should restart (miningStats resets for new round)
+      // Give it a moment to restart
+      await new Promise(r => setTimeout(r, 200))
+
+      node.stopMining()
+      await Promise.race([
+        miningPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5_000))
+      ])
+
+      // Block from external miner should be in the chain
+      expect(node.chain.getHeight()).toBeGreaterThanOrEqual(1)
+      expect(node.chain.blocks[1].hash).toBe(externalBlock.hash)
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('does not abort mining when receiveBlock fails', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-noabort-'))
+    try {
+      const storage = new FileBlockStorage(tmpDir)
+      const node = new Node('miner', undefined, storage)
+      node.chain.difficulty = '00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+
+      const miningPromise = node.startMining(walletA.address)
+      await waitFor(() => node.miningStats !== null, 10_000)
+
+      // Send an invalid block (wrong target)
+      const invalidBlock = {
+        header: {
+          version: 1,
+          previousHash: node.chain.blocks[0].hash,
+          merkleRoot: 'a'.repeat(64),
+          timestamp: Date.now(),
+          target: 'f'.repeat(64),
+          nonce: 0,
+        },
+        hash: 'b'.repeat(64),
+        transactions: [],
+        height: 1,
+      }
+
+      const result = node.receiveBlock(invalidBlock as any)
+      expect(result.success).toBe(false)
+
+      // Mining should still be running (miningStats not null)
+      expect(node.miningStats).not.toBeNull()
+
+      node.stopMining()
+      await Promise.race([
+        miningPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5_000))
+      ])
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('validateBlock edge cases', () => {
+  const TEST_TARGET = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+
+  it('rejects claim tx with zero amount', () => {
+    // Blockchain imported at top of file
+    const { snapshot } = createMockSnapshot()
+    const chain = new Blockchain(snapshot)
+    chain.difficulty = TEST_TARGET
+
+    const tip = chain.getChainTip()
+    const height = chain.getHeight() + 1
+    const coinbase = createCoinbaseTransaction(walletA.address, height, 0)
+
+    // Claim tx with amount = 0
+    const zeroClaim = {
+      id: doubleSha256Hex(new TextEncoder().encode('zero-claim')),
+      inputs: [{ txId: CLAIM_TXID, outputIndex: 0, publicKey: new Uint8Array(0), signature: new Uint8Array(0) }],
+      outputs: [{ address: walletA.address, amount: 0 }],
+      timestamp: Date.now(),
+      claimData: {
+        btcAddress: snapshot.entries[0].btcAddress,
+        ecdsaPublicKey: new Uint8Array(33),
+        ecdsaSignature: new Uint8Array(64),
+        qbtcAddress: walletA.address,
+      },
+    }
+
+    const txs = [coinbase, zeroClaim]
+    const merkleRoot = computeMerkleRoot(txs.map(t => t.id))
+
+    const header: BlockHeader = {
+      version: 1,
+      previousHash: tip.hash,
+      merkleRoot,
+      timestamp: tip.header.timestamp + 1,
+      target: TEST_TARGET,
+      nonce: 0,
+    }
+
+    let hash = computeBlockHash(header)
+    while (!hashMeetsTarget(hash, header.target)) {
+      header.nonce++
+      hash = computeBlockHash(header)
+    }
+
+    const result = validateBlock(
+      { header, hash, transactions: txs, height },
+      tip,
+      chain.utxoSet,
+      chain.blocks
+    )
+    expect(result.valid).toBe(false)
+  })
+
+  it('rejects claim tx with multiple outputs', () => {
+    // Blockchain imported at top of file
+    const { snapshot } = createMockSnapshot()
+    const chain = new Blockchain(snapshot)
+    chain.difficulty = TEST_TARGET
+
+    const tip = chain.getChainTip()
+    const height = chain.getHeight() + 1
+    const coinbase = createCoinbaseTransaction(walletA.address, height, 0)
+
+    const multiOutputClaim = {
+      id: doubleSha256Hex(new TextEncoder().encode('multi-out-claim')),
+      inputs: [{ txId: CLAIM_TXID, outputIndex: 0, publicKey: new Uint8Array(0), signature: new Uint8Array(0) }],
+      outputs: [
+        { address: walletA.address, amount: 50_000_000 },
+        { address: walletB.address, amount: 50_000_000 },
+      ],
+      timestamp: Date.now(),
+      claimData: {
+        btcAddress: snapshot.entries[0].btcAddress,
+        ecdsaPublicKey: new Uint8Array(33),
+        ecdsaSignature: new Uint8Array(64),
+        qbtcAddress: walletA.address,
+      },
+    }
+
+    const txs = [coinbase, multiOutputClaim]
+    const merkleRoot = computeMerkleRoot(txs.map(t => t.id))
+
+    const header: BlockHeader = {
+      version: 1,
+      previousHash: tip.hash,
+      merkleRoot,
+      timestamp: tip.header.timestamp + 1,
+      target: TEST_TARGET,
+      nonce: 0,
+    }
+
+    let hash = computeBlockHash(header)
+    while (!hashMeetsTarget(hash, header.target)) {
+      header.nonce++
+      hash = computeBlockHash(header)
+    }
+
+    const result = validateBlock(
+      { header, hash, transactions: txs, height },
+      tip,
+      chain.utxoSet,
+      chain.blocks
+    )
+    expect(result.valid).toBe(false)
+  })
+
+  it('blockWork returns 0n for zero target', () => {
+    expect(blockWork('0'.repeat(64))).toBe(0n)
   })
 })

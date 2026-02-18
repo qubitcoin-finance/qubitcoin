@@ -488,6 +488,96 @@ describe('Mempool claims', () => {
     expect((mempool as any).pendingBtcClaims.has(snapshot.entries[1].btcAddress)).toBe(true)
   })
 
+  it('clear() resets all tracking state', () => {
+    const mempool = new Mempool()
+    const { snapshot, holders } = createMockSnapshot()
+
+    const claimTx = createClaimTransaction(
+      holders[0].secretKey,
+      holders[0].publicKey,
+      snapshot.entries[0],
+      walletB,
+      snapshot.btcBlockHash
+    )
+    mempool.addTransaction(claimTx, new Map())
+
+    const utxoSet = makeUtxoSet(walletA)
+    const tx = createTransaction(
+      walletA,
+      [{ txId: 'a'.repeat(64), outputIndex: 0, address: walletA.address, amount: DEFAULT_AMOUNT }],
+      [{ address: 'b'.repeat(64), amount: 5_000_000_000 }],
+      DEFAULT_FEE
+    )
+    mempool.addTransaction(tx, utxoSet)
+    expect(mempool.size()).toBe(2)
+
+    mempool.clear()
+    expect(mempool.size()).toBe(0)
+    expect(mempool.sizeBytes()).toBe(0)
+
+    // Should be able to re-add the same claim after clear
+    const claimTx2 = createClaimTransaction(
+      holders[0].secretKey,
+      holders[0].publicKey,
+      snapshot.entries[0],
+      walletB,
+      snapshot.btcBlockHash
+    )
+    const result = mempool.addTransaction(claimTx2, new Map())
+    expect(result.success).toBe(true)
+  })
+
+  it('sizeBytes() tracks bytes correctly across add/remove', () => {
+    const mempool = new Mempool()
+    expect(mempool.sizeBytes()).toBe(0)
+
+    const utxoSet = makeUtxoSet(walletA)
+    const tx = createTransaction(
+      walletA,
+      [{ txId: 'a'.repeat(64), outputIndex: 0, address: walletA.address, amount: DEFAULT_AMOUNT }],
+      [{ address: 'b'.repeat(64), amount: 5_000_000_000 }],
+      DEFAULT_FEE
+    )
+    mempool.addTransaction(tx, utxoSet)
+    const sizeAfterAdd = mempool.sizeBytes()
+    expect(sizeAfterAdd).toBeGreaterThan(0)
+
+    mempool.removeTransactions([tx.id])
+    expect(mempool.sizeBytes()).toBe(0)
+  })
+
+  it('getTransactionsForBlock sorts claims before regular txs', () => {
+    const mempool = new Mempool()
+    const utxoSet = makeUtxoSet(walletA)
+
+    // Add a regular tx first
+    const tx = createTransaction(
+      walletA,
+      [{ txId: 'a'.repeat(64), outputIndex: 0, address: walletA.address, amount: DEFAULT_AMOUNT }],
+      [{ address: 'b'.repeat(64), amount: 5_000_000_000 }],
+      DEFAULT_FEE
+    )
+    mempool.addTransaction(tx, utxoSet)
+
+    // Add a claim tx
+    const { snapshot, holders } = createMockSnapshot()
+    const claimTx = createClaimTransaction(
+      holders[0].secretKey,
+      holders[0].publicKey,
+      snapshot.entries[0],
+      walletC,
+      snapshot.btcBlockHash
+    )
+    mempool.addTransaction(claimTx, new Map())
+
+    const forBlock = mempool.getTransactionsForBlock(utxoSet)
+    expect(forBlock.length).toBe(2)
+
+    // Claims should come first
+    const firstIsClaim = forBlock[0].claimData !== undefined
+    expect(firstIsClaim).toBe(true)
+  })
+
   it('allows claims again after removeTransactions frees slots', () => {
     const mempool = new Mempool()
 

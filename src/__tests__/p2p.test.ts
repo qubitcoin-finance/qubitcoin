@@ -535,6 +535,80 @@ describe('P2P improvements', () => {
     }
   })
 
+  it('miningStats is null before mining starts', () => {
+    const storage = new FileBlockStorage(tmpDir1)
+    const node = new Node('alice', undefined, storage)
+    expect(node.miningStats).toBeNull()
+  })
+
+  it('miningStats is populated during mining and null after stop', async () => {
+    const storage = new FileBlockStorage(tmpDir1)
+    const node = new Node('alice', undefined, storage)
+    // Use a harder target so mining doesn't finish instantly
+    node.chain.difficulty = '00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+
+    const miningPromise = node.startMining(walletA.address)
+
+    // Wait for miningStats to be populated
+    await waitFor(() => node.miningStats !== null, 10_000)
+    expect(node.miningStats).not.toBeNull()
+    expect(node.miningStats!.blockHeight).toBe(node.chain.getHeight() + 1)
+    expect(node.miningStats!.startedAt).toBeGreaterThan(0)
+
+    node.stopMining()
+    await Promise.race([
+      miningPromise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5_000))
+    ])
+
+    expect(node.miningStats).toBeNull()
+  })
+
+  it('miningStats resets to null after block is mined', async () => {
+    const storage = new FileBlockStorage(tmpDir1)
+    const node = new Node('alice', undefined, storage)
+    node.chain.difficulty = TEST_TARGET
+
+    const miningPromise = node.startMining(walletA.address)
+
+    // Wait for a block to be mined
+    await waitFor(() => node.chain.getHeight() >= 1, 10_000)
+
+    // After a block is found, miningStats should briefly be null before the next round starts
+    // Stop mining to observe the final state
+    node.stopMining()
+    await Promise.race([
+      miningPromise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5_000))
+    ])
+
+    expect(node.miningStats).toBeNull()
+  })
+
+  it('miningStats appears in getState()', async () => {
+    const storage = new FileBlockStorage(tmpDir1)
+    const node = new Node('alice', undefined, storage)
+    node.chain.difficulty = '00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+
+    const miningPromise = node.startMining(walletA.address)
+
+    await waitFor(() => node.miningStats !== null, 10_000)
+
+    const state = node.getState()
+    expect(state.miningStats).not.toBeNull()
+    expect(state.miningStats!.hashrate).toBeGreaterThanOrEqual(0)
+    expect(state.miningStats!.nonce).toBeGreaterThanOrEqual(0)
+
+    node.stopMining()
+    await Promise.race([
+      miningPromise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5_000))
+    ])
+
+    const stateAfter = node.getState()
+    expect(stateAfter.miningStats).toBeNull()
+  })
+
   it('stopMining should stop the mining loop', async () => {
     const storage1 = new FileBlockStorage(tmpDir1)
     const node1 = new Node('alice', undefined, storage1)
@@ -808,6 +882,54 @@ describe('P2P security hardening', () => {
 
       // Second send should NOT add more misbehavior (block was cached as rejected)
       expect(scoreAfterSecond).toBe(scoreAfterFirst)
+    } finally {
+      await p2p1.stop()
+      await p2p2.stop()
+    }
+  })
+
+  it('should add misbehavior for protocol version mismatch', async () => {
+    const storage1 = new FileBlockStorage(tmpDir1)
+    const storage2 = new FileBlockStorage(tmpDir2)
+    const node1 = new Node('alice', undefined, storage1)
+    const node2 = new Node('bob', undefined, storage2)
+    node1.chain.difficulty = TEST_TARGET
+    node2.chain.difficulty = TEST_TARGET
+
+    const p2p1 = new P2PServer(node1, 0, tmpDir1)
+    const p2p2 = new P2PServer(node2, 0, tmpDir2)
+    await p2p1.start()
+    await p2p2.start()
+
+    try {
+      const addr = (p2p1 as any).server.address()
+      const port = typeof addr === 'object' ? addr.port : 0
+
+      // Send a version message with wrong protocol version via raw socket
+      const socket = net.createConnection({ host: '127.0.0.1', port })
+      await new Promise<void>((resolve) => socket.once('connect', resolve))
+
+      const versionMsg = encodeMessage({
+        type: 'version',
+        payload: {
+          version: 999,
+          height: 0,
+          genesisHash: node1.chain.blocks[0].hash,
+          userAgent: 'bad-node',
+        },
+      })
+      socket.write(versionMsg)
+
+      // Wait for disconnect
+      await new Promise<void>((resolve) => {
+        socket.on('close', resolve)
+        setTimeout(resolve, 2_000)
+      })
+      socket.destroy()
+
+      // The peer should have been disconnected — no peers remaining
+      await new Promise(r => setTimeout(r, 100))
+      expect(p2p1.getPeers().length).toBe(0)
     } finally {
       await p2p1.stop()
       await p2p2.stop()
