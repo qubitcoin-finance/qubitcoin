@@ -133,7 +133,7 @@ describe('validateBlock', () => {
     const claimTx: Transaction = {
       id: doubleSha256Hex(new TextEncoder().encode('claim-frac')),
       inputs: [{ txId: CLAIM_TXID, outputIndex: 0, publicKey: new Uint8Array(0), signature: new Uint8Array(0) }],
-      outputs: [{ address: 'a'.repeat(64), amount: 1.5 }],
+      outputs: [{ address: 'a'.repeat(64), amount: 1000.5 }],
       timestamp: Date.now(),
       claimData: {
         btcAddress: 'b'.repeat(40),
@@ -205,7 +205,7 @@ describe('validateBlock', () => {
     const claimTx: Transaction = {
       id: doubleSha256Hex(new TextEncoder().encode('claim-test')),
       inputs: [{ txId: CLAIM_TXID, outputIndex: 0, publicKey: new Uint8Array(0), signature: new Uint8Array(0) }],
-      outputs: [{ address: 'a'.repeat(64), amount: 100 }],
+      outputs: [{ address: 'a'.repeat(64), amount: 10_000 }],
       timestamp: Date.now(),
       claimData: {
         btcAddress: 'b'.repeat(40),

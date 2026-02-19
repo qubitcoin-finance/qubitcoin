@@ -23,6 +23,7 @@ import {
   calculateFee,
   validateTransaction,
   utxoKey,
+  DUST_THRESHOLD,
 } from './transaction.js'
 import { type BtcSnapshot } from './snapshot.js'
 
@@ -401,8 +402,8 @@ export function validateBlock(
       if (tx.outputs.length !== 1) {
         return { valid: false, error: `Transaction ${i}: claim tx must have exactly 1 output` }
       }
-      if (tx.outputs[0].amount <= 0) {
-        return { valid: false, error: `Transaction ${i}: claim tx must have positive amount` }
+      if (tx.outputs[0].amount < DUST_THRESHOLD) {
+        return { valid: false, error: `Transaction ${i}: claim tx output below dust threshold` }
       }
       if (!Number.isInteger(tx.outputs[0].amount)) {
         return { valid: false, error: `Transaction ${i}: claim tx must have integer amount` }

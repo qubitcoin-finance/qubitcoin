@@ -64,6 +64,12 @@ export const COINBASE_MATURITY = 100
 /** Claim outputs cannot be spent until this many blocks have been mined on top */
 export const CLAIM_MATURITY = 10
 
+/** Minimum output amount in satoshis (matches Bitcoin's dust threshold) */
+export const DUST_THRESHOLD = 546
+
+/** Maximum total money supply in satoshis (21M QBTC, same as Bitcoin) */
+export const MAX_MONEY = 2_100_000_000_000_000
+
 export const COINBASE_TXID = '0'.repeat(64)
 export const CLAIM_TXID = 'c'.repeat(64) // sentinel for BTC claim transactions
 export const HALVING_INTERVAL = 210_000
@@ -255,13 +261,19 @@ export function validateTransaction(
     return { valid: false, error: 'Transaction has no outputs' }
   }
 
-  // Check all outputs are positive integers (reject fractional amounts from old/rogue peers)
+  // Check all outputs are positive integers within valid range
   for (let i = 0; i < tx.outputs.length; i++) {
     if (tx.outputs[i].amount <= 0) {
       return { valid: false, error: `Output ${i} has non-positive amount` }
     }
     if (!Number.isInteger(tx.outputs[i].amount)) {
       return { valid: false, error: `Output ${i} has non-integer amount` }
+    }
+    if (tx.outputs[i].amount < DUST_THRESHOLD) {
+      return { valid: false, error: `Output ${i} amount ${tx.outputs[i].amount} below dust threshold (${DUST_THRESHOLD})` }
+    }
+    if (tx.outputs[i].amount > MAX_MONEY) {
+      return { valid: false, error: `Output ${i} amount exceeds maximum` }
     }
   }
 
@@ -322,8 +334,15 @@ export function validateTransaction(
     totalIn += utxo.amount
   }
 
+  if (totalIn > MAX_MONEY) {
+    return { valid: false, error: `Total input amount ${totalIn} exceeds maximum` }
+  }
+
   // Check amounts
   const totalOut = tx.outputs.reduce((sum, o) => sum + o.amount, 0)
+  if (totalOut > MAX_MONEY) {
+    return { valid: false, error: `Total output amount ${totalOut} exceeds maximum` }
+  }
   if (totalIn < totalOut) {
     return {
       valid: false,

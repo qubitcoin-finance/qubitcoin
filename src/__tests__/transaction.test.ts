@@ -61,41 +61,41 @@ describe('createTransaction', () => {
   it('creates a properly signed transaction', () => {
     const wallet = walletA
     const utxos: UTXO[] = [
-      { txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: 100 },
+      { txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: 10_000 },
     ]
     const tx = createTransaction(
       wallet,
       utxos,
-      [{ address: 'b'.repeat(64), amount: 30 }],
+      [{ address: 'b'.repeat(64), amount: 3000 }],
       1
     )
 
     expect(tx.inputs.length).toBe(1)
     expect(tx.outputs.length).toBe(2) // recipient + change
-    expect(tx.outputs[0].amount).toBe(30)
-    expect(tx.outputs[1].amount).toBe(69) // 100 - 30 - 1 fee
+    expect(tx.outputs[0].amount).toBe(3000)
+    expect(tx.outputs[1].amount).toBe(6999) // 10000 - 3000 - 1 fee
     expect(tx.id.length).toBe(64)
   })
 
   it('throws on insufficient funds', () => {
     const wallet = walletA
     const utxos: UTXO[] = [
-      { txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: 10 },
+      { txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: 1000 },
     ]
     expect(() =>
-      createTransaction(wallet, utxos, [{ address: 'b'.repeat(64), amount: 100 }], 1)
+      createTransaction(wallet, utxos, [{ address: 'b'.repeat(64), amount: 10_000 }], 1)
     ).toThrow('Insufficient funds')
   })
 
   it('omits change output when exact amount', () => {
     const wallet = walletA
     const utxos: UTXO[] = [
-      { txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: 51 },
+      { txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: 5001 },
     ]
     const tx = createTransaction(
       wallet,
       utxos,
-      [{ address: 'b'.repeat(64), amount: 50 }],
+      [{ address: 'b'.repeat(64), amount: 5000 }],
       1
     )
     expect(tx.outputs.length).toBe(1)
@@ -111,13 +111,13 @@ describe('validateTransaction', () => {
       txId: utxoId,
       outputIndex: 0,
       address: wallet.address,
-      amount: 100,
+      amount: 10_000,
     })
 
     const tx = createTransaction(
       wallet,
-      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 100 }],
-      [{ address: 'b'.repeat(64), amount: 50 }],
+      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 10_000 }],
+      [{ address: 'b'.repeat(64), amount: 5000 }],
       1
     )
 
@@ -129,8 +129,8 @@ describe('validateTransaction', () => {
     const wallet = walletA
     const tx = createTransaction(
       wallet,
-      [{ txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: 100 }],
-      [{ address: 'b'.repeat(64), amount: 50 }],
+      [{ txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: 10_000 }],
+      [{ address: 'b'.repeat(64), amount: 5000 }],
       1
     )
 
@@ -150,14 +150,14 @@ describe('validateTransaction', () => {
       txId: utxoId,
       outputIndex: 0,
       address: wallet2.address,
-      amount: 100,
+      amount: 10_000,
     })
 
     // Signed by wallet1
     const tx = createTransaction(
       wallet1,
-      [{ txId: utxoId, outputIndex: 0, address: wallet1.address, amount: 100 }],
-      [{ address: 'b'.repeat(64), amount: 50 }],
+      [{ txId: utxoId, outputIndex: 0, address: wallet1.address, amount: 10_000 }],
+      [{ address: 'b'.repeat(64), amount: 5000 }],
       1
     )
 
@@ -174,13 +174,13 @@ describe('validateTransaction', () => {
       txId: utxoId,
       outputIndex: 0,
       address: wallet.address,
-      amount: 100,
+      amount: 10_000,
     })
 
     const tx = createTransaction(
       wallet,
-      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 100 }],
-      [{ address: 'b'.repeat(64), amount: 50 }],
+      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 10_000 }],
+      [{ address: 'b'.repeat(64), amount: 5000 }],
       1
     )
 
@@ -202,7 +202,7 @@ describe('validateTransaction', () => {
     const claimTx: Transaction = {
       id: 'x'.repeat(64),
       inputs: [{ txId: CLAIM_TXID, outputIndex: 0, publicKey: new Uint8Array(0), signature: new Uint8Array(0) }],
-      outputs: [{ address: 'a'.repeat(64), amount: 100 }],
+      outputs: [{ address: 'a'.repeat(64), amount: 10_000 }],
       timestamp: Date.now(),
       claimData: {
         btcAddress: 'b'.repeat(40),
@@ -260,7 +260,7 @@ describe('calculateFee', () => {
     const tx: Transaction = {
       id: 'x'.repeat(64),
       inputs: [],
-      outputs: [{ address: 'a'.repeat(64), amount: 100 }],
+      outputs: [{ address: 'a'.repeat(64), amount: 10_000 }],
       timestamp: 0,
       claimData: {
         btcAddress: 'a'.repeat(40),
@@ -303,13 +303,13 @@ describe('validateTransaction additional edge cases', () => {
       txId: utxoId,
       outputIndex: 0,
       address: wallet.address,
-      amount: 100,
+      amount: 10_000,
     })
 
     const tx = createTransaction(
       wallet,
-      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 100 }],
-      [{ address: 'b'.repeat(64), amount: 50 }],
+      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 10_000 }],
+      [{ address: 'b'.repeat(64), amount: 5000 }],
       1
     )
     tx.outputs[0].amount = 0
@@ -327,13 +327,13 @@ describe('validateTransaction additional edge cases', () => {
       txId: utxoId,
       outputIndex: 0,
       address: wallet.address,
-      amount: 100,
+      amount: 10_000,
     })
 
     const tx = createTransaction(
       wallet,
-      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 100 }],
-      [{ address: 'b'.repeat(64), amount: 50 }],
+      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 10_000 }],
+      [{ address: 'b'.repeat(64), amount: 5000 }],
       1
     )
     tx.outputs[0].amount = -10
@@ -351,13 +351,13 @@ describe('validateTransaction additional edge cases', () => {
       txId: utxoId,
       outputIndex: 0,
       address: wallet.address,
-      amount: 100,
+      amount: 10_000,
     })
 
     const tx = createTransaction(
       wallet,
-      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 100 }],
-      [{ address: 'b'.repeat(64), amount: 50 }],
+      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 10_000 }],
+      [{ address: 'b'.repeat(64), amount: 5000 }],
       1
     )
     // Duplicate the first input
@@ -376,13 +376,13 @@ describe('validateTransaction additional edge cases', () => {
       txId: utxoId,
       outputIndex: 0,
       address: wallet.address,
-      amount: 100,
+      amount: 10_000,
     })
 
     const tx = createTransaction(
       wallet,
-      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 100 }],
-      [{ address: 'b'.repeat(64), amount: 50 }],
+      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 10_000 }],
+      [{ address: 'b'.repeat(64), amount: 5000 }],
       1
     )
     tx.id = 'f'.repeat(64) // tamper the ID
@@ -401,24 +401,23 @@ describe('validateTransaction additional edge cases', () => {
       txId: utxoId,
       outputIndex: 0,
       address: wallet.address,
-      amount: 10, // tiny amount
+      amount: 10_000,
     })
 
-    // Create tx that tries to send 50 from a 10-sat UTXO
+    // Create tx spending from the UTXO
     const tx = createTransaction(
       wallet,
-      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 10 }],
-      [{ address: 'b'.repeat(64), amount: 9 }],
+      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 10_000 }],
+      [{ address: 'b'.repeat(64), amount: 9000 }],
       1
     )
 
     // Lie about the UTXO amount to make output > input
-    // The tx was signed expecting 10 sat input, but we set UTXO to 5
     utxoSet.set(utxoKey(utxoId, 0), {
       txId: utxoId,
       outputIndex: 0,
       address: wallet.address,
-      amount: 5, // less than output (9)
+      amount: 5000, // less than output (9000)
     })
 
     const result = validateTransaction(tx, utxoSet)

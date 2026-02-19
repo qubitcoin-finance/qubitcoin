@@ -107,7 +107,7 @@ describe('Mempool', () => {
       const tx = createTransaction(
         wallet,
         [{ txId, outputIndex: 0, address: wallet.address, amount: DEFAULT_AMOUNT }],
-        [{ address: 'b'.repeat(64), amount: 50 }],
+        [{ address: 'b'.repeat(64), amount: 5000 }],
         DEFAULT_FEE
       )
       mempool.addTransaction(tx, utxoSet)
