@@ -170,6 +170,16 @@ Tech Stack
 - **Vite + TailwindCSS v4** — Block explorer frontend
 - **vitest** — Test framework
 
+Supporting Development
+---------------------
+
+QBTC token on Base is available for those who want to support QubitCoin development:
+
+- **Token:** QUBITCOIN ($QBTC) on Base
+- **Contract:** [`0xF070ABD59F60561E6468B9762F617e175a88bB07`](https://clanker.world/clanker/0xF070ABD59F60561E6468B9762F617e175a88bB07)
+- **Telegram:** [@qubitcoin_finance](https://t.me/qubitcoin_finance)
+- **X:** [@qubitcoin_](https://x.com/qubitcoin_)
+
 BTC Snapshot Pipeline
 ---------------------
 
