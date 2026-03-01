@@ -86,9 +86,12 @@ The `--full` flag automatically downloads the 3.6 GB BTC snapshot from `qubitcoi
 --p2p-port <n>          P2P port (default 6001)
 --snapshot <path>       Path to BTC snapshot NDJSON file
 --datadir <path>        Data directory (default data/node)
---seeds <host:port,...> Comma-separated seed peers (default qubitcoin.finance:6001)
---mine                  Enable mining
+--seeds <host:port,...> Comma-separated seed peers (default: qubitcoin.finance:6001 with --full)
+--mine                  Enable mining (connects to network by default)
 --full                  Auto-download snapshot if missing, then start as full node
+--local                 Run without default seed (isolated local chain)
+--message <text>        Coinbase message included in every mined block
+--rpc-bind <addr>       RPC bind address (default 127.0.0.1)
 --simulate              Dev mode: easy difficulty, fake transactions
 ```
 
