@@ -79,3 +79,5 @@ md/
 
 # Ansible local inventory
 ansible/inventory.local.yml
+
+tmp/
