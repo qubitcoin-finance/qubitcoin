@@ -347,7 +347,7 @@ function renderLoading(): void {
 
   root.innerHTML = `
     <div class="${pulse} h-9 w-48 mb-6 rounded"></div>
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mb-6">
       ${skeletonCard}${skeletonCard}${skeletonCard}${skeletonCard}
     </div>
     <div class="flex items-center gap-2 overflow-hidden py-4 mb-6">
@@ -399,7 +399,7 @@ async function renderDashboard(): Promise<void> {
     cards.push(card('BTC Fork Block', claimStats.btcBlockHeight.toLocaleString()));
     cards.push(card('Claimed BTC', formatQBTC(claimStats.claimedAmount) + ' QBTC'));
   }
-  html += `<div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">${cards.join('')}</div>`;
+  html += `<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 mb-6">${cards.join('')}</div>`;
 
   // Block visualization strip
   if (blocks && blocks.length > 0) {
@@ -413,11 +413,11 @@ async function renderDashboard(): Promise<void> {
   html += `<div class="bg-surface rounded-lg glow-border p-5">
     <h2 class="text-lg font-semibold mb-4">Recent Blocks</h2>`;
   if (blocks && blocks.length > 0) {
-    html += `<table class="w-full text-sm">
+    html += `<div class="overflow-x-auto"><table class="w-full text-sm">
       <thead><tr class="text-xs text-text-muted border-b border-border">
         <th class="text-left font-normal pb-2">Hash</th>
         <th class="text-right font-normal pb-2">Txs</th>
-        <th class="text-left font-normal pb-2 pl-4">Miner</th>
+        <th class="text-left font-normal pb-2 pl-4 hidden lg:table-cell">Miner</th>
         <th class="text-right font-normal pb-2">Age</th>
       </tr></thead><tbody>`;
     for (const b of blocks) {
@@ -426,11 +426,11 @@ async function renderDashboard(): Promise<void> {
       html += `<tr class="border-b border-border last:border-0">
         <td class="py-2">${hashLink(b.hash, 'block')}</td>
         <td class="py-2 text-right text-text-muted">${txCount}</td>
-        <td class="py-2 pl-4 font-mono text-xs">${miner ? hashLink(miner, 'address', truncHash(miner)) : ''}</td>
-        <td class="py-2 text-right text-text-muted text-xs">${timeAgo(b.header.timestamp)}</td>
+        <td class="py-2 pl-4 font-mono text-xs hidden lg:table-cell">${miner ? hashLink(miner, 'address', truncHash(miner)) : ''}</td>
+        <td class="py-2 text-right text-text-muted text-xs whitespace-nowrap">${timeAgo(b.header.timestamp)}</td>
       </tr>`;
     }
-    html += `</tbody></table>`;
+    html += `</tbody></table></div>`;
   } else {
     html += `<p class="text-text-muted text-sm">No blocks yet.</p>`;
   }
@@ -444,12 +444,12 @@ async function renderDashboard(): Promise<void> {
     html += `<div class="space-y-3">`;
     for (const tx of mempoolTxs) {
       const amount = transferAmount(tx, tx.sender);
-      html += `<div class="flex items-center justify-between py-2 border-b border-border last:border-0">
-        <div class="flex items-center gap-2">
+      html += `<div class="flex items-center justify-between gap-3 py-2 border-b border-border last:border-0">
+        <div class="flex items-center gap-2 min-w-0">
           ${txTypeBadge(tx)}
-          ${hashLink(tx.id, 'tx')}
+          <span class="truncate">${hashLink(tx.id, 'tx')}</span>
         </div>
-        <span class="text-text-muted text-xs font-mono">${formatQBTC(amount)} QBTC</span>
+        <span class="text-text-muted text-xs font-mono whitespace-nowrap">${formatQBTC(amount)} QBTC</span>
       </div>`;
     }
     html += `</div>`;
@@ -1958,22 +1958,63 @@ function renderDocs(section?: string): void {
     return html;
   }).join('');
 
+  // Note: all content here is static/hardcoded (doc sections, icons, section titles).
+  // No user-supplied data is interpolated into the HTML — XSS risk is not applicable.
+  const sidebarContent = `
+    <a href="#/docs" class="flex items-center gap-2 text-xs text-text-muted hover:text-qubit-400 font-mono tracking-widest mb-4 pb-3 border-b border-border transition-colors">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+      DOCS
+    </a>
+    <div class="space-y-0.5 -ml-1">
+      ${sidebar}
+    </div>`;
+
   root.innerHTML = `<div class="flex gap-8 items-start">
+    <!-- Mobile docs menu button -->
+    <button id="docs-mobile-btn" class="md:hidden fixed bottom-6 right-6 z-40 w-12 h-12 rounded-full bg-qubit-600 text-white shadow-lg shadow-qubit-600/30 flex items-center justify-center hover:bg-qubit-500 transition-colors" aria-label="Docs navigation">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+    </button>
+    <!-- Mobile docs drawer overlay -->
+    <div id="docs-mobile-overlay" class="hidden md:hidden fixed inset-0 z-40 bg-black/60" aria-hidden="true"></div>
+    <!-- Mobile docs drawer -->
+    <div id="docs-mobile-drawer" class="hidden md:hidden fixed inset-y-0 left-0 z-50 w-72 bg-bg border-r border-border overflow-y-auto p-5">
+      <div class="flex items-center justify-between mb-4">
+        <span class="text-xs text-text-muted font-mono tracking-widest">DOCS</span>
+        <button id="docs-mobile-close" class="p-1 text-text-muted hover:text-text-primary transition-colors" aria-label="Close">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="space-y-0.5 -ml-1">
+        ${sidebar}
+      </div>
+    </div>
+    <!-- Desktop sidebar -->
     <nav class="w-72 shrink-0 hidden md:block sticky top-20">
       <div class="bg-surface rounded-xl glow-border p-5">
-        <a href="#/docs" class="flex items-center gap-2 text-xs text-text-muted hover:text-qubit-400 font-mono tracking-widest mb-4 pb-3 border-b border-border transition-colors">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
-          DOCS
-        </a>
-        <div class="space-y-0.5 -ml-1">
-          ${sidebar}
-        </div>
+        ${sidebarContent}
       </div>
     </nav>
     <div class="flex-1 min-w-0 max-w-4xl">
       ${sectionData.render()}
     </div>
   </div>`;
+
+  // Wire up mobile docs drawer
+  const mobileBtn = document.getElementById('docs-mobile-btn');
+  const mobileOverlay = document.getElementById('docs-mobile-overlay');
+  const mobileDrawer = document.getElementById('docs-mobile-drawer');
+  const mobileClose = document.getElementById('docs-mobile-close');
+  const toggleDrawer = () => {
+    mobileDrawer?.classList.toggle('hidden');
+    mobileOverlay?.classList.toggle('hidden');
+  };
+  mobileBtn?.addEventListener('click', toggleDrawer);
+  mobileOverlay?.addEventListener('click', toggleDrawer);
+  mobileClose?.addEventListener('click', toggleDrawer);
+  mobileDrawer?.querySelectorAll('a').forEach(a => a.addEventListener('click', () => {
+    mobileDrawer?.classList.add('hidden');
+    mobileOverlay?.classList.add('hidden');
+  }));
 }
 
 // --- Search ----------------------------------------------------------------

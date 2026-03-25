@@ -1,0 +1,170 @@
+{
+  "status": {
+    "name": "qbtc-node",
+    "height": 1842,
+    "mempoolSize": 3,
+    "utxoCount": 58042317,
+    "difficulty": "000003ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "lastBlockTime": 1711300000000,
+    "targetBlockTime": 60000,
+    "peers": 4,
+    "avgBlockTime": 58200,
+    "blockReward": 5000000000,
+    "totalTxs": 5219,
+    "hashrate": 142857
+  },
+  "blocks": [
+    {
+      "hash": "000002a1b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef12345",
+      "height": 1842,
+      "header": {
+        "version": 1,
+        "previousHash": "000001f2e3d4c5b6a7980fedcba9876543210fedcba9876543210fedcba98765",
+        "merkleRoot": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+        "timestamp": 1711300000000,
+        "target": "000003ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "nonce": 847291
+      },
+      "transactions": [
+        {
+          "id": "cb11112222333344445555666677778888999900001111222233334444555566",
+          "inputs": [{ "txId": "0000000000000000000000000000000000000000000000000000000000000000", "outputIndex": 0, "publicKey": "", "signature": "" }],
+          "outputs": [{ "address": "qbtc1miner_address_abc123def456789012345678901234567890", "amount": 5000000000 }],
+          "timestamp": 1711300000000
+        },
+        {
+          "id": "tx1111aaaa2222bbbb3333cccc4444dddd5555eeee6666ffff7777888899990000",
+          "inputs": [{ "txId": "prev1111222233334444555566667777888899990000aaaabbbbccccddddeeeeff", "outputIndex": 0, "publicKey": "pk_sender1", "signature": "sig1" }],
+          "outputs": [
+            { "address": "qbtc1receiver_addr_xyz789012345678901234567890123456789", "amount": 150000000 },
+            { "address": "qbtc1sender_change_abc456789012345678901234567890123456", "amount": 49850000000 }
+          ],
+          "timestamp": 1711299990000
+        }
+      ]
+    },
+    {
+      "hash": "000001f2e3d4c5b6a7980fedcba9876543210fedcba9876543210fedcba98765",
+      "height": 1841,
+      "header": {
+        "version": 1,
+        "previousHash": "000002b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8",
+        "merkleRoot": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+        "timestamp": 1711299940000,
+        "target": "000003ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "nonce": 193847
+      },
+      "transactions": [
+        {
+          "id": "cb22223333444455556666777788889999000011112222333344445555666677",
+          "inputs": [{ "txId": "0000000000000000000000000000000000000000000000000000000000000000", "outputIndex": 0, "publicKey": "", "signature": "" }],
+          "outputs": [{ "address": "qbtc1miner_address_abc123def456789012345678901234567890", "amount": 5000000000 }],
+          "timestamp": 1711299940000
+        }
+      ]
+    },
+    {
+      "hash": "000002b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8",
+      "height": 1840,
+      "header": {
+        "version": 1,
+        "previousHash": "000003aabbccddee11223344556677889900aabbccddee11223344556677889900",
+        "merkleRoot": "fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
+        "timestamp": 1711299880000,
+        "target": "000003ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "nonce": 582910
+      },
+      "transactions": [
+        {
+          "id": "cb33334444555566667777888899990000111122223333444455556666777788",
+          "inputs": [{ "txId": "0000000000000000000000000000000000000000000000000000000000000000", "outputIndex": 0, "publicKey": "", "signature": "" }],
+          "outputs": [{ "address": "qbtc1miner_address_abc123def456789012345678901234567890", "amount": 5000000000 }],
+          "timestamp": 1711299880000
+        }
+      ]
+    }
+  ],
+  "block": {
+    "hash": "000002a1b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef12345",
+    "height": 1842,
+    "header": {
+      "version": 1,
+      "previousHash": "000001f2e3d4c5b6a7980fedcba9876543210fedcba9876543210fedcba98765",
+      "merkleRoot": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+      "timestamp": 1711300000000,
+      "target": "000003ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "nonce": 847291
+    },
+    "transactions": [
+      {
+        "id": "cb11112222333344445555666677778888999900001111222233334444555566",
+        "inputs": [{ "txId": "0000000000000000000000000000000000000000000000000000000000000000", "outputIndex": 0, "publicKey": "", "signature": "" }],
+        "outputs": [{ "address": "qbtc1miner_address_abc123def456789012345678901234567890", "amount": 5000000000 }],
+        "timestamp": 1711300000000
+      },
+      {
+        "id": "tx1111aaaa2222bbbb3333cccc4444dddd5555eeee6666ffff7777888899990000",
+        "inputs": [{ "txId": "prev1111222233334444555566667777888899990000aaaabbbbccccddddeeeeff", "outputIndex": 0, "publicKey": "pk_sender1", "signature": "sig1" }],
+        "outputs": [
+          { "address": "qbtc1receiver_addr_xyz789012345678901234567890123456789", "amount": 150000000 },
+          { "address": "qbtc1sender_change_abc456789012345678901234567890123456", "amount": 49850000000 }
+        ],
+        "timestamp": 1711299990000
+      }
+    ]
+  },
+  "tx": {
+    "id": "tx1111aaaa2222bbbb3333cccc4444dddd5555eeee6666ffff7777888899990000",
+    "inputs": [{ "txId": "prev1111222233334444555566667777888899990000aaaabbbbccccddddeeeeff", "outputIndex": 0, "publicKey": "pk_sender1", "signature": "sig1" }],
+    "outputs": [
+      { "address": "qbtc1receiver_addr_xyz789012345678901234567890123456789", "amount": 150000000 },
+      { "address": "qbtc1sender_change_abc456789012345678901234567890123456", "amount": 49850000000 }
+    ],
+    "timestamp": 1711299990000
+  },
+  "mempoolStats": { "size": 3 },
+  "mempoolTxs": [
+    {
+      "id": "mp1111aaaa2222bbbb3333cccc4444dddd5555eeee6666ffff7777888899990000",
+      "timestamp": 1711300010000,
+      "sender": "qbtc1sender_change_abc456789012345678901234567890123456",
+      "inputs": [{ "txId": "tx1111aaaa2222bbbb3333cccc4444dddd5555eeee6666ffff7777888899990000", "outputIndex": 1 }],
+      "outputs": [
+        { "address": "qbtc1another_receiver_def012345678901234567890123456789", "amount": 25000000 },
+        { "address": "qbtc1sender_change_abc456789012345678901234567890123456", "amount": 49824000000 }
+      ]
+    },
+    {
+      "id": "mp2222bbbb3333cccc4444dddd5555eeee6666ffff7777888899990000aaaa1111",
+      "timestamp": 1711300015000,
+      "sender": null,
+      "inputs": [{ "txId": "0000000000000000000000000000000000000000000000000000000000000000", "outputIndex": 0 }],
+      "outputs": [
+        { "address": "qbtc1claimer_address_aaa111222333444555666777888999000", "amount": 500000000000 }
+      ],
+      "claimData": {
+        "btcAddress": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+        "ecdsaPublicKey": "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+        "ecdsaSignature": "3045022100abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890022012345678",
+        "qbtcAddress": "qbtc1claimer_address_aaa111222333444555666777888999000"
+      }
+    }
+  ],
+  "claimStats": {
+    "btcBlockHeight": 936708,
+    "totalEntries": 58100000,
+    "claimed": 42,
+    "unclaimed": 58099958,
+    "claimedAmount": 2100000000000,
+    "unclaimedAmount": 1997900000000000
+  },
+  "addressBalance": { "balance": 49850000000 },
+  "addressUtxos": [
+    {
+      "txId": "tx1111aaaa2222bbbb3333cccc4444dddd5555eeee6666ffff7777888899990000",
+      "outputIndex": 1,
+      "address": "qbtc1sender_change_abc456789012345678901234567890123456",
+      "amount": 49850000000
+    }
+  ]
+}

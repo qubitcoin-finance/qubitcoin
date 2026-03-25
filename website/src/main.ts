@@ -10,6 +10,30 @@ const observer = new IntersectionObserver((entries) => {
 document.querySelectorAll('.reveal').forEach(el => observer.observe(el))
 
 
+// Mobile hamburger menu
+const menuBtn = document.getElementById('mobile-menu-btn')
+const mobileMenu = document.getElementById('mobile-menu')
+
+if (menuBtn && mobileMenu) {
+  menuBtn.addEventListener('click', () => {
+    mobileMenu.classList.toggle('hidden')
+  })
+
+  // Close menu on link click
+  mobileMenu.querySelectorAll('a').forEach(link => {
+    link.addEventListener('click', () => {
+      mobileMenu.classList.add('hidden')
+    })
+  })
+
+  // Close menu on scroll
+  window.addEventListener('scroll', () => {
+    if (!mobileMenu.classList.contains('hidden')) {
+      mobileMenu.classList.add('hidden')
+    }
+  })
+}
+
 // Smooth nav highlight
 const navLinks = document.querySelectorAll<HTMLAnchorElement>('nav a[href^="#"]')
 const sections = document.querySelectorAll('section[id]')

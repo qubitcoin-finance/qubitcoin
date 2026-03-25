@@ -44,6 +44,10 @@ test-results/
 coverage/
 coverage-integration/
 
+# Playwright visual testing
+website/tmp/
+website/playwright-report/
+
 # Environment
 .env.local
 .env.development.local

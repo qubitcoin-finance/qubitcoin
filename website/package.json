@@ -5,11 +5,14 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:visual": "playwright test",
+    "screenshots": "playwright test && echo 'Screenshots saved to tmp/screenshots/'"
   },
   "devDependencies": {
-    "vite": "^7.3.1",
+    "@playwright/test": "^1.58.2",
+    "@tailwindcss/vite": "^4.2.1",
     "tailwindcss": "^4.2.1",
-    "@tailwindcss/vite": "^4.2.1"
+    "vite": "^7.3.1"
   }
 }

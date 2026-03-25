@@ -41,6 +41,23 @@
           Mempool
         </a>
       </div>
+      <button id="mobile-menu-btn" class="md:hidden p-2 text-text-muted hover:text-text-primary transition-colors" aria-label="Open menu">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path id="hamburger-icon" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
+    </div>
+    <!-- Mobile menu -->
+    <div id="mobile-menu" class="hidden md:hidden border-t border-border bg-bg/95 backdrop-blur-xl">
+      <div class="flex flex-col px-6 py-4 gap-3 text-sm">
+        <a href="#about" class="text-text-muted hover:text-qubit-400 transition-colors nav-landing mobile-nav-link py-1">About</a>
+        <a href="#technology" class="text-text-muted hover:text-qubit-400 transition-colors nav-landing mobile-nav-link py-1">Technology</a>
+        <a href="#how-it-works" class="text-text-muted hover:text-qubit-400 transition-colors nav-landing mobile-nav-link py-1">How It Works</a>
+        <a href="#/docs" class="text-text-muted hover:text-qubit-400 transition-colors mobile-nav-link py-1">Docs</a>
+        <a href="#/mempool" class="px-4 py-2 rounded-lg bg-qubit-600/20 border border-qubit-600/40 text-qubit-300 hover:bg-qubit-600/30 transition-all text-sm font-medium text-center mobile-nav-link">
+          Mempool
+        </a>
+      </div>
     </div>
   </nav>
 
@@ -213,7 +230,7 @@
       </div>
 
       <!-- Architecture row -->
-      <div class="reveal grid md:grid-cols-4 gap-4 mt-8">
+      <div class="reveal grid grid-cols-2 md:grid-cols-4 gap-4 mt-8">
         <div class="rounded-xl bg-surface p-5 glow-border">
           <div class="w-8 h-8 rounded-lg bg-qubit-600/30 flex items-center justify-center mb-3">
             <span class="text-qubit-400 font-mono text-xs font-bold">Tx</span>

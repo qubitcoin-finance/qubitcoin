@@ -28,6 +28,7 @@
     "test:watch": "vitest",
     "website": "cd website && pnpm run dev",
     "website:build": "cd website && pnpm run build",
+    "website:screenshots": "cd website && pnpm run screenshots",
     "dev:tx": "node --loader ts-node/esm src/dev-tx.ts",
     "ship": "./scripts/deploy.sh",
     "deploy": "./scripts/deploy.sh",
