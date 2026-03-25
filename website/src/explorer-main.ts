@@ -282,7 +282,7 @@ function renderBlockStrip(blocks: Block[], mempoolSize: number): string {
 }
 
 function card(label: string, value: string | number, small = false): string {
-  const valClass = small ? 'text-sm font-bold font-mono truncate' : 'text-xl font-bold';
+  const valClass = small ? 'text-sm font-bold font-mono truncate' : 'text-xl font-bold whitespace-nowrap';
   return `<div class="bg-surface px-4 py-3 rounded-lg glow-border overflow-hidden">
     <p class="text-text-muted text-xs mb-0.5">${label}</p>
     <p class="${valClass}" title="${value}">${value}</p>
@@ -1971,13 +1971,13 @@ function renderDocs(section?: string): void {
 
   root.innerHTML = `<div class="flex gap-8 items-start">
     <!-- Mobile docs menu button -->
-    <button id="docs-mobile-btn" class="md:hidden fixed bottom-6 right-6 z-40 w-12 h-12 rounded-full bg-qubit-600 text-white shadow-lg shadow-qubit-600/30 flex items-center justify-center hover:bg-qubit-500 transition-colors" aria-label="Docs navigation">
+    <button id="docs-mobile-btn" class="lg:hidden fixed bottom-6 right-6 z-40 w-12 h-12 rounded-full bg-qubit-600 text-white shadow-lg shadow-qubit-600/30 flex items-center justify-center hover:bg-qubit-500 transition-colors" aria-label="Docs navigation">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
     </button>
     <!-- Mobile docs drawer overlay -->
-    <div id="docs-mobile-overlay" class="hidden md:hidden fixed inset-0 z-40 bg-black/60" aria-hidden="true"></div>
+    <div id="docs-mobile-overlay" class="hidden lg:hidden fixed inset-0 z-40 bg-black/60" aria-hidden="true"></div>
     <!-- Mobile docs drawer -->
-    <div id="docs-mobile-drawer" class="hidden md:hidden fixed inset-y-0 left-0 z-50 w-72 bg-bg border-r border-border overflow-y-auto p-5">
+    <div id="docs-mobile-drawer" class="hidden lg:hidden fixed inset-y-0 left-0 z-50 w-72 bg-bg border-r border-border overflow-y-auto p-5">
       <div class="flex items-center justify-between mb-4">
         <span class="text-xs text-text-muted font-mono tracking-widest">DOCS</span>
         <button id="docs-mobile-close" class="p-1 text-text-muted hover:text-text-primary transition-colors" aria-label="Close">
@@ -1989,7 +1989,7 @@ function renderDocs(section?: string): void {
       </div>
     </div>
     <!-- Desktop sidebar -->
-    <nav class="w-72 shrink-0 hidden md:block sticky top-20">
+    <nav class="w-72 shrink-0 hidden lg:block sticky top-20">
       <div class="bg-surface rounded-xl glow-border p-5">
         ${sidebarContent}
       </div>
