@@ -49,6 +49,34 @@ describe('RPC endpoints', () => {
     expect(body.error).toContain('not found')
   })
 
+  it('GET /block/:hash rejects invalid hash format', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/block/invalidhash`)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('Invalid block hash format')
+  })
+
+  it('GET /block/:hash rejects non-hex characters', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/block/${'g'.repeat(64)}`)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('Invalid block hash format')
+  })
+
+  it('GET /block/:hash rejects too-short hash', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/block/${'a'.repeat(63)}`)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('Invalid block hash format')
+  })
+
+  it('GET /block/:hash rejects too-long hash', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/block/${'a'.repeat(65)}`)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('Invalid block hash format')
+  })
+
   it('GET /block-by-height/:h returns block by height', async () => {
     const res = await fetch(`${baseUrl}/api/v1/block-by-height/1`)
     expect(res.status).toBe(200)
@@ -71,6 +99,34 @@ describe('RPC endpoints', () => {
     expect(res.status).toBe(404)
     const body = await res.json()
     expect(body.error).toContain('not found')
+  })
+
+  it('GET /tx/:txid rejects invalid txid format', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/tx/notahash`)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('Invalid transaction ID format')
+  })
+
+  it('GET /tx/:txid rejects non-hex characters', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/tx/${'g'.repeat(64)}`)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('Invalid transaction ID format')
+  })
+
+  it('GET /tx/:txid rejects too-short txid', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/tx/${'a'.repeat(63)}`)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('Invalid transaction ID format')
+  })
+
+  it('GET /tx/:txid rejects too-long txid', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/tx/${'a'.repeat(65)}`)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('Invalid transaction ID format')
   })
 
   it('GET /tx/:txid returns coinbase tx from chain', async () => {
@@ -138,6 +194,41 @@ describe('RPC endpoints', () => {
     const body = await res.json()
     expect(Array.isArray(body)).toBe(true)
     expect(body.length).toBe(0)
+  })
+
+  it('GET /address/:addr/balance rejects invalid address format', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/address/invalidaddr/balance`)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('Invalid address format')
+  })
+
+  it('GET /address/:addr/balance rejects non-hex characters', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/address/${'g'.repeat(64)}/balance`)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('Invalid address format')
+  })
+
+  it('GET /address/:addr/balance rejects too-short address', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/address/${'a'.repeat(63)}/balance`)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('Invalid address format')
+  })
+
+  it('GET /address/:addr/utxos rejects invalid address format', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/address/not-hex/utxos`)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('Invalid address format')
+  })
+
+  it('GET /address/:addr/utxos rejects too-long address', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/address/${'a'.repeat(65)}/utxos`)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('Invalid address format')
   })
 
   it('GET /status returns node state', async () => {

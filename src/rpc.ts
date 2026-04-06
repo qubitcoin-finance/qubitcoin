@@ -98,6 +98,16 @@ function deserializeTransaction(raw: Record<string, unknown>): Transaction {
   return tx;
 }
 
+/** Validate that an address is a valid 64-character hex string */
+function isValidAddress(address: string): boolean {
+  return typeof address === 'string' && address.length === 64 && /^[0-9a-f]{64}$/i.test(address);
+}
+
+/** Validate that a hash is a valid 64-character hex string (block hash or txid) */
+function isValidHash(hash: string): boolean {
+  return typeof hash === 'string' && hash.length === 64 && /^[0-9a-f]{64}$/i.test(hash);
+}
+
 export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, bindAddress: string = '127.0.0.1') {
   const app = express();
   app.set('trust proxy', 1);
@@ -121,6 +131,10 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
 
   // Endpoint to get a block by its hash
   app.get('/api/v1/block/:hash', (req, res) => {
+    if (!isValidHash(req.params.hash)) {
+      res.status(400).json({ error: 'Invalid block hash format: must be 64-character hex string' });
+      return;
+    }
     const block = node.chain.blocks.find(b => b.hash === req.params.hash);
     if (block) {
       res.json(sanitize(block));
@@ -153,6 +167,10 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
 
   // Endpoint to get a transaction by its ID
   app.get('/api/v1/tx/:txid', (req, res) => {
+    if (!isValidHash(req.params.txid)) {
+      res.status(400).json({ error: 'Invalid transaction ID format: must be 64-character hex string' });
+      return;
+    }
     const tx = node.mempool.getTransaction(req.params.txid);
     if (tx) {
       res.json(sanitize(tx));
@@ -217,12 +235,20 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
 
   // Endpoint to get the balance of an address
   app.get('/api/v1/address/:address/balance', (req, res) => {
+    if (!isValidAddress(req.params.address)) {
+      res.status(400).json({ error: 'Invalid address format: must be 64-character hex string' });
+      return;
+    }
     const balance = node.chain.getBalance(req.params.address);
     res.json({ balance });
   });
 
   // Endpoint to get the UTXOs of an address
   app.get('/api/v1/address/:address/utxos', (req, res) => {
+    if (!isValidAddress(req.params.address)) {
+      res.status(400).json({ error: 'Invalid address format: must be 64-character hex string' });
+      return;
+    }
     const utxos = node.chain.findUTXOs(req.params.address);
     res.json(sanitize(utxos));
   });
