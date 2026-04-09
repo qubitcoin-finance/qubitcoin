@@ -1,11 +1,11 @@
 
 import express from 'express';
 import { Node } from './node.js';
-import { bytesToHex, hexToBytes } from './crypto.js';
+import { bytesToHex, deriveAddress } from './crypto.js';
 import cors from 'cors';
 import type { P2PServer } from './p2p/server.js';
-import { type Transaction, type TransactionInput, type ClaimData, isClaimTransaction, COINBASE_TXID } from './transaction.js';
-import { deriveAddress } from './crypto.js';
+import { type Transaction, isClaimTransaction, COINBASE_TXID } from './transaction.js';
+import { deserializeTransaction } from './storage.js';
 import { DIFFICULTY_ADJUSTMENT_INTERVAL, STARTING_DIFFICULTY } from './block.js';
 import { log } from './log.js';
 import type { Request, Response, NextFunction } from 'express';
@@ -69,34 +69,6 @@ export function sanitize(obj: unknown): unknown {
   return obj;
 }
 
-/** Known Uint8Array fields in transactions that need deserialization */
-const TX_INPUT_BINARY_FIELDS = ['publicKey', 'signature'] as const;
-const CLAIM_DATA_BINARY_FIELDS = ['ecdsaPublicKey', 'ecdsaSignature', 'schnorrPublicKey', 'schnorrSignature', 'witnessScript', 'witnessSignatures'] as const;
-
-function deserializeTransaction(raw: Record<string, unknown>): Transaction {
-  const tx = raw as unknown as Transaction;
-  if (Array.isArray(raw.inputs)) {
-    tx.inputs = raw.inputs.map((inp: Record<string, unknown>) => {
-      const input = inp as unknown as TransactionInput;
-      for (const field of TX_INPUT_BINARY_FIELDS) {
-        if (typeof inp[field] === 'string') {
-          (input as Record<string, unknown>)[field] = hexToBytes(inp[field] as string);
-        }
-      }
-      return input;
-    });
-  }
-  if (raw.claimData && typeof raw.claimData === 'object') {
-    const cd = raw.claimData as Record<string, unknown>;
-    for (const field of CLAIM_DATA_BINARY_FIELDS) {
-      if (typeof cd[field] === 'string') {
-        (cd as Record<string, unknown>)[field] = hexToBytes(cd[field] as string);
-      }
-    }
-    tx.claimData = cd as unknown as ClaimData;
-  }
-  return tx;
-}
 
 /** Validate that an address is a valid 64-character hex string */
 function isValidAddress(address: string): boolean {

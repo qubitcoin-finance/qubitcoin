@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-import { FileBlockStorage, sanitizeForStorage } from '../storage.js'
+import { FileBlockStorage, sanitizeForStorage, deserializeTransaction, deserializeBlock } from '../storage.js'
 import { Blockchain } from '../chain.js'
 import {
   createCoinbaseTransaction,
@@ -197,6 +197,115 @@ describe('FileBlockStorage', () => {
     expect(chain2.getHeight()).toBe(height1)
     expect(chain2.utxoSet.size).toBe(utxoCount1)
     expect(chain2.blocks[chain2.blocks.length - 1].hash).toBe(block2.hash)
+  })
+})
+
+describe('deserializeTransaction', () => {
+  it('restores publicKey and signature hex strings to Uint8Array', () => {
+    const raw = {
+      id: 'abc123',
+      inputs: [{ txId: 'deadbeef', outputIndex: 0, publicKey: '0102', signature: 'aabb' }],
+      outputs: [{ address: 'someaddr', amount: 100 }],
+      timestamp: 1000,
+    }
+    const tx = deserializeTransaction(raw as any)
+    expect(tx.inputs[0].publicKey).toBeInstanceOf(Uint8Array)
+    expect(tx.inputs[0].publicKey).toEqual(new Uint8Array([0x01, 0x02]))
+    expect(tx.inputs[0].signature).toBeInstanceOf(Uint8Array)
+    expect(tx.inputs[0].signature).toEqual(new Uint8Array([0xaa, 0xbb]))
+  })
+
+  it('restores all claimData binary fields from hex to Uint8Array', () => {
+    const raw = {
+      id: 'abc123',
+      inputs: [],
+      outputs: [],
+      timestamp: 1000,
+      claimData: {
+        btcAddress: 'btcaddr',
+        qbtcAddress: 'qbtcaddr',
+        ecdsaPublicKey: 'aabb',
+        ecdsaSignature: 'ccdd',
+        schnorrPublicKey: 'eeff',
+        schnorrSignature: '1122',
+        witnessScript: '3344',
+        witnessSignatures: '5566',
+      },
+    }
+    const tx = deserializeTransaction(raw as any)
+    const cd = tx.claimData!
+    expect(cd.ecdsaPublicKey).toBeInstanceOf(Uint8Array)
+    expect(cd.ecdsaPublicKey).toEqual(new Uint8Array([0xaa, 0xbb]))
+    expect(cd.ecdsaSignature).toBeInstanceOf(Uint8Array)
+    expect(cd.schnorrPublicKey).toBeInstanceOf(Uint8Array)
+    expect(cd.schnorrSignature).toBeInstanceOf(Uint8Array)
+    expect(cd.witnessScript).toBeInstanceOf(Uint8Array)
+    expect(cd.witnessSignatures).toBeInstanceOf(Uint8Array)
+  })
+
+  it('handles transaction without claimData', () => {
+    const raw = {
+      id: 'abc',
+      inputs: [{ txId: 'x', outputIndex: 0, publicKey: 'ff', signature: '00' }],
+      outputs: [],
+      timestamp: 1,
+    }
+    const tx = deserializeTransaction(raw as any)
+    expect(tx.claimData).toBeUndefined()
+    expect(tx.inputs[0].publicKey).toBeInstanceOf(Uint8Array)
+  })
+
+  it('leaves non-string binary fields unchanged', () => {
+    const existingBytes = new Uint8Array([0x01])
+    const raw = {
+      id: 'abc',
+      inputs: [{ txId: 'x', outputIndex: 0, publicKey: existingBytes, signature: existingBytes }],
+      outputs: [],
+      timestamp: 1,
+    }
+    const tx = deserializeTransaction(raw as any)
+    expect(tx.inputs[0].publicKey).toBe(existingBytes)
+  })
+})
+
+describe('deserializeBlock', () => {
+  it('deserializes all transactions in a block', () => {
+    const raw = {
+      hash: 'blockhash',
+      height: 1,
+      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: 0 },
+      transactions: [
+        {
+          id: 'tx1',
+          inputs: [{ txId: 'prev', outputIndex: 0, publicKey: 'aabb', signature: 'ccdd' }],
+          outputs: [{ address: 'addr', amount: 50 }],
+          timestamp: 1,
+        },
+        {
+          id: 'tx2',
+          inputs: [{ txId: 'prev2', outputIndex: 1, publicKey: '1234', signature: '5678' }],
+          outputs: [],
+          timestamp: 2,
+        },
+      ],
+    }
+    const block = deserializeBlock(raw as any)
+    expect(block.transactions).toHaveLength(2)
+    expect(block.transactions[0].inputs[0].publicKey).toBeInstanceOf(Uint8Array)
+    expect(block.transactions[0].inputs[0].publicKey).toEqual(new Uint8Array([0xaa, 0xbb]))
+    expect(block.transactions[1].inputs[0].publicKey).toBeInstanceOf(Uint8Array)
+    expect(block.transactions[1].inputs[0].publicKey).toEqual(new Uint8Array([0x12, 0x34]))
+  })
+
+  it('handles block with no transactions', () => {
+    const raw = {
+      hash: 'bh',
+      height: 0,
+      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: 0 },
+      transactions: [],
+    }
+    const block = deserializeBlock(raw as any)
+    expect(block.transactions).toHaveLength(0)
   })
 })
 

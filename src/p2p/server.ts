@@ -25,10 +25,9 @@ import {
   encodeMessage,
 } from './protocol.js'
 import type { Node } from '../node.js'
-import { sanitizeForStorage } from '../storage.js'
-import { hexToBytes, bytesToHex } from '../crypto.js'
+import { sanitizeForStorage, deserializeTransaction, deserializeBlock } from '../storage.js'
 import { type Block, computeBlockHash, hashMeetsTarget, blockWork } from '../block.js'
-import type { Transaction, TransactionInput, ClaimData } from '../transaction.js'
+import type { Transaction } from '../transaction.js'
 import { log } from '../log.js'
 
 const MAX_INBOUND = 25
@@ -94,45 +93,6 @@ const ORPHAN_EXPIRY_MS = 10 * 60_000
 interface OrphanBlock {
   block: Block
   receivedAt: number
-}
-
-/** Known Uint8Array fields that need deserialization from P2P messages */
-const TX_INPUT_BINARY_FIELDS = ['publicKey', 'signature'] as const
-const CLAIM_DATA_BINARY_FIELDS = ['ecdsaPublicKey', 'ecdsaSignature', 'schnorrPublicKey', 'schnorrSignature', 'witnessScript', 'witnessSignatures'] as const
-
-function deserializeTransaction(raw: Record<string, unknown>): Transaction {
-  const tx = raw as unknown as Transaction
-  if (Array.isArray(raw.inputs)) {
-    tx.inputs = raw.inputs.map((inp: Record<string, unknown>) => {
-      const input = inp as unknown as TransactionInput
-      for (const field of TX_INPUT_BINARY_FIELDS) {
-        if (typeof inp[field] === 'string') {
-          (input as Record<string, unknown>)[field] = hexToBytes(inp[field] as string)
-        }
-      }
-      return input
-    })
-  }
-  if (raw.claimData && typeof raw.claimData === 'object') {
-    const cd = raw.claimData as Record<string, unknown>
-    for (const field of CLAIM_DATA_BINARY_FIELDS) {
-      if (typeof cd[field] === 'string') {
-        (cd as Record<string, unknown>)[field] = hexToBytes(cd[field] as string)
-      }
-    }
-    tx.claimData = cd as unknown as ClaimData
-  }
-  return tx
-}
-
-function deserializeBlock(raw: Record<string, unknown>): Block {
-  const block = raw as unknown as Block
-  if (Array.isArray(raw.transactions)) {
-    block.transactions = raw.transactions.map((t: Record<string, unknown>) =>
-      deserializeTransaction(t)
-    )
-  }
-  return block
 }
 
 export class P2PServer {
@@ -1044,8 +1004,8 @@ export class P2PServer {
           }
         }
       }
-    } catch {
-      // Ignore corrupt ban list
+    } catch (err) {
+      log.debug({ component: 'p2p', err }, 'Could not load ban list — starting fresh')
     }
   }
 
@@ -1162,7 +1122,7 @@ export class P2PServer {
       if (!this.localMode) {
         const subnetCounts = new Map<string, number>()
         for (const peer of this.peers.values()) {
-          if (!(peer as any).inbound) {
+          if (!peer.inbound) {
             const subnet = getSubnet16(peer.address)
             subnetCounts.set(subnet, (subnetCounts.get(subnet) ?? 0) + 1)
           }
@@ -1279,8 +1239,8 @@ export class P2PServer {
       if (anchors.length > 0) {
         log.info({ component: 'p2p', count: anchors.length }, 'Loaded anchor peers')
       }
-    } catch {
-      // File doesn't exist or is invalid — start fresh
+    } catch (err) {
+      log.debug({ component: 'p2p', err }, 'Could not load anchors — starting fresh')
     }
   }
 
@@ -1292,8 +1252,8 @@ export class P2PServer {
       .slice(0, this.MAX_ANCHORS)
     try {
       fs.writeFileSync(this.anchorsPath, JSON.stringify(entries, null, 2) + '\n')
-    } catch {
-      // Data dir may not be writable — ignore
+    } catch (err) {
+      log.debug({ component: 'p2p', err }, 'Could not save anchors — data dir may not be writable')
     }
   }
 
