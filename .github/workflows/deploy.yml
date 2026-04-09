@@ -7,7 +7,6 @@ on:
 env:
   REGISTRY: ghcr.io
   MINER_IMAGE: qubitcoin-finance/qbtcd
-  WEBSITE_IMAGE: qubitcoin-finance/qbtcd-website
 
 jobs:
   build-and-push:
@@ -72,17 +71,25 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push website
-        uses: docker/build-push-action@v6
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          context: .
-          file: ./Dockerfile.website
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta-website.outputs.tags }}
-          labels: ${{ steps.meta-website.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          node-version: '22'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: latest
+
+      - name: Build website
+        run: cd website && pnpm install --frozen-lockfile && pnpm build
+
+      - name: Upload website artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: website-dist
+          path: website/dist/
+          retention-days: 1
 
   deploy:
     needs: build-and-push
@@ -94,16 +101,15 @@ jobs:
       cancel-in-progress: false
     env:
       MINER_IMAGE: ghcr.io/qubitcoin-finance/qbtcd:main
-      WEBSITE_IMAGE: ghcr.io/qubitcoin-finance/qbtcd-website:main
       MINER_CONTAINER: qbtc-miner
-      WEBSITE_CONTAINER: qbtc-website
       DATA_DIR: /home/qubitcoin/qbtc-data
       RPC_PORT: 3001
       P2P_PORT: 6001
-      WEBSITE_PORT: 8080
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          clean: false
 
       # ----- Backend (Docker container) -----
       - name: Login to GHCR
@@ -112,15 +118,12 @@ jobs:
       - name: Pull latest miner image
         run: docker pull $MINER_IMAGE
 
-      - name: Pull latest website image
-        run: docker pull $WEBSITE_IMAGE
-
-      # ----- Miner deployment (keep website running) -----
+      # ----- Miner deployment -----
       - name: Stop existing miner container
         run: docker stop $MINER_CONTAINER && docker rm $MINER_CONTAINER || true
 
       - name: Wait for ports to be released
-        run: sleep 2
+        run: sleep 5
 
       - name: Start new miner container
         run: |
@@ -131,7 +134,7 @@ jobs:
             -p $P2P_PORT:6001 \
             -v $DATA_DIR:/data \
             $MINER_IMAGE \
-            --mine --full --datadir /data
+            --mine --datadir /data
 
       - name: Wait for miner to be healthy
         run: |
@@ -148,30 +151,16 @@ jobs:
           docker logs --tail 50 $MINER_CONTAINER
           exit 1
 
-      # ----- Website deployment (replace only after miner is healthy) -----
-      - name: Stop existing website container
-        run: docker stop $WEBSITE_CONTAINER && docker rm $WEBSITE_CONTAINER || true
+      # ----- Website deployment (static files via nginx) -----
+      - name: Download website artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: website-dist
+          path: website-dist
 
-      - name: Start new website container
+      - name: Deploy website files
         run: |
-          docker run -d \
-            --name $WEBSITE_CONTAINER \
-            --restart unless-stopped \
-            -p $WEBSITE_PORT:80 \
-            --network host \
-            $WEBSITE_IMAGE
-
-      - name: Wait for website to be healthy
-        run: |
-          echo "Waiting for website to start..."
-          for i in $(seq 1 10); do
-            if curl -sf http://127.0.0.1:$WEBSITE_PORT/ > /dev/null; then
-              echo ""
-              echo "Website is up"
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "Website failed to start"
-          docker logs --tail 20 $WEBSITE_CONTAINER
-          exit 1
+          WEBSITE_ROOT=/home/qubitcoin/www
+          mkdir -p $WEBSITE_ROOT
+          rm -rf $WEBSITE_ROOT/*
+          cp -r website-dist/* $WEBSITE_ROOT/
