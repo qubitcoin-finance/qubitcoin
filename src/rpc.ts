@@ -8,7 +8,7 @@ import { type Transaction, isClaimTransaction, COINBASE_TXID } from './transacti
 import { deserializeTransaction } from './storage.js';
 import { DIFFICULTY_ADJUSTMENT_INTERVAL, STARTING_DIFFICULTY } from './block.js';
 import { log } from './log.js';
-import type { Request, Response, NextFunction } from 'express';
+import type { Request, Response, NextFunction, Express } from 'express';
 
 /** Maximum JSON body size (1 MB) */
 const MAX_BODY_SIZE = '1mb';
@@ -80,7 +80,7 @@ function isValidHash(hash: string): boolean {
   return typeof hash === 'string' && hash.length === 64 && /^[0-9a-f]{64}$/i.test(hash);
 }
 
-export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, bindAddress: string = '127.0.0.1') {
+export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, bindAddress: string = '127.0.0.1'): Express {
   const app = express();
   app.set('trust proxy', 1);
   app.disable('x-powered-by');

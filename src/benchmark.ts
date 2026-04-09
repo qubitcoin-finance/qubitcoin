@@ -21,9 +21,36 @@ interface BenchResult {
   outputLabel: string
 }
 
+export interface KemKeyPair {
+  publicKey: Uint8Array
+  secretKey: Uint8Array
+}
+
+export interface KemEncapsulation {
+  cipherText: Uint8Array
+  sharedSecret: Uint8Array
+}
+
+export interface KemAlgorithm {
+  keygen(): KemKeyPair
+  encapsulate(pk: Uint8Array): KemEncapsulation
+  decapsulate(cipherText: Uint8Array, secretKey: Uint8Array): Uint8Array
+}
+
+export interface SigKeyPair {
+  publicKey: Uint8Array
+  secretKey: Uint8Array
+}
+
+export interface SigAlgorithm {
+  keygen(): SigKeyPair
+  sign(msg: Uint8Array, secretKey: Uint8Array): Uint8Array
+  verify(signature: Uint8Array, msg: Uint8Array, publicKey: Uint8Array): boolean
+}
+
 function benchKem(
   name: string,
-  algo: { keygen: () => any; encapsulate: (pk: any) => any; decapsulate: (ct: any, sk: any) => any },
+  algo: KemAlgorithm,
   iterations: number
 ): BenchResult {
   // Warmup
@@ -70,7 +97,7 @@ function benchKem(
 
 function benchSig(
   name: string,
-  algo: { keygen: () => any; sign: (msg: any, sk: any) => any; verify: (sig: any, msg: any, pk: any) => any },
+  algo: SigAlgorithm,
   iterations: number
 ): BenchResult {
   const msg = new TextEncoder().encode('Benchmark message for PQC signature algorithms.')
