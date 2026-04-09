@@ -40,11 +40,11 @@ export function sanitizeForStorage(obj: unknown): unknown {
 }
 
 /** Known Uint8Array fields in transactions that need deserialization */
-const TX_INPUT_BINARY_FIELDS = ['publicKey', 'signature'] as const
-const CLAIM_DATA_BINARY_FIELDS = ['ecdsaPublicKey', 'ecdsaSignature', 'schnorrPublicKey', 'schnorrSignature', 'witnessScript', 'witnessSignatures'] as const
+export const TX_INPUT_BINARY_FIELDS = ['publicKey', 'signature'] as const
+export const CLAIM_DATA_BINARY_FIELDS = ['ecdsaPublicKey', 'ecdsaSignature', 'schnorrPublicKey', 'schnorrSignature', 'witnessScript', 'witnessSignatures'] as const
 
 /** Restore hex strings back to Uint8Array for known binary fields */
-function deserializeTransaction(raw: Record<string, unknown>): Transaction {
+export function deserializeTransaction(raw: Record<string, unknown>): Transaction {
   const tx = raw as unknown as Transaction
 
   // Restore inputs
@@ -74,7 +74,7 @@ function deserializeTransaction(raw: Record<string, unknown>): Transaction {
   return tx
 }
 
-function deserializeBlock(raw: Record<string, unknown>): Block {
+export function deserializeBlock(raw: Record<string, unknown>): Block {
   const block = raw as unknown as Block
   if (Array.isArray(raw.transactions)) {
     block.transactions = raw.transactions.map((t: Record<string, unknown>) =>

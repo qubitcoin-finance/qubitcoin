@@ -1045,3 +1045,72 @@ describe('Bare multisig claims', () => {
     expect(result.error).toContain('signatures verified')
   })
 })
+
+describe('verifyMultisig via verifyClaimProof — missing witnessSignatures', () => {
+  it('rejects P2WSH multisig claim with null witnessSignatures', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const p2wshHolder = holders.find(h => h.type === 'p2wsh')!
+    const p2wshEntry = snapshot.entries.find(e => e.type === 'p2wsh')!
+    const qbtcWallet = qbtcWalletA
+
+    const tx = createP2wshClaimTransaction(
+      [p2wshHolder.signerKeys![0].secretKey, p2wshHolder.signerKeys![1].secretKey],
+      p2wshHolder.witnessScript!,
+      p2wshEntry,
+      qbtcWallet,
+      snapshot.btcBlockHash
+    )
+    // Remove witnessSignatures to trigger the missing-signatures branch
+    tx.claimData!.witnessSignatures = undefined as any
+
+    const result = verifyClaimProof(tx, snapshot)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('missing signatures')
+  })
+
+  it('rejects P2SH multisig claim with null witnessSignatures', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const p2shMultisigHolder = holders.find(h => h.type === 'p2sh' && h.signerKeys)!
+    const p2shMultisigEntry = snapshot.entries.find(e =>
+      e.type === 'p2sh' && e.btcAddress === p2shMultisigHolder.address
+    )!
+    const qbtcWallet = qbtcWalletA
+
+    const tx = createP2shMultisigClaimTransaction(
+      [p2shMultisigHolder.signerKeys![0].secretKey, p2shMultisigHolder.signerKeys![1].secretKey],
+      p2shMultisigHolder.witnessScript!,
+      p2shMultisigEntry,
+      qbtcWallet,
+      snapshot.btcBlockHash
+    )
+    tx.claimData!.witnessSignatures = undefined as any
+
+    const result = verifyClaimProof(tx, snapshot)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('missing signatures')
+  })
+})
+
+describe('verifyClaimProof — improved catch error messages', () => {
+  it('includes parse detail when P2TR public key is invalid', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const p2trHolder = holders.find(h => h.type === 'p2tr')!
+    const p2trEntry = snapshot.entries.find(e => e.type === 'p2tr')!
+    const qbtcWallet = qbtcWalletA
+
+    const tx = createClaimTransaction(
+      p2trHolder.secretKey,
+      p2trHolder.publicKey,
+      p2trEntry,
+      qbtcWallet,
+      snapshot.btcBlockHash
+    )
+    // Replace schnorrPublicKey with garbage bytes that will fail computeTaprootOutputKey
+    tx.claimData!.schnorrPublicKey = new Uint8Array(32).fill(0xff)
+
+    const result = verifyClaimProof(tx, snapshot)
+    expect(result.valid).toBe(false)
+    // Error should include the detail from the thrown error, not just a bare message
+    expect(result.error).toMatch(/Invalid P2TR public key:/)
+  })
+})

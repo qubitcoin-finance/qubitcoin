@@ -92,8 +92,9 @@ export class Peer {
         // Slow peer: kernel buffer full — disconnect immediately (Bitcoin Core behavior)
         this.disconnect('write backpressure')
       }
-    } catch {
-      this.disconnect('send error')
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err)
+      this.disconnect(`send error: ${reason}`)
     }
   }
 
@@ -171,7 +172,8 @@ export class Peer {
         }
         this.onMessage(this, msg)
       }
-    } catch (err) {
+    } catch {
+      // Malformed message framing — penalize peer for sending garbage
       this.addMisbehavior(25)
     }
   }
