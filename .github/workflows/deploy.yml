@@ -6,7 +6,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  BACKEND_IMAGE: qubitcoin-finance/qbtcd
+  MINER_IMAGE: qubitcoin-finance/qbtcd
   WEBSITE_IMAGE: qubitcoin-finance/qbtcd-website
 
 jobs:
@@ -41,11 +41,11 @@ jobs:
           major-identifier: "breaking:"
           prefix: "v"
 
-      - name: Extract metadata (backend)
-        id: meta-backend
+      - name: Extract metadata (miner)
+        id: meta-miner
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}
+          images: ${{ env.REGISTRY }}/${{ env.MINER_IMAGE }}
           tags: |
             type=ref,event=branch
             type=sha,prefix=
@@ -61,14 +61,14 @@ jobs:
             type=sha,prefix=
             type=raw,value=${{ steps.version.outputs.version }}
 
-      - name: Build and push backend
+      - name: Build and push miner
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta-backend.outputs.tags }}
-          labels: ${{ steps.meta-backend.outputs.labels }}
+          tags: ${{ steps.meta-miner.outputs.tags }}
+          labels: ${{ steps.meta-miner.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -93,9 +93,9 @@ jobs:
       group: deploy-qubitcoin
       cancel-in-progress: false
     env:
-      BACKEND_IMAGE: ghcr.io/qubitcoin-finance/qbtcd:main
+      MINER_IMAGE: ghcr.io/qubitcoin-finance/qbtcd:main
       WEBSITE_IMAGE: ghcr.io/qubitcoin-finance/qbtcd-website:main
-      BACKEND_CONTAINER: qbtc-miner
+      MINER_CONTAINER: qbtc-miner
       WEBSITE_CONTAINER: qbtc-website
       DATA_DIR: /home/qubitcoin/qbtc-data
       RPC_PORT: 3001
@@ -109,43 +109,46 @@ jobs:
       - name: Login to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      - name: Pull latest backend image
-        run: docker pull $BACKEND_IMAGE
+      - name: Pull latest miner image
+        run: docker pull $MINER_IMAGE
 
       - name: Pull latest website image
         run: docker pull $WEBSITE_IMAGE
 
-      # ----- Backend deployment (keep website running) -----
-      - name: Stop existing backend container
-        run: docker stop $BACKEND_CONTAINER && docker rm $BACKEND_CONTAINER || true
+      # ----- Miner deployment (keep website running) -----
+      - name: Stop existing miner container
+        run: docker stop $MINER_CONTAINER && docker rm $MINER_CONTAINER || true
 
-      - name: Start new backend container
+      - name: Wait for ports to be released
+        run: sleep 2
+
+      - name: Start new miner container
         run: |
           docker run -d \
-            --name $BACKEND_CONTAINER \
+            --name $MINER_CONTAINER \
             --restart unless-stopped \
             -p $RPC_PORT:3001 \
             -p $P2P_PORT:6001 \
             -v $DATA_DIR:/data \
-            $BACKEND_IMAGE \
+            $MINER_IMAGE \
             --mine --full --datadir /data
 
-      - name: Wait for backend to be healthy
+      - name: Wait for miner to be healthy
         run: |
-          echo "Waiting for backend to start..."
+          echo "Waiting for miner to start..."
           for i in $(seq 1 30); do
             if curl -sf http://127.0.0.1:$RPC_PORT/api/v1/status; then
               echo ""
-              echo "Backend is up after $((i * 10))s"
+              echo "Miner is up after $((i * 10))s"
               exit 0
             fi
             sleep 10
           done
-          echo "Backend failed to start within 300s"
-          docker logs --tail 50 $BACKEND_CONTAINER
+          echo "Miner failed to start within 300s"
+          docker logs --tail 50 $MINER_CONTAINER
           exit 1
 
-      # ----- Website deployment (replace only after backend is healthy) -----
+      # ----- Website deployment (replace only after miner is healthy) -----
       - name: Stop existing website container
         run: docker stop $WEBSITE_CONTAINER && docker rm $WEBSITE_CONTAINER || true
 
