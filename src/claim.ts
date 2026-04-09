@@ -239,6 +239,41 @@ export function createP2shMultisigClaimTransaction(
 }
 
 /**
+ * Verify m-of-n CHECKMULTISIG-style ordered signatures.
+ *
+ * Walks pubkeys in order, matching signatures in order (same as Bitcoin's
+ * OP_CHECKMULTISIG). Returns an error string if verification fails, or
+ * undefined on success.
+ */
+function verifyMultisig(
+  signatures: Uint8Array,
+  messageHash: Uint8Array,
+  m: number,
+  pubkeys: Uint8Array[],
+  label: string,
+): string | undefined {
+  if (signatures.length !== m * 64) {
+    return `${label} ${m}-of-${pubkeys.length} claim requires exactly ${m} signatures (${m * 64} bytes)`
+  }
+
+  const sigs: Uint8Array[] = []
+  for (let i = 0; i < m; i++) {
+    sigs.push(signatures.slice(i * 64, (i + 1) * 64))
+  }
+
+  let sigIdx = 0
+  for (let pkIdx = 0; pkIdx < pubkeys.length && sigIdx < m; pkIdx++) {
+    if (verifyEcdsaSignature(sigs[sigIdx], messageHash, pubkeys[pkIdx])) {
+      sigIdx++
+    }
+  }
+  if (sigIdx < m) {
+    return `Only ${sigIdx} of ${m} required signatures verified`
+  }
+  return undefined
+}
+
+/**
  * Verify a claim transaction's ECDSA proof against the BTC snapshot.
  *
  * Checks:
@@ -289,8 +324,9 @@ export function verifyClaimProof(
     let parsed: ReturnType<typeof parseWitnessScript>
     try {
       parsed = parseWitnessScript(claim.witnessScript)
-    } catch {
-      return { valid: false, error: 'Failed to parse witness script' }
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err)
+      return { valid: false, error: `Failed to parse witness script: ${detail}` }
     }
 
     if (parsed.type === 'single-key') {
@@ -304,25 +340,12 @@ export function verifyClaimProof(
     } else {
       // Multisig: verify m-of-n CHECKMULTISIG-style ordered signatures
       const { m, pubkeys } = parsed
-      if (!claim.witnessSignatures || claim.witnessSignatures.length !== m * 64) {
-        return { valid: false, error: `P2WSH ${m}-of-${pubkeys.length} claim requires exactly ${m} signatures (${m * 64} bytes)` }
+      if (!claim.witnessSignatures) {
+        return { valid: false, error: `P2WSH ${m}-of-${pubkeys.length} claim missing signatures` }
       }
-
-      // Extract individual signatures
-      const sigs: Uint8Array[] = []
-      for (let i = 0; i < m; i++) {
-        sigs.push(claim.witnessSignatures.slice(i * 64, (i + 1) * 64))
-      }
-
-      // CHECKMULTISIG ordering: walk pubkeys in order, match signatures in order
-      let sigIdx = 0
-      for (let pkIdx = 0; pkIdx < pubkeys.length && sigIdx < m; pkIdx++) {
-        if (verifyEcdsaSignature(sigs[sigIdx], claimMsgHash, pubkeys[pkIdx])) {
-          sigIdx++
-        }
-      }
-      if (sigIdx < m) {
-        return { valid: false, error: `Only ${sigIdx} of ${m} required signatures verified` }
+      const multisigErr = verifyMultisig(claim.witnessSignatures, claimMsgHash, m, pubkeys, 'P2WSH')
+      if (multisigErr) {
+        return { valid: false, error: multisigErr }
       }
     }
   } else if (entry.type === 'p2tr') {
@@ -338,8 +361,9 @@ export function verifyClaimProof(
     let derivedAddress: string
     try {
       derivedAddress = bytesToHex(computeTaprootOutputKey(claim.schnorrPublicKey))
-    } catch {
-      return { valid: false, error: 'Invalid P2TR public key' }
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err)
+      return { valid: false, error: `Invalid P2TR public key: ${detail}` }
     }
     if (derivedAddress !== claim.btcAddress) {
       return {
@@ -363,8 +387,9 @@ export function verifyClaimProof(
       let parsed: ReturnType<typeof parseWitnessScript>
       try {
         parsed = parseWitnessScript(claim.witnessScript)
-      } catch {
-        return { valid: false, error: 'Failed to parse redeem script' }
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err)
+        return { valid: false, error: `Failed to parse redeem script: ${detail}` }
       }
 
       if (parsed.type === 'single-key') {
@@ -376,23 +401,12 @@ export function verifyClaimProof(
         }
       } else {
         const { m, pubkeys } = parsed
-        if (!claim.witnessSignatures || claim.witnessSignatures.length !== m * 64) {
-          return { valid: false, error: `P2SH ${m}-of-${pubkeys.length} claim requires exactly ${m} signatures (${m * 64} bytes)` }
+        if (!claim.witnessSignatures) {
+          return { valid: false, error: `P2SH ${m}-of-${pubkeys.length} claim missing signatures` }
         }
-
-        const sigs: Uint8Array[] = []
-        for (let i = 0; i < m; i++) {
-          sigs.push(claim.witnessSignatures.slice(i * 64, (i + 1) * 64))
-        }
-
-        let sigIdx = 0
-        for (let pkIdx = 0; pkIdx < pubkeys.length && sigIdx < m; pkIdx++) {
-          if (verifyEcdsaSignature(sigs[sigIdx], claimMsgHash, pubkeys[pkIdx])) {
-            sigIdx++
-          }
-        }
-        if (sigIdx < m) {
-          return { valid: false, error: `Only ${sigIdx} of ${m} required signatures verified` }
+        const multisigErr = verifyMultisig(claim.witnessSignatures, claimMsgHash, m, pubkeys, 'P2SH')
+        if (multisigErr) {
+          return { valid: false, error: multisigErr }
         }
       }
     } else {

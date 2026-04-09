@@ -2119,3 +2119,278 @@ describe('Cumulative work threshold (1.5x)', () => {
     expect(1600n > newThreshold).toBe(true)   // new: banned
   })
 })
+
+describe('P2P input validation hardening', () => {
+  let tmpDir: string
+  let node: Node
+  let p2p: P2PServer
+
+  beforeEach(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-val-'))
+    node = new Node('test')
+    p2p = new P2PServer(node, 0, tmpDir)
+    await p2p.start()
+  })
+
+  afterEach(async () => {
+    await p2p.stop()
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  function makePeer(overrides: Partial<{ handshakeComplete: boolean; sent: unknown[] }> = {}) {
+    const sent: unknown[] = overrides.sent ?? []
+    return {
+      handshakeComplete: overrides.handshakeComplete ?? true,
+      getMisbehaviorScore: () => score,
+      addMisbehavior: (n: number) => { score += n },
+      send: (msg: unknown) => { sent.push(msg) },
+      id: 'test-peer',
+    }
+    // hoisted var pattern — declare score before the object literal
+    var score = 0
+  }
+
+  it('handleVersion: malformed cumulativeWork adds misbehavior instead of silent ignore', () => {
+    let score = 0
+    const peer = {
+      id: 'test',
+      handshakeComplete: false,
+      remoteHeight: 0,
+      remoteGenesisHash: '',
+      remoteListenPort: undefined as number | undefined,
+      remoteCumulativeWork: 0n,
+      inbound: false,
+      addMisbehavior: (n: number) => { score += n },
+      send: () => {},
+      completeHandshake: () => {},
+    }
+
+    const handleVersion = (p2p as any).handleVersion.bind(p2p)
+    const genesisHash = node.chain.blocks[0].hash
+    handleVersion(peer, {
+      version: 2,
+      height: 0,
+      genesisHash,
+      userAgent: 'test',
+      cumulativeWork: 'NOT_VALID_HEX_ZZZ', // invalid: cannot BigInt('0x' + this)
+    })
+
+    // Should have gained misbehavior for the malformed field
+    expect(score).toBeGreaterThan(0)
+    // remoteCumulativeWork should remain at default (parse failed)
+    expect(peer.remoteCumulativeWork).toBe(0n)
+  })
+
+  it('handleVersion: valid cumulativeWork is parsed correctly and adds no misbehavior', () => {
+    let score = 0
+    const peer = {
+      id: 'test',
+      handshakeComplete: false,
+      remoteHeight: 0,
+      remoteGenesisHash: '',
+      remoteListenPort: undefined as number | undefined,
+      remoteCumulativeWork: 0n,
+      inbound: false,
+      addMisbehavior: (n: number) => { score += n },
+      send: () => {},
+      completeHandshake: () => {},
+    }
+
+    const handleVersion = (p2p as any).handleVersion.bind(p2p)
+    const genesisHash = node.chain.blocks[0].hash
+    handleVersion(peer, {
+      version: 2,
+      height: 0,
+      genesisHash,
+      userAgent: 'test',
+      cumulativeWork: 'deadbeef', // valid hex
+    })
+
+    // No misbehavior for valid input
+    expect(score).toBe(0)
+    expect(peer.remoteCumulativeWork).toBe(BigInt('0xdeadbeef'))
+  })
+
+  it('handleInv: rejects hash with invalid format (adds misbehavior)', () => {
+    let score = 0
+    const peer = {
+      handshakeComplete: true,
+      addMisbehavior: (n: number) => { score += n },
+      send: () => {},
+      id: 'test',
+    }
+
+    const handleInv = (p2p as any).handleInv.bind(p2p)
+
+    // Hash is only 8 chars (not 64)
+    handleInv(peer, { type: 'block', hash: 'deadbeef' })
+    expect(score).toBeGreaterThan(0)
+
+    const scoreMid = score
+    // Hash contains non-hex characters
+    handleInv(peer, { type: 'tx', hash: 'z'.repeat(64) })
+    expect(score).toBeGreaterThan(scoreMid)
+  })
+
+  it('handleInv: valid hash is accepted without misbehavior', () => {
+    let score = 0
+    const sentMessages: unknown[] = []
+    const peer = {
+      handshakeComplete: true,
+      addMisbehavior: (n: number) => { score += n },
+      send: (msg: unknown) => { sentMessages.push(msg) },
+      id: 'test',
+    }
+
+    const handleInv = (p2p as any).handleInv.bind(p2p)
+    handleInv(peer, { type: 'block', hash: 'a'.repeat(64) })
+
+    expect(score).toBe(0)
+    // Should have sent a getdata for the unknown block
+    expect(sentMessages.length).toBe(1)
+    expect((sentMessages[0] as any).type).toBe('getdata')
+  })
+
+  it('handleGetData: rejects hash with invalid format (adds misbehavior)', () => {
+    let score = 0
+    const peer = {
+      handshakeComplete: true,
+      addMisbehavior: (n: number) => { score += n },
+      send: () => {},
+      id: 'test',
+    }
+
+    const handleGetData = (p2p as any).handleGetData.bind(p2p)
+
+    // Hash too short
+    handleGetData(peer, { type: 'block', hash: 'abc' })
+    expect(score).toBeGreaterThan(0)
+  })
+
+  it('handleGetData: valid hash is accepted without misbehavior', () => {
+    let score = 0
+    const sentMessages: unknown[] = []
+    const peer = {
+      handshakeComplete: true,
+      addMisbehavior: (n: number) => { score += n },
+      send: (msg: unknown) => { sentMessages.push(msg) },
+      id: 'test',
+    }
+
+    const handleGetData = (p2p as any).handleGetData.bind(p2p)
+    // Request genesis block
+    const genesisHash = node.chain.blocks[0].hash
+    handleGetData(peer, { type: 'block', hash: genesisHash })
+
+    expect(score).toBe(0)
+    // Should have replied with the block
+    expect(sentMessages.length).toBe(1)
+    expect((sentMessages[0] as any).type).toBe('blocks')
+  })
+
+  it('handleHeaders: rejects oversized headers array (adds misbehavior)', () => {
+    let score = 0
+    const peer = {
+      handshakeComplete: true,
+      addMisbehavior: (n: number) => { score += n },
+      send: () => {},
+      id: 'test',
+      remoteCumulativeWork: 0n,
+      remoteHeight: 0,
+    }
+
+    const handleHeaders = (p2p as any).handleHeaders.bind(p2p)
+
+    // 501 headers exceeds MAX_HEADERS_RESPONSE (500)
+    const tooManyHeaders = Array.from({ length: 501 }, (_, i) => ({
+      hash: i.toString(16).padStart(64, '0'),
+      height: i + 1,
+      previousHash: (i === 0 ? '0' : i - 1).toString(16).padStart(64, '0'),
+    }))
+
+    handleHeaders(peer, { headers: tooManyHeaders })
+    expect(score).toBeGreaterThan(0)
+  })
+
+  it('handleHeaders: rejects headers with malformed hash field (adds misbehavior)', () => {
+    let score = 0
+    const peer = {
+      handshakeComplete: true,
+      addMisbehavior: (n: number) => { score += n },
+      send: () => {},
+      id: 'test',
+      remoteCumulativeWork: 0n,
+      remoteHeight: 0,
+    }
+
+    const handleHeaders = (p2p as any).handleHeaders.bind(p2p)
+
+    // Header with non-hex hash
+    const badHeaders = [
+      { hash: 'not-a-valid-hash', height: 1, previousHash: '0'.repeat(64) },
+    ]
+    handleHeaders(peer, { headers: badHeaders })
+    expect(score).toBeGreaterThan(0)
+  })
+
+  it('handleHeaders: rejects headers with missing previousHash (adds misbehavior)', () => {
+    let score = 0
+    const peer = {
+      handshakeComplete: true,
+      addMisbehavior: (n: number) => { score += n },
+      send: () => {},
+      id: 'test',
+      remoteCumulativeWork: 0n,
+      remoteHeight: 0,
+    }
+
+    const handleHeaders = (p2p as any).handleHeaders.bind(p2p)
+
+    // Header missing previousHash
+    const badHeaders = [
+      { hash: 'a'.repeat(64), height: 1 },
+    ]
+    handleHeaders(peer, { headers: badHeaders })
+    expect(score).toBeGreaterThan(0)
+  })
+
+  it('handleHeaders: rejects headers with non-finite height (adds misbehavior)', () => {
+    let score = 0
+    const peer = {
+      handshakeComplete: true,
+      addMisbehavior: (n: number) => { score += n },
+      send: () => {},
+      id: 'test',
+      remoteCumulativeWork: 0n,
+      remoteHeight: 0,
+    }
+
+    const handleHeaders = (p2p as any).handleHeaders.bind(p2p)
+
+    const badHeaders = [
+      { hash: 'a'.repeat(64), height: NaN, previousHash: '0'.repeat(64) },
+    ]
+    handleHeaders(peer, { headers: badHeaders })
+    expect(score).toBeGreaterThan(0)
+  })
+
+  it('handleHeaders: rejects headers with negative height (adds misbehavior)', () => {
+    let score = 0
+    const peer = {
+      handshakeComplete: true,
+      addMisbehavior: (n: number) => { score += n },
+      send: () => {},
+      id: 'test',
+      remoteCumulativeWork: 0n,
+      remoteHeight: 0,
+    }
+
+    const handleHeaders = (p2p as any).handleHeaders.bind(p2p)
+
+    const badHeaders = [
+      { hash: 'a'.repeat(64), height: -1, previousHash: '0'.repeat(64) },
+    ]
+    handleHeaders(peer, { headers: badHeaders })
+    expect(score).toBeGreaterThan(0)
+  })
+})

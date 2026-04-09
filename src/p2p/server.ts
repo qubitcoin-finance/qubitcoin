@@ -25,10 +25,9 @@ import {
   encodeMessage,
 } from './protocol.js'
 import type { Node } from '../node.js'
-import { sanitizeForStorage } from '../storage.js'
-import { hexToBytes, bytesToHex } from '../crypto.js'
+import { sanitizeForStorage, deserializeTransaction, deserializeBlock } from '../storage.js'
 import { type Block, computeBlockHash, hashMeetsTarget, blockWork } from '../block.js'
-import type { Transaction, TransactionInput, ClaimData } from '../transaction.js'
+import type { Transaction } from '../transaction.js'
 import { log } from '../log.js'
 
 const MAX_INBOUND = 25
@@ -79,6 +78,11 @@ function normalizeIP(ip: string): string {
   return ip.replace(/^::ffff:/i, '')
 }
 
+/** Validate a 64-character lowercase hex string (block hash or txid) */
+function isValidHash(s: unknown): s is string {
+  return typeof s === 'string' && s.length === 64 && /^[0-9a-f]{64}$/i.test(s)
+}
+
 /** Check if a peer matches a given host:port, with IPv6 normalization */
 function peerMatchesHost(peer: { id: string; address: string }, host: string, port: number): boolean {
   if (peer.id === `${host}:${port}`) return true
@@ -94,45 +98,6 @@ const ORPHAN_EXPIRY_MS = 10 * 60_000
 interface OrphanBlock {
   block: Block
   receivedAt: number
-}
-
-/** Known Uint8Array fields that need deserialization from P2P messages */
-const TX_INPUT_BINARY_FIELDS = ['publicKey', 'signature'] as const
-const CLAIM_DATA_BINARY_FIELDS = ['ecdsaPublicKey', 'ecdsaSignature', 'schnorrPublicKey', 'schnorrSignature', 'witnessScript', 'witnessSignatures'] as const
-
-function deserializeTransaction(raw: Record<string, unknown>): Transaction {
-  const tx = raw as unknown as Transaction
-  if (Array.isArray(raw.inputs)) {
-    tx.inputs = raw.inputs.map((inp: Record<string, unknown>) => {
-      const input = inp as unknown as TransactionInput
-      for (const field of TX_INPUT_BINARY_FIELDS) {
-        if (typeof inp[field] === 'string') {
-          (input as Record<string, unknown>)[field] = hexToBytes(inp[field] as string)
-        }
-      }
-      return input
-    })
-  }
-  if (raw.claimData && typeof raw.claimData === 'object') {
-    const cd = raw.claimData as Record<string, unknown>
-    for (const field of CLAIM_DATA_BINARY_FIELDS) {
-      if (typeof cd[field] === 'string') {
-        (cd as Record<string, unknown>)[field] = hexToBytes(cd[field] as string)
-      }
-    }
-    tx.claimData = cd as unknown as ClaimData
-  }
-  return tx
-}
-
-function deserializeBlock(raw: Record<string, unknown>): Block {
-  const block = raw as unknown as Block
-  if (Array.isArray(raw.transactions)) {
-    block.transactions = raw.transactions.map((t: Record<string, unknown>) =>
-      deserializeTransaction(t)
-    )
-  }
-  return block
 }
 
 export class P2PServer {
@@ -481,7 +446,12 @@ export class P2PServer {
       peer.remoteListenPort = payload.listenPort
     }
     if (payload.cumulativeWork) {
-      try { peer.remoteCumulativeWork = BigInt('0x' + payload.cumulativeWork) } catch { /* ignore */ }
+      try {
+        peer.remoteCumulativeWork = BigInt('0x' + payload.cumulativeWork)
+      } catch {
+        log.warn({ component: 'p2p', peer: peer.id }, 'Peer sent malformed cumulativeWork in version')
+        peer.addMisbehavior(5)
+      }
     }
 
     // If inbound, send our version back
@@ -721,6 +691,10 @@ export class P2PServer {
       peer.addMisbehavior(10)
       return
     }
+    if (!isValidHash(payload.hash)) {
+      peer.addMisbehavior(10)
+      return
+    }
 
     if (payload.type === 'block' && !this.seenBlocks.has(payload.hash)) {
       peer.send({
@@ -741,6 +715,10 @@ export class P2PServer {
       return
     }
     if (!payload || !payload.type || !payload.hash) {
+      peer.addMisbehavior(10)
+      return
+    }
+    if (!isValidHash(payload.hash)) {
       peer.addMisbehavior(10)
       return
     }
@@ -875,6 +853,32 @@ export class P2PServer {
       log.info({ component: 'p2p', peer: peer.id }, 'No headers from peer — no reorg needed')
       this.clearForkResolution()
       return
+    }
+
+    // Cap headers count to prevent processing oversized responses
+    if (payload.headers.length > MAX_HEADERS_RESPONSE) {
+      log.warn({ component: 'p2p', peer: peer.id, count: payload.headers.length }, 'Peer sent too many headers')
+      peer.addMisbehavior(10)
+      this.clearForkResolution()
+      return
+    }
+
+    // Validate each header has the required fields with correct types
+    for (const h of payload.headers) {
+      if (
+        !h ||
+        typeof h !== 'object' ||
+        !isValidHash(h.hash) ||
+        !isValidHash(h.previousHash) ||
+        typeof h.height !== 'number' ||
+        !Number.isFinite(h.height) ||
+        h.height < 0
+      ) {
+        log.warn({ component: 'p2p', peer: peer.id }, 'Peer sent malformed header in headers message')
+        peer.addMisbehavior(10)
+        this.clearForkResolution()
+        return
+      }
     }
 
     const chain = this.node.chain
@@ -1044,8 +1048,8 @@ export class P2PServer {
           }
         }
       }
-    } catch {
-      // Ignore corrupt ban list
+    } catch (err) {
+      log.debug({ component: 'p2p', err }, 'Could not load ban list — starting fresh')
     }
   }
 
@@ -1162,7 +1166,7 @@ export class P2PServer {
       if (!this.localMode) {
         const subnetCounts = new Map<string, number>()
         for (const peer of this.peers.values()) {
-          if (!(peer as any).inbound) {
+          if (!peer.inbound) {
             const subnet = getSubnet16(peer.address)
             subnetCounts.set(subnet, (subnetCounts.get(subnet) ?? 0) + 1)
           }
@@ -1279,8 +1283,8 @@ export class P2PServer {
       if (anchors.length > 0) {
         log.info({ component: 'p2p', count: anchors.length }, 'Loaded anchor peers')
       }
-    } catch {
-      // File doesn't exist or is invalid — start fresh
+    } catch (err) {
+      log.debug({ component: 'p2p', err }, 'Could not load anchors — starting fresh')
     }
   }
 
@@ -1292,8 +1296,8 @@ export class P2PServer {
       .slice(0, this.MAX_ANCHORS)
     try {
       fs.writeFileSync(this.anchorsPath, JSON.stringify(entries, null, 2) + '\n')
-    } catch {
-      // Data dir may not be writable — ignore
+    } catch (err) {
+      log.debug({ component: 'p2p', err }, 'Could not save anchors — data dir may not be writable')
     }
   }
 
