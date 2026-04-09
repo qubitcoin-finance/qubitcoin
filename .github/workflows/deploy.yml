@@ -1,0 +1,174 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE: qubitcoin-finance/qbtcd
+  WEBSITE_IMAGE: qubitcoin-finance/qbtcd-website
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Git Version
+        id: version
+        uses: codacy/git-version@2.7.1
+        with:
+          release-branch: main
+          minor-identifier: "feat:"
+          major-identifier: "breaking:"
+          prefix: "v"
+
+      - name: Extract metadata (backend)
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=
+            type=raw,value=${{ steps.version.outputs.version }}
+
+      - name: Extract metadata (website)
+        id: meta-website
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.WEBSITE_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=
+            type=raw,value=${{ steps.version.outputs.version }}
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push website
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.website
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta-website.outputs.tags }}
+          labels: ${{ steps.meta-website.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-and-push
+    runs-on: [self-hosted, linux]
+    permissions:
+      packages: read
+    concurrency:
+      group: deploy-qubitcoin
+      cancel-in-progress: false
+    env:
+      BACKEND_IMAGE: ghcr.io/qubitcoin-finance/qbtcd:main
+      WEBSITE_IMAGE: ghcr.io/qubitcoin-finance/qbtcd-website:main
+      BACKEND_CONTAINER: qbtc-miner
+      WEBSITE_CONTAINER: qbtc-website
+      DATA_DIR: /home/qubitcoin/qbtc-data
+      RPC_PORT: 3001
+      P2P_PORT: 6001
+      WEBSITE_PORT: 8080
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ----- Backend (Docker container) -----
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Pull latest backend image
+        run: docker pull $BACKEND_IMAGE
+
+      - name: Pull latest website image
+        run: docker pull $WEBSITE_IMAGE
+
+      # ----- Backend deployment (keep website running) -----
+      - name: Stop existing backend container
+        run: docker stop $BACKEND_CONTAINER && docker rm $BACKEND_CONTAINER || true
+
+      - name: Start new backend container
+        run: |
+          docker run -d \
+            --name $BACKEND_CONTAINER \
+            --restart unless-stopped \
+            -p $RPC_PORT:3001 \
+            -p $P2P_PORT:6001 \
+            -v $DATA_DIR:/data \
+            $BACKEND_IMAGE \
+            --mine --full --datadir /data
+
+      - name: Wait for backend to be healthy
+        run: |
+          echo "Waiting for backend to start..."
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:$RPC_PORT/api/v1/status; then
+              echo ""
+              echo "Backend is up after $((i * 10))s"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Backend failed to start within 300s"
+          docker logs --tail 50 $BACKEND_CONTAINER
+          exit 1
+
+      # ----- Website deployment (replace only after backend is healthy) -----
+      - name: Stop existing website container
+        run: docker stop $WEBSITE_CONTAINER && docker rm $WEBSITE_CONTAINER || true
+
+      - name: Start new website container
+        run: |
+          docker run -d \
+            --name $WEBSITE_CONTAINER \
+            --restart unless-stopped \
+            -p $WEBSITE_PORT:80 \
+            --network host \
+            $WEBSITE_IMAGE
+
+      - name: Wait for website to be healthy
+        run: |
+          echo "Waiting for website to start..."
+          for i in $(seq 1 10); do
+            if curl -sf http://127.0.0.1:$WEBSITE_PORT/ > /dev/null; then
+              echo ""
+              echo "Website is up"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Website failed to start"
+          docker logs --tail 20 $WEBSITE_CONTAINER
+          exit 1

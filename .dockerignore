@@ -1,7 +1,6 @@
 .git
 node_modules
 data/
-website/
 dist/
 ansible/
 docs/

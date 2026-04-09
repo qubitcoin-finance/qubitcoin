@@ -30,10 +30,7 @@
     "website:build": "cd website && pnpm run build",
     "website:screenshots": "cd website && pnpm run screenshots",
     "dev:tx": "node --loader ts-node/esm src/dev-tx.ts",
-    "ship": "./scripts/deploy.sh",
-    "deploy": "./scripts/deploy.sh",
-    "deploy:ui": "./scripts/deploy-ui.sh",
-    "deploy:backend": "./scripts/deploy-backend.sh",
+    "ship": "echo 'Deployment is automatic — push to main. See .github/workflows/docker.yml'",
     "generate-snapshot": "./scripts/generate-snapshot.sh",
     "snapshot:activate": "./scripts/activate-snapshot.sh",
     "q": "node --loader ts-node/esm scripts/q.ts"

@@ -111,15 +111,24 @@ pnpm run website:build  # Production build
 
 Visit `http://localhost:5173` (dev) or the deployed site at https://qubitcoin.finance.
 
-Deploying a Miner
------------------
+Deployment
+----------
 
-An Ansible role is included for automated deployment of mining nodes via Docker.
+### Automatic (CI/CD)
+
+Every push to `main` triggers automatic deployment:
+
+1. **Build** — GitHub Actions builds a multi-arch Docker image and pushes to GHCR (`ubuntu-latest`)
+2. **Deploy** — A self-hosted runner on goro pulls the image and restarts the container (no SSH required)
+3. **Health check** — The workflow verifies the node is up via `/api/v1/status`
+
+No manual steps needed — just push to `main`.
+
+### Manual (Ansible)
+
+For initial server setup or deploying additional mining nodes:
 
 ```bash
-# 1. Edit ansible/inventory.yml with your server IP and user
-# 2. Ensure Docker is installed on the target (or install it as root)
-# 3. Deploy
 cd ansible
 ansible-playbook -i inventory.yml deploy-miner.yml
 ```
@@ -127,6 +136,17 @@ ansible-playbook -i inventory.yml deploy-miner.yml
 The playbook pulls the Docker image from GHCR, mounts a persistent data volume, and starts mining with `--mine --full`. The node auto-downloads the BTC snapshot on first run.
 
 See `ansible/roles/qbtc-miner/defaults/main.yml` for configurable variables (`qbtc_image`, `qbtc_rpc_port`, `qbtc_p2p_port`, `qbtc_message`, etc.).
+
+### Runner Provisioning
+
+Self-hosted GHA runners are managed centrally from the `z` repo:
+
+```bash
+cd z/bootstrap/ansible
+GITHUB_RUNNER_TOKEN_QUBITCOIN=xxx ansible-playbook gha-runners.yml -i inventory-goro.yml --tags runners
+```
+
+Get the runner token from: [Settings → Actions → Runners → New self-hosted runner](https://github.com/qubitcoin-finance/qubitcoin/settings/actions/runners/new). Tokens expire after 1 hour.
 
 Development Process
 -------------------

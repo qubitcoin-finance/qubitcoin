@@ -1,6 +1,13 @@
 all:
   hosts:
-    qbtc-q:
-      ansible_host: YOUR_SERVER_IP
-      ansible_user: qbtc
-      qbtc_message: "mined by q"
+    goro:
+      ansible_host: 65.108.198.110
+      ansible_user: root
+      ansible_become: false
+
+  children:
+    miners:
+      hosts:
+        goro:
+          qbtc_user: qbtc
+          qbtc_message: "mined by q"

@@ -1,0 +1,7 @@
+# DEPRECATED — Runner provisioning has moved to z/bootstrap/ansible/gha-runners.yml
+#
+# Usage (from z repo):
+#   cd z/bootstrap/ansible
+#   GITHUB_RUNNER_TOKEN_QUBITCOIN=xxx ansible-playbook gha-runners.yml -i inventory-goro.yml --tags runners
+#
+# See z/bootstrap/ansible/inventory-goro.yml for the runner config.
