@@ -109,13 +109,17 @@ export function schnorrSign(msgHash: Uint8Array, secretKey: Uint8Array): Uint8Ar
   return schnorr.sign(msgHash, secretKey)
 }
 
-/** Verify a Schnorr (BIP340) signature */
+/** Verify a Schnorr (BIP340) signature. Returns false for structurally invalid inputs. */
 export function verifySchnorrSignature(
   signature: Uint8Array,
   msgHash: Uint8Array,
   publicKey: Uint8Array
 ): boolean {
-  return schnorr.verify(signature, msgHash, publicKey)
+  try {
+    return schnorr.verify(signature, msgHash, publicKey)
+  } catch {
+    return false
+  }
 }
 
 /** Get 32-byte x-only public key for Schnorr/Taproot */

@@ -11,6 +11,9 @@ import {
   HALVING_INTERVAL,
   COINBASE_TXID,
   CLAIM_TXID,
+  COINBASE_MATURITY,
+  CLAIM_MATURITY,
+  DUST_THRESHOLD,
   type Transaction,
   type UTXO,
 } from '../transaction.js'
@@ -36,6 +39,11 @@ describe('blockSubsidy', () => {
 
   it('reaches 0 after 26 halvings', () => {
     expect(blockSubsidy(HALVING_INTERVAL * 26)).toBe(0)
+  })
+
+  it('throws RangeError for negative height', () => {
+    expect(() => blockSubsidy(-1)).toThrow(RangeError)
+    expect(() => blockSubsidy(-210_000)).toThrow(RangeError)
   })
 })
 
@@ -423,5 +431,185 @@ describe('validateTransaction additional edge cases', () => {
     const result = validateTransaction(tx, utxoSet)
     expect(result.valid).toBe(false)
     expect(result.error).toContain('exceed inputs')
+  })
+
+  it('rejects output below dust threshold', () => {
+    const wallet = walletA
+    const utxoId = 'a'.repeat(64)
+    const utxoSet = new Map<string, UTXO>()
+    utxoSet.set(utxoKey(utxoId, 0), {
+      txId: utxoId,
+      outputIndex: 0,
+      address: wallet.address,
+      amount: 10_000,
+    })
+
+    // createTransaction does not enforce dust threshold — only validateTransaction does
+    const tx = createTransaction(
+      wallet,
+      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 10_000 }],
+      [{ address: 'b'.repeat(64), amount: 5000 }],
+      1
+    )
+    // Force output below dust threshold (DUST_THRESHOLD = 546)
+    tx.outputs[0].amount = DUST_THRESHOLD - 1
+
+    const result = validateTransaction(tx, utxoSet)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('dust threshold')
+  })
+
+  it('accepts output exactly at dust threshold', () => {
+    const wallet = walletA
+    const utxoId = 'a'.repeat(64)
+    const utxoSet = new Map<string, UTXO>()
+    utxoSet.set(utxoKey(utxoId, 0), {
+      txId: utxoId,
+      outputIndex: 0,
+      address: wallet.address,
+      amount: 10_000,
+    })
+
+    const tx = createTransaction(
+      wallet,
+      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 10_000 }],
+      [{ address: 'b'.repeat(64), amount: DUST_THRESHOLD }],
+      10_000 - DUST_THRESHOLD
+    )
+
+    const result = validateTransaction(tx, utxoSet)
+    expect(result.valid).toBe(true)
+  })
+
+  it('rejects spending immature coinbase UTXO', () => {
+    const wallet = walletA
+    const utxoId = 'a'.repeat(64)
+    const utxoSet = new Map<string, UTXO>()
+    utxoSet.set(utxoKey(utxoId, 0), {
+      txId: utxoId,
+      outputIndex: 0,
+      address: wallet.address,
+      amount: 10_000_000,
+      isCoinbase: true,
+      height: 0, // mined at height 0
+    })
+
+    const tx = createTransaction(
+      wallet,
+      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 10_000_000 }],
+      [{ address: 'b'.repeat(64), amount: 5_000_000 }],
+      1000
+    )
+
+    // Attempt to spend at height 50 — coinbase requires COINBASE_MATURITY (100) blocks
+    const currentHeight = COINBASE_MATURITY - 1
+    const result = validateTransaction(tx, utxoSet, currentHeight)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('not mature')
+    expect(result.error).toContain(`need ${COINBASE_MATURITY}`)
+  })
+
+  it('accepts spending coinbase UTXO once mature', () => {
+    const wallet = walletA
+    const utxoId = 'a'.repeat(64)
+    const utxoSet = new Map<string, UTXO>()
+    utxoSet.set(utxoKey(utxoId, 0), {
+      txId: utxoId,
+      outputIndex: 0,
+      address: wallet.address,
+      amount: 10_000_000,
+      isCoinbase: true,
+      height: 0,
+    })
+
+    const tx = createTransaction(
+      wallet,
+      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 10_000_000 }],
+      [{ address: 'b'.repeat(64), amount: 5_000_000 }],
+      1000
+    )
+
+    // At exactly COINBASE_MATURITY blocks later, spending should be allowed
+    const result = validateTransaction(tx, utxoSet, COINBASE_MATURITY)
+    expect(result.valid).toBe(true)
+  })
+
+  it('rejects spending immature claim UTXO', () => {
+    const wallet = walletA
+    const utxoId = 'a'.repeat(64)
+    const utxoSet = new Map<string, UTXO>()
+    utxoSet.set(utxoKey(utxoId, 0), {
+      txId: utxoId,
+      outputIndex: 0,
+      address: wallet.address,
+      amount: 10_000_000,
+      isClaim: true,
+      height: 5, // claim mined at height 5
+    })
+
+    const tx = createTransaction(
+      wallet,
+      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 10_000_000 }],
+      [{ address: 'b'.repeat(64), amount: 5_000_000 }],
+      1000
+    )
+
+    // Attempt to spend at height 5 + 9 = 14 — claim requires CLAIM_MATURITY (10) blocks
+    const currentHeight = 5 + CLAIM_MATURITY - 1
+    const result = validateTransaction(tx, utxoSet, currentHeight)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('not mature')
+    expect(result.error).toContain(`need ${CLAIM_MATURITY}`)
+  })
+
+  it('accepts spending claim UTXO once mature', () => {
+    const wallet = walletA
+    const utxoId = 'a'.repeat(64)
+    const claimHeight = 5
+    const utxoSet = new Map<string, UTXO>()
+    utxoSet.set(utxoKey(utxoId, 0), {
+      txId: utxoId,
+      outputIndex: 0,
+      address: wallet.address,
+      amount: 10_000_000,
+      isClaim: true,
+      height: claimHeight,
+    })
+
+    const tx = createTransaction(
+      wallet,
+      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 10_000_000 }],
+      [{ address: 'b'.repeat(64), amount: 5_000_000 }],
+      1000
+    )
+
+    // At exactly CLAIM_MATURITY blocks after the claim, spending should be allowed
+    const result = validateTransaction(tx, utxoSet, claimHeight + CLAIM_MATURITY)
+    expect(result.valid).toBe(true)
+  })
+
+  it('skips maturity check when currentHeight is undefined', () => {
+    const wallet = walletA
+    const utxoId = 'a'.repeat(64)
+    const utxoSet = new Map<string, UTXO>()
+    utxoSet.set(utxoKey(utxoId, 0), {
+      txId: utxoId,
+      outputIndex: 0,
+      address: wallet.address,
+      amount: 10_000_000,
+      isCoinbase: true,
+      height: 0,
+    })
+
+    const tx = createTransaction(
+      wallet,
+      [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 10_000_000 }],
+      [{ address: 'b'.repeat(64), amount: 5_000_000 }],
+      1000
+    )
+
+    // No currentHeight → maturity not enforced (used in some internal paths)
+    const result = validateTransaction(tx, utxoSet)
+    expect(result.valid).toBe(true)
   })
 })

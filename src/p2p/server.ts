@@ -29,6 +29,7 @@ import { sanitizeForStorage, deserializeTransaction, deserializeBlock } from '..
 import { type Block, computeBlockHash, hashMeetsTarget, blockWork } from '../block.js'
 import type { Transaction } from '../transaction.js'
 import { log } from '../log.js'
+import { isValidHash } from '../utils.js'
 
 const MAX_INBOUND = 25
 const MAX_OUTBOUND = 25
@@ -406,6 +407,42 @@ export class P2PServer {
       return
     }
 
+    // Validate height is a non-negative finite integer
+    if (!Number.isFinite(payload.height) || payload.height < 0 || !Number.isInteger(payload.height)) {
+      peer.addMisbehavior(25)
+      return
+    }
+
+    // Validate genesis hash format (must be 64-char hex)
+    if (!isValidHash(payload.genesisHash)) {
+      peer.addMisbehavior(25)
+      return
+    }
+
+    // Validate version is a positive integer
+    if (typeof payload.version !== 'number' || !Number.isInteger(payload.version) || payload.version < 1) {
+      peer.addMisbehavior(25)
+      return
+    }
+
+    // Cap user agent length to prevent memory abuse
+    if (payload.userAgent !== undefined && (typeof payload.userAgent !== 'string' || payload.userAgent.length > 256)) {
+      peer.addMisbehavior(10)
+      return
+    }
+
+    // Validate optional listenPort
+    if (payload.listenPort !== undefined && (typeof payload.listenPort !== 'number' || !Number.isInteger(payload.listenPort) || payload.listenPort < 0 || payload.listenPort > 65535)) {
+      peer.addMisbehavior(10)
+      return
+    }
+
+    // Validate optional cumulativeWork is a hex string (reasonable length)
+    if (payload.cumulativeWork !== undefined && (typeof payload.cumulativeWork !== 'string' || payload.cumulativeWork.length > 128 || !/^[0-9a-fA-F]+$/.test(payload.cumulativeWork))) {
+      peer.addMisbehavior(10)
+      return
+    }
+
     // Protocol version check: reject peers running incompatible versions
     if (payload.version !== PROTOCOL_VERSION) {
       peer.send({
@@ -526,7 +563,7 @@ export class P2PServer {
       peer.addMisbehavior(10)
       return
     }
-    if (!payload || typeof payload.fromHeight !== 'number') {
+    if (!payload || typeof payload.fromHeight !== 'number' || !Number.isFinite(payload.fromHeight) || !Number.isInteger(payload.fromHeight)) {
       peer.addMisbehavior(10)
       return
     }
@@ -557,6 +594,13 @@ export class P2PServer {
     }
     if (!payload || !Array.isArray(payload.blocks)) {
       peer.addMisbehavior(10)
+      return
+    }
+
+    // Reject oversized block batches — sender must respect IBD_BATCH_SIZE
+    if (payload.blocks.length > IBD_BATCH_SIZE) {
+      log.warn({ component: 'p2p', peer: peer.id, count: payload.blocks.length, max: IBD_BATCH_SIZE }, 'Oversized blocks message — misbehaving peer')
+      peer.addMisbehavior(25)
       return
     }
 
@@ -653,7 +697,17 @@ export class P2PServer {
       return
     }
 
-    const tx = deserializeTransaction(payload.tx as Record<string, unknown>)
+    let tx: Transaction
+    try {
+      tx = deserializeTransaction(payload.tx as Record<string, unknown>)
+    } catch {
+      peer.addMisbehavior(10)
+      return
+    }
+    if (!isValidHash(tx.id)) {
+      peer.addMisbehavior(10)
+      return
+    }
     if (this.seenTxs.has(tx.id)) return
     if (this.rejectedTxs.has(tx.id)) return
 
@@ -677,7 +731,7 @@ export class P2PServer {
       peer.addMisbehavior(10)
       return
     }
-    if (!payload || !payload.type || !payload.hash) {
+    if (!payload || (payload.type !== 'block' && payload.type !== 'tx') || !isValidHash(payload.hash)) {
       peer.addMisbehavior(10)
       return
     }
@@ -700,7 +754,7 @@ export class P2PServer {
       peer.addMisbehavior(10)
       return
     }
-    if (!payload || !payload.type || !payload.hash) {
+    if (!payload || (payload.type !== 'block' && payload.type !== 'tx') || !isValidHash(payload.hash)) {
       peer.addMisbehavior(10)
       return
     }
@@ -792,6 +846,14 @@ export class P2PServer {
     const MAX_LOCATOR_HASHES = 101
     const locator = payload.locatorHashes.slice(0, MAX_LOCATOR_HASHES)
 
+    // Validate all locator hashes are proper 64-char hex strings
+    for (const hash of locator) {
+      if (!isValidHash(hash)) {
+        peer.addMisbehavior(10)
+        return
+      }
+    }
+
     const chain = this.node.chain
 
     // Find the first locator hash that matches a block in our chain
@@ -835,6 +897,20 @@ export class P2PServer {
       log.info({ component: 'p2p', peer: peer.id }, 'No headers from peer — no reorg needed')
       this.clearForkResolution()
       return
+    }
+
+    // Cap headers response length and validate each entry
+    if (payload.headers.length > MAX_HEADERS_RESPONSE) {
+      peer.addMisbehavior(25)
+      this.clearForkResolution()
+      return
+    }
+    for (const h of payload.headers) {
+      if (!h || !isValidHash(h.hash) || typeof h.height !== 'number' || !Number.isInteger(h.height) || h.height < 0 || !isValidHash(h.previousHash)) {
+        peer.addMisbehavior(25)
+        this.clearForkResolution()
+        return
+      }
     }
 
     const chain = this.node.chain
@@ -1052,7 +1128,12 @@ export class P2PServer {
 
     const newAddresses: Array<{ host: string; port: number; lastSeen?: number }> = []
     for (const entry of payload.addresses) {
-      if (!entry.host || typeof entry.port !== 'number' || entry.port <= 0 || entry.port > 65535) continue
+      // Validate host: must be a non-empty string with reasonable length (IPv6 max ~45 chars)
+      if (typeof entry.host !== 'string' || entry.host.length === 0 || entry.host.length > 45) continue
+      // Validate port: must be an integer in valid range
+      if (typeof entry.port !== 'number' || !Number.isInteger(entry.port) || entry.port <= 0 || entry.port > 65535) continue
+      // Validate lastSeen: must be a number if present
+      if (entry.lastSeen !== undefined && (typeof entry.lastSeen !== 'number' || !Number.isFinite(entry.lastSeen))) continue
       const key = `${entry.host}:${entry.port}`
       const wasNew = !this.knownAddresses.has(key)
       this.addKnownAddress(entry.host, entry.port, entry.lastSeen)

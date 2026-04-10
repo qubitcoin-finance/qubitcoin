@@ -4,6 +4,8 @@ import { startRpcServer } from '../rpc.js'
 import { walletA, walletB } from './fixtures.js'
 import { createMockSnapshot } from '../snapshot.js'
 import { createClaimTransaction } from '../claim.js'
+import { createTransaction } from '../transaction.js'
+import { sanitizeForStorage } from '../storage.js'
 import type { AddressInfo } from 'node:net'
 import type { Server } from 'node:http'
 
@@ -89,9 +91,11 @@ describe('RPC endpoints', () => {
     expect(res.status).toBe(404)
   })
 
-  it('GET /block-by-height/:h returns 404 for NaN height', async () => {
+  it('GET /block-by-height/:h returns 400 for non-integer height', async () => {
     const res = await fetch(`${baseUrl}/api/v1/block-by-height/abc`)
-    expect(res.status).toBe(404)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('non-negative integer')
   })
 
   it('GET /tx/:txid returns 404 for unknown txid', async () => {
@@ -320,5 +324,198 @@ describe('RPC transaction endpoints', () => {
     const body = await res.json()
     expect(Array.isArray(body)).toBe(true)
     expect(body.length).toBeGreaterThan(0)
+  })
+})
+
+describe('RPC edge cases', () => {
+  let node: Node
+  let server: Server
+  let baseUrl: string
+
+  beforeAll(() => {
+    node = new Node('rpc-edge-test')
+    node.chain.difficulty = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+
+    // Mine enough blocks to test pagination cap (>100)
+    for (let i = 0; i < 3; i++) {
+      node.mine(walletA.address, false)
+    }
+
+    const app = startRpcServer(node, 0)
+    server = app.listen(0)
+    const addr = server.address() as AddressInfo
+    baseUrl = `http://127.0.0.1:${addr.port}`
+  })
+
+  afterAll(() => {
+    server.close()
+  })
+
+  // GET /blocks edge cases
+  it('GET /blocks?count=0 returns empty array', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/blocks?count=0`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(Array.isArray(body)).toBe(true)
+    expect(body.length).toBe(0)
+  })
+
+  it('GET /blocks?count=-1 returns 400', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/blocks?count=-1`)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('Invalid count parameter')
+  })
+
+  it('GET /blocks?count=200 caps at 100', async () => {
+    // Mine additional blocks to go over 100 total (start from 4, need ~100 more)
+    const extraNode = new Node('rpc-cap-test')
+    // Reset difficulty before each mine to prevent the every-10-block adjustment
+    // from ratcheting the target to infeasible levels when blocks have ~0ms timestamps.
+    const EASY_TARGET = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+    for (let i = 0; i < 105; i++) {
+      extraNode.chain.difficulty = EASY_TARGET
+      extraNode.mine(walletA.address, false)
+    }
+    const extraApp = startRpcServer(extraNode, 0)
+    const extraServer = extraApp.listen(0)
+    const extraAddr = extraServer.address() as AddressInfo
+    const extraUrl = `http://127.0.0.1:${extraAddr.port}`
+
+    const res = await fetch(`${extraUrl}/api/v1/blocks?count=200`)
+    extraServer.close()
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(Array.isArray(body)).toBe(true)
+    expect(body.length).toBe(100)
+  })
+
+  it('GET /blocks without count defaults to 10', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/blocks`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(Array.isArray(body)).toBe(true)
+    // 3 mined + 1 genesis = 4 blocks total, all returned when default (10) > chain length
+    expect(body.length).toBe(4)
+  })
+
+  // GET /block-by-height edge cases
+  it('GET /block-by-height/-1 returns 400', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/block-by-height/-1`)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('non-negative integer')
+  })
+
+  it('GET /block-by-height/0 returns genesis block', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/block-by-height/0`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.height).toBe(0)
+  })
+
+  it('GET /block-by-height/1abc returns 400 (not block 1)', async () => {
+    // parseInt("1abc", 10) === 1, so without the regex guard this would
+    // silently return block 1 instead of rejecting the malformed request.
+    const res = await fetch(`${baseUrl}/api/v1/block-by-height/1abc`)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('non-negative integer')
+  })
+
+  it('GET /blocks?count=100abc returns 400 (not 100 blocks)', async () => {
+    // parseInt("100abc", 10) === 100, so without the regex guard this would
+    // silently use 100 instead of rejecting the malformed parameter.
+    const res = await fetch(`${baseUrl}/api/v1/blocks?count=100abc`)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('Invalid count parameter')
+  })
+
+  // GET /mempool/txs limit edge cases
+  it('GET /mempool/txs?limit=0 returns empty array', async () => {
+    const { snapshot } = createMockSnapshot()
+    const limitNode = new Node('rpc-limit-test', snapshot)
+    limitNode.chain.difficulty = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+    limitNode.mine(walletA.address, false)
+    // Add a claim tx to mempool
+    const { holders } = createMockSnapshot()
+    const genesisHash = limitNode.chain.blocks[0].hash
+    const claimTx = createClaimTransaction(
+      holders[0].secretKey,
+      holders[0].publicKey,
+      snapshot.entries[0],
+      walletB,
+      snapshot.btcBlockHash,
+      genesisHash
+    )
+    limitNode.receiveTransaction(claimTx)
+
+    const limitApp = startRpcServer(limitNode, 0)
+    const limitServer = limitApp.listen(0)
+    const limitAddr = limitServer.address() as AddressInfo
+    const limitUrl = `http://127.0.0.1:${limitAddr.port}`
+
+    const res = await fetch(`${limitUrl}/api/v1/mempool/txs?limit=0`)
+    limitServer.close()
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(Array.isArray(body)).toBe(true)
+    expect(body.length).toBe(0)
+  })
+
+  it('GET /mempool/txs?limit=2000 caps at 1000', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/mempool/txs?limit=2000`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(Array.isArray(body)).toBe(true)
+    // mempool is empty so 0 results, but we can verify no crash
+    expect(body.length).toBe(0)
+  })
+
+  it('GET /mempool/txs?limit=abc defaults to 1000 cap', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/mempool/txs?limit=abc`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(Array.isArray(body)).toBe(true)
+  })
+
+  // POST /tx edge cases
+  it('POST /tx with valid-structure transaction but non-existent UTXOs returns 400', async () => {
+    // Build a transaction spending a UTXO that does not exist in the chain
+    const fakeTx = createTransaction(
+      walletA,
+      [{ txId: 'dead'.repeat(16), outputIndex: 0, address: walletA.address, amount: 1_000_000 }],
+      [{ address: walletB.address, amount: 900_000 }],
+      100_000
+    )
+    const body = sanitizeForStorage(fakeTx)
+
+    const res = await fetch(`${baseUrl}/api/v1/tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    expect(res.status).toBe(400)
+    const json = await res.json()
+    expect(typeof json.error).toBe('string')
+  })
+
+  it('POST /tx with non-object body returns 400', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify('not-an-object'),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('POST /tx with array body returns 400', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify([]),
+    })
+    expect(res.status).toBe(400)
   })
 })

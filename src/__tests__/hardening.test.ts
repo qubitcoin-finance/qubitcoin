@@ -839,8 +839,8 @@ describe('P2P message error handling', () => {
 
       await new Promise(r => setTimeout(r, 300))
 
-      // Unknown type should add +10 misbehavior
-      expect(peerOnNode1.getMisbehaviorScore()).toBe(scoreBefore + 10)
+      // Unknown type is rejected during decode (malformed framing), adds +25 misbehavior
+      expect(peerOnNode1.getMisbehaviorScore()).toBe(scoreBefore + 25)
     } finally {
       await p2p1.stop()
       await p2p2.stop()
@@ -2117,5 +2117,185 @@ describe('Cumulative work threshold (1.5x)', () => {
     // A peer claiming 1600 work would pass old check but fail new
     expect(1600n > oldThreshold).toBe(false)  // old: not banned
     expect(1600n > newThreshold).toBe(true)   // new: banned
+  })
+})
+
+describe('P2P input validation hardening', () => {
+  let tmpDir1: string
+  let tmpDir2: string
+
+  beforeEach(() => {
+    tmpDir1 = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-val-1-'))
+    tmpDir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-val-2-'))
+  })
+
+  afterEach(() => {
+    fs.rmSync(tmpDir1, { recursive: true, force: true })
+    fs.rmSync(tmpDir2, { recursive: true, force: true })
+  })
+
+  async function makePair() {
+    const node1 = new Node('alice', undefined, new FileBlockStorage(tmpDir1))
+    const node2 = new Node('bob', undefined, new FileBlockStorage(tmpDir2))
+    node1.chain.difficulty = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+    node2.chain.difficulty = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+    const p2p1 = new P2PServer(node1, 0, tmpDir1)
+    const p2p2 = new P2PServer(node2, 0, tmpDir2)
+    await p2p1.start()
+    await p2p2.start()
+    const addr = (p2p1 as any).server.address()
+    const port = typeof addr === 'object' ? addr.port : 0
+    p2p2.connectOutbound('127.0.0.1', port)
+    await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
+    const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0] as Peer
+    const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0] as Peer
+    return { p2p1, p2p2, peerOnNode1, peerOnNode2 }
+  }
+
+  it('should penalize peer sending oversized blocks batch (>IBD_BATCH_SIZE)', async () => {
+    const { p2p1, p2p2, peerOnNode1, peerOnNode2 } = await makePair()
+    try {
+      const scoreBefore = peerOnNode1.getMisbehaviorScore()
+
+      // Send 201 blocks (IBD_BATCH_SIZE is 200) — should trigger misbehavior on receiver
+      // Use empty block stubs; deserialization won't be reached because count check is first
+      const tooManyBlocks = Array.from({ length: 201 }, () => ({}))
+      peerOnNode2.send({ type: 'blocks', payload: { blocks: tooManyBlocks } })
+
+      await new Promise(r => setTimeout(r, 300))
+
+      const scoreAfter = peerOnNode1.getMisbehaviorScore()
+      expect(scoreAfter).toBeGreaterThan(scoreBefore)
+    } finally {
+      await p2p1.stop()
+      await p2p2.stop()
+    }
+  })
+
+  it('should penalize peer sending inv with malformed hash', async () => {
+    const { p2p1, p2p2, peerOnNode1, peerOnNode2 } = await makePair()
+    try {
+      const scoreBefore = peerOnNode1.getMisbehaviorScore()
+
+      // Send inv with a hash that is not 64-char hex
+      peerOnNode2.send({ type: 'inv', payload: { type: 'block', hash: 'not-a-valid-hash' } })
+
+      await new Promise(r => setTimeout(r, 300))
+
+      const scoreAfter = peerOnNode1.getMisbehaviorScore()
+      expect(scoreAfter).toBeGreaterThan(scoreBefore)
+    } finally {
+      await p2p1.stop()
+      await p2p2.stop()
+    }
+  })
+
+  it('should penalize peer sending getdata with malformed hash', async () => {
+    const { p2p1, p2p2, peerOnNode1, peerOnNode2 } = await makePair()
+    try {
+      const scoreBefore = peerOnNode1.getMisbehaviorScore()
+
+      // Send getdata with an excessively long hash string
+      peerOnNode2.send({ type: 'getdata', payload: { type: 'tx', hash: 'z'.repeat(64) } })
+
+      await new Promise(r => setTimeout(r, 300))
+
+      const scoreAfter = peerOnNode1.getMisbehaviorScore()
+      expect(scoreAfter).toBeGreaterThan(scoreBefore)
+    } finally {
+      await p2p1.stop()
+      await p2p2.stop()
+    }
+  })
+
+  it('should penalize peer sending getblocks with NaN fromHeight', async () => {
+    const { p2p1, p2p2, peerOnNode1, peerOnNode2 } = await makePair()
+    try {
+      const scoreBefore = peerOnNode1.getMisbehaviorScore()
+
+      // NaN passes typeof check but not isFinite — receiver should reject
+      peerOnNode2.send({ type: 'getblocks', payload: { fromHeight: NaN } })
+
+      await new Promise(r => setTimeout(r, 300))
+
+      const scoreAfter = peerOnNode1.getMisbehaviorScore()
+      expect(scoreAfter).toBeGreaterThan(scoreBefore)
+    } finally {
+      await p2p1.stop()
+      await p2p2.stop()
+    }
+  })
+
+  it('should accept valid inv with well-formed 64-char hex hash', async () => {
+    const { p2p1, p2p2, peerOnNode1, peerOnNode2 } = await makePair()
+    try {
+      const scoreBefore = peerOnNode1.getMisbehaviorScore()
+
+      // Valid hash — should not trigger misbehavior (unknown hash just results in getdata sent back)
+      peerOnNode2.send({ type: 'inv', payload: { type: 'block', hash: 'a'.repeat(64) } })
+
+      await new Promise(r => setTimeout(r, 300))
+
+      const scoreAfter = peerOnNode1.getMisbehaviorScore()
+      expect(scoreAfter).toBe(scoreBefore) // no misbehavior for valid format
+    } finally {
+      await p2p1.stop()
+      await p2p2.stop()
+    }
+  })
+
+  it('should penalize peer sending tx with missing id field', async () => {
+    const { p2p1, p2p2, peerOnNode1, peerOnNode2 } = await makePair()
+    try {
+      const scoreBefore = peerOnNode1.getMisbehaviorScore()
+
+      // tx payload with no id field — tx.id will be undefined, failing isValidHash check
+      peerOnNode2.send({
+        type: 'tx',
+        payload: {
+          tx: {
+            inputs: [{ txId: 'a'.repeat(64), outputIndex: 0, publicKey: 'aabb', signature: 'ccdd' }],
+            outputs: [{ address: 'b'.repeat(64), amount: 100 }],
+            timestamp: Date.now(),
+          },
+        },
+      })
+
+      await new Promise(r => setTimeout(r, 300))
+
+      const scoreAfter = peerOnNode1.getMisbehaviorScore()
+      expect(scoreAfter).toBeGreaterThan(scoreBefore)
+    } finally {
+      await p2p1.stop()
+      await p2p2.stop()
+    }
+  })
+
+  it('should penalize peer sending tx with malformed id (not 64-char hex)', async () => {
+    const { p2p1, p2p2, peerOnNode1, peerOnNode2 } = await makePair()
+    try {
+      const scoreBefore = peerOnNode1.getMisbehaviorScore()
+
+      // tx payload where id is a non-hex string — fails isValidHash check
+      peerOnNode2.send({
+        type: 'tx',
+        payload: {
+          tx: {
+            id: 'not-a-valid-hash',
+            inputs: [{ txId: 'a'.repeat(64), outputIndex: 0, publicKey: 'aabb', signature: 'ccdd' }],
+            outputs: [{ address: 'b'.repeat(64), amount: 100 }],
+            timestamp: Date.now(),
+          },
+        },
+      })
+
+      await new Promise(r => setTimeout(r, 300))
+
+      const scoreAfter = peerOnNode1.getMisbehaviorScore()
+      expect(scoreAfter).toBeGreaterThan(scoreBefore)
+    } finally {
+      await p2p1.stop()
+      await p2p2.stop()
+    }
   })
 })

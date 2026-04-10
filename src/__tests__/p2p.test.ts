@@ -72,6 +72,34 @@ describe('protocol encoding', () => {
 
     expect(() => decodeMessages(buf)).toThrow('exceeds max')
   })
+
+  it('should reject zero-length messages', () => {
+    const buf = Buffer.alloc(4)
+    buf.writeUInt32BE(0, 0)
+
+    expect(() => decodeMessages(buf)).toThrow('Empty message')
+  })
+
+  it('should reject unknown message types', () => {
+    // Manually create a frame with an unknown type
+    const json = JSON.stringify({ type: 'faketype', payload: {} })
+    const body = Buffer.from(json, 'utf-8')
+    const frame = Buffer.alloc(4 + body.length)
+    frame.writeUInt32BE(body.length, 0)
+    body.copy(frame, 4)
+
+    expect(() => decodeMessages(frame)).toThrow('Invalid message type')
+  })
+
+  it('should reject messages without a type field', () => {
+    const json = JSON.stringify({ payload: 'hello' })
+    const body = Buffer.from(json, 'utf-8')
+    const frame = Buffer.alloc(4 + body.length)
+    frame.writeUInt32BE(body.length, 0)
+    body.copy(frame, 4)
+
+    expect(() => decodeMessages(frame)).toThrow('missing type')
+  })
 })
 
 describe('P2P server integration', () => {

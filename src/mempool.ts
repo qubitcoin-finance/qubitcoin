@@ -101,7 +101,9 @@ export class Mempool {
         }
       }
 
-      // Claims always accepted — evict a non-claim tx if needed
+      // Claims are prioritized — evict the lowest-fee-density non-claim tx if needed.
+      // If the pool is full of only claims (eviction returns false), accept the claim
+      // anyway since the count cap (MAX_CLAIM_COUNT) bounds total claim memory.
       if (this.totalBytes + txSize > MAX_MEMPOOL_BYTES) {
         this.evictLowest(utxoSet, txSize)
       }

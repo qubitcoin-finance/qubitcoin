@@ -1,3 +1,8 @@
+/** Validate that a value is a 64-character lowercase hex string (SHA-256 hash) */
+export function isValidHash(value: unknown): value is string {
+  return typeof value === 'string' && /^[0-9a-f]{64}$/.test(value)
+}
+
 export function hexEncode(bytes: Uint8Array): string {
   return Array.from(bytes)
     .map((b) => b.toString(16).padStart(2, '0'))

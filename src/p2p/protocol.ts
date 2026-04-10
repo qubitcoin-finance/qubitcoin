@@ -24,6 +24,18 @@ export type MessageType =
   | 'addr'
   | 'getaddr'
 
+/** Set of all valid message types for O(1) validation */
+const VALID_MESSAGE_TYPES: ReadonlySet<string> = new Set<MessageType>([
+  'version', 'verack', 'reject', 'getblocks', 'blocks', 'tx',
+  'inv', 'getdata', 'getheaders', 'headers', 'ping', 'pong',
+  'addr', 'getaddr',
+])
+
+/** Check if a string is a valid message type */
+export function isValidMessageType(type: string): type is MessageType {
+  return VALID_MESSAGE_TYPES.has(type)
+}
+
 export interface VersionPayload {
   version: number
   height: number
@@ -102,6 +114,10 @@ export function decodeMessages(
   while (offset + 4 <= buffer.length) {
     const length = buffer.readUInt32BE(offset)
 
+    if (length === 0) {
+      throw new Error('Empty message (zero length)')
+    }
+
     if (length > MAX_MESSAGE_SIZE) {
       throw new Error(`Message size ${length} exceeds max ${MAX_MESSAGE_SIZE}`)
     }
@@ -115,6 +131,10 @@ export function decodeMessages(
 
     if (!msg.type || typeof msg.type !== 'string') {
       throw new Error('Invalid message: missing type')
+    }
+
+    if (!isValidMessageType(msg.type)) {
+      throw new Error(`Invalid message type: ${msg.type}`)
     }
 
     messages.push(msg)

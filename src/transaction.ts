@@ -82,6 +82,7 @@ export const HALVING_INTERVAL = 210_000
 const INITIAL_SUBSIDY = 312_500_000
 
 export function blockSubsidy(height: number): number {
+  if (height < 0) throw new RangeError(`blockSubsidy: height must be non-negative, got ${height}`)
   const halvings = Math.floor(height / HALVING_INTERVAL)
   if (halvings >= 26) return 0
   return Math.floor(INITIAL_SUBSIDY / Math.pow(2, halvings))

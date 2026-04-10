@@ -8,6 +8,7 @@ import { type Transaction, isClaimTransaction, COINBASE_TXID } from './transacti
 import { deserializeTransaction } from './storage.js';
 import { DIFFICULTY_ADJUSTMENT_INTERVAL, STARTING_DIFFICULTY } from './block.js';
 import { log } from './log.js';
+import { isValidHash } from './utils.js';
 import type { Request, Response, NextFunction, Express } from 'express';
 
 /** Maximum JSON body size (1 MB) */
@@ -75,11 +76,6 @@ function isValidAddress(address: string): boolean {
   return typeof address === 'string' && address.length === 64 && /^[0-9a-f]{64}$/i.test(address);
 }
 
-/** Validate that a hash is a valid 64-character hex string (block hash or txid) */
-function isValidHash(hash: string): boolean {
-  return typeof hash === 'string' && hash.length === 64 && /^[0-9a-f]{64}$/i.test(hash);
-}
-
 export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, bindAddress: string = '127.0.0.1'): Express {
   const app = express();
   app.set('trust proxy', 1);
@@ -103,11 +99,12 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
 
   // Endpoint to get a block by its hash
   app.get('/api/v1/block/:hash', (req, res) => {
-    if (!isValidHash(req.params.hash)) {
+    const hash = req.params.hash.toLowerCase();
+    if (!isValidHash(hash)) {
       res.status(400).json({ error: 'Invalid block hash format: must be 64-character hex string' });
       return;
     }
-    const block = node.chain.blocks.find(b => b.hash === req.params.hash);
+    const block = node.chain.blocks.find(b => b.hash === hash);
     if (block) {
       res.json(sanitize(block));
     } else {
@@ -117,8 +114,12 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
 
   // Endpoint to get a block by height
   app.get('/api/v1/block-by-height/:height', (req, res) => {
+    if (!/^\d+$/.test(req.params.height)) {
+      res.status(400).json({ error: 'Invalid height: must be a non-negative integer' });
+      return;
+    }
     const height = parseInt(req.params.height, 10);
-    if (isNaN(height) || height < 0 || height >= node.chain.blocks.length) {
+    if (height >= node.chain.blocks.length) {
       res.status(404).json({ error: 'Block not found' });
       return;
     }
@@ -127,11 +128,11 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
 
   // Endpoint to get the latest blocks
   app.get('/api/v1/blocks', (req, res) => {
-    const parsed = req.query.count ? parseInt(req.query.count as string, 10) : 10;
-    if (isNaN(parsed) || parsed < 0) {
+    if (req.query.count !== undefined && !/^\d+$/.test(req.query.count as string)) {
       res.status(400).json({ error: 'Invalid count parameter' });
       return;
     }
+    const parsed = req.query.count ? parseInt(req.query.count as string, 10) : 10;
     const count = Math.min(parsed, 100);
     const blocks = [...node.chain.blocks].reverse().slice(0, count);
     res.json(sanitize(blocks));
@@ -139,18 +140,19 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
 
   // Endpoint to get a transaction by its ID
   app.get('/api/v1/tx/:txid', (req, res) => {
-    if (!isValidHash(req.params.txid)) {
+    const txid = req.params.txid.toLowerCase();
+    if (!isValidHash(txid)) {
       res.status(400).json({ error: 'Invalid transaction ID format: must be 64-character hex string' });
       return;
     }
-    const tx = node.mempool.getTransaction(req.params.txid);
+    const tx = node.mempool.getTransaction(txid);
     if (tx) {
       res.json(sanitize(tx));
       return;
     }
     // Look in the chain
     for (const block of node.chain.blocks) {
-      const foundTx = block.transactions.find(t => t.id === req.params.txid);
+      const foundTx = block.transactions.find(t => t.id === txid);
       if (foundTx) {
         res.json(sanitize(foundTx));
         return;
