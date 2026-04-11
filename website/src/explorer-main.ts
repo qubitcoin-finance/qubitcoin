@@ -333,6 +333,16 @@ function showLanding(): void {
   if (explorerEl) explorerEl.classList.add('hidden');
 }
 
+function renderError(message = 'Unable to reach the node. Check your connection or try again.'): void {
+  root.innerHTML = `<div class="flex flex-col items-center justify-center py-24 text-center gap-4">
+    <svg class="w-12 h-12 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+    </svg>
+    <p class="text-text-muted text-sm">${escapeHtml(message)}</p>
+    <button onclick="location.reload()" class="px-4 py-2 rounded-lg bg-qubit-600/20 border border-qubit-600/40 text-qubit-300 hover:bg-qubit-600/30 transition-all text-sm">Retry</button>
+  </div>`;
+}
+
 function renderLoading(): void {
   const pulse = 'animate-pulse bg-border/50 rounded';
   const skeletonCard = `<div class="bg-surface p-4 rounded-lg glow-border">
@@ -378,7 +388,7 @@ async function renderDashboard(): Promise<void> {
   ]);
 
   if (!status) {
-    renderLoading();
+    renderError();
     return;
   }
 
@@ -721,39 +731,6 @@ async function renderAddress(addr: string): Promise<void> {
   } else {
     html += `<p class="text-text-muted text-sm">No UTXOs for this address.</p>`;
   }
-
-  root.innerHTML = html;
-}
-
-// Mempool view --------------------------------------------------------------
-
-async function renderMempool(): Promise<void> {
-  const txs = await fetchMempoolTxs();
-
-  let html = `<h1 class="text-2xl font-bold mb-6">Mempool</h1>`;
-
-  if (!txs || txs.length === 0) {
-    html += `<p class="text-text-muted">Mempool is empty.</p>`;
-    root.innerHTML = html;
-    return;
-  }
-
-  html += `<p class="text-text-muted text-sm mb-4">${txs.length} pending transaction${txs.length !== 1 ? 's' : ''}</p>`;
-  html += `<div class="space-y-3">`;
-  for (const tx of txs) {
-    const amount = transferAmount(tx, tx.sender);
-    html += `<div class="bg-surface rounded-lg glow-border p-4 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        ${txTypeBadge(tx)}
-        ${hashLink(tx.id, 'tx')}
-      </div>
-      <div class="text-right">
-        <span class="text-text-muted text-sm font-mono">${formatQBTC(amount)} QBTC</span>
-        <span class="text-text-muted text-xs ml-2">${timeAgo(tx.timestamp)}</span>
-      </div>
-    </div>`;
-  }
-  html += `</div>`;
 
   root.innerHTML = html;
 }
