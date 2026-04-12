@@ -243,7 +243,7 @@ function txTypeBadge(tx: Transaction | MempoolTx): string {
 
 function hashLink(hash: string, type: 'block' | 'tx' | 'address', display?: string): string {
   const d = display ?? truncHash(hash);
-  return `<a href="#/${type}/${hash}" class="font-mono text-qubit-400 hover:text-qubit-300 transition-colors">${d}</a>`;
+  return `<a href="#/${type}/${escapeHtml(hash)}" class="font-mono text-qubit-400 hover:text-qubit-300 transition-colors">${d}</a>`;
 }
 
 function renderBlockStrip(blocks: Block[], mempoolSize: number): string {
@@ -425,6 +425,7 @@ async function renderDashboard(): Promise<void> {
   if (blocks && blocks.length > 0) {
     html += `<div class="overflow-x-auto"><table class="w-full text-sm">
       <thead><tr class="text-xs text-text-muted border-b border-border">
+        <th class="text-left font-normal pb-2 pr-3">Height</th>
         <th class="text-left font-normal pb-2">Hash</th>
         <th class="text-right font-normal pb-2">Txs</th>
         <th class="text-left font-normal pb-2 pl-4 hidden lg:table-cell">Miner</th>
@@ -434,6 +435,7 @@ async function renderDashboard(): Promise<void> {
       const txCount = b.transactions.length;
       const miner = b.transactions[0]?.outputs[0]?.address ?? '';
       html += `<tr class="border-b border-border last:border-0">
+        <td class="py-2 pr-3 font-mono text-qubit-400 whitespace-nowrap">${hashLink(b.hash, 'block', `#${b.height}`)}</td>
         <td class="py-2">${hashLink(b.hash, 'block')}</td>
         <td class="py-2 text-right text-text-muted">${txCount}</td>
         <td class="py-2 pl-4 font-mono text-xs hidden lg:table-cell">${miner ? hashLink(miner, 'address', truncHash(miner)) : ''}</td>
@@ -485,17 +487,21 @@ async function renderBlock(hash: string): Promise<void> {
       location.hash = `#/tx/${hash}`;
       return;
     }
-    root.innerHTML = `<p class="text-red-500">Block not found: ${truncHash(hash)}</p>
+    root.innerHTML = `<p class="text-red-500">Block not found: ${escapeHtml(truncHash(hash))}</p>
       <a href="#/mempool" class="text-qubit-400 hover:text-qubit-300 text-sm mt-2 inline-block">Back</a>`;
     return;
   }
 
   const h = block.header;
   let html = ``;
-  html += `<h1 class="text-2xl font-bold mb-6">Block</h1>`;
+  html += `<h1 class="text-2xl font-bold mb-6">Block <span class="text-qubit-400">#${block.height}</span></h1>`;
 
   html += `<div class="bg-surface rounded-lg glow-border p-6 mb-6">
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+      <div>
+        <p class="text-text-muted mb-1">Height</p>
+        <p class="font-mono">${block.height.toLocaleString()}</p>
+      </div>
       <div>
         <p class="text-text-muted mb-1">Hash</p>
         <p class="font-mono text-xs break-all">${block.hash}</p>
@@ -574,7 +580,7 @@ async function renderBlock(hash: string): Promise<void> {
 async function renderTx(txid: string): Promise<void> {
   const tx = await fetchTx(txid);
   if (!tx) {
-    root.innerHTML = `<p class="text-red-500">Transaction not found: ${truncHash(txid)}</p>
+    root.innerHTML = `<p class="text-red-500">Transaction not found: ${escapeHtml(truncHash(txid))}</p>
       <a href="#/mempool" class="text-qubit-400 hover:text-qubit-300 text-sm mt-2 inline-block">Back</a>`;
     return;
   }
@@ -707,7 +713,7 @@ async function renderAddress(addr: string): Promise<void> {
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
       <div>
         <p class="text-text-muted mb-1">Address</p>
-        <p class="font-mono text-xs break-all">${addr}</p>
+        <p class="font-mono text-xs break-all">${escapeHtml(addr)}</p>
       </div>
       <div>
         <p class="text-text-muted mb-1">Balance</p>

@@ -200,6 +200,25 @@ describe('RPC endpoints', () => {
     expect(body.length).toBe(0)
   })
 
+  it('GET /address/:addr/balance normalizes uppercase address to return correct balance', async () => {
+    const upperAddr = walletA.address.toUpperCase()
+    const res = await fetch(`${baseUrl}/api/v1/address/${upperAddr}/balance`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    // Uppercase address must resolve to same balance as lowercase — not silently return 0
+    expect(body.balance).toBeGreaterThan(0)
+  })
+
+  it('GET /address/:addr/utxos normalizes uppercase address to return UTXOs', async () => {
+    const upperAddr = walletA.address.toUpperCase()
+    const res = await fetch(`${baseUrl}/api/v1/address/${upperAddr}/utxos`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(Array.isArray(body)).toBe(true)
+    // Uppercase address must resolve to the same UTXOs as lowercase — not silently return []
+    expect(body.length).toBeGreaterThan(0)
+  })
+
   it('GET /address/:addr/balance rejects invalid address format', async () => {
     const res = await fetch(`${baseUrl}/api/v1/address/invalidaddr/balance`)
     expect(res.status).toBe(400)

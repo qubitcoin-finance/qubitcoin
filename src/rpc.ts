@@ -213,7 +213,8 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
       res.status(400).json({ error: 'Invalid address format: must be 64-character hex string' });
       return;
     }
-    const balance = node.chain.getBalance(req.params.address);
+    const address = req.params.address.toLowerCase();
+    const balance = node.chain.getBalance(address);
     res.json({ balance });
   });
 
@@ -223,7 +224,8 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
       res.status(400).json({ error: 'Invalid address format: must be 64-character hex string' });
       return;
     }
-    const utxos = node.chain.findUTXOs(req.params.address);
+    const address = req.params.address.toLowerCase();
+    const utxos = node.chain.findUTXOs(address);
     res.json(sanitize(utxos));
   });
 
