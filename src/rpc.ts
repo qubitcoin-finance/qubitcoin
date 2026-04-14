@@ -150,13 +150,12 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
       res.json(sanitize(tx));
       return;
     }
-    // Look in the chain
-    for (const block of node.chain.blocks) {
-      const foundTx = block.transactions.find(t => t.id === txid);
-      if (foundTx) {
-        res.json(sanitize(foundTx));
-        return;
-      }
+    // Look in the chain using O(1) transaction index
+    const block = node.chain.findTransactionBlock(txid);
+    if (block) {
+      const foundTx = block.transactions.find(t => t.id === txid)!;
+      res.json(sanitize(foundTx));
+      return;
     }
     res.status(404).json({ error: 'Transaction not found' });
   });

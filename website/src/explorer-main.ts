@@ -91,12 +91,25 @@ interface UTXO {
 
 // --- API layer -------------------------------------------------------------
 
+/** Log errors with context for debugging */
+function logApiError(path: string, error: Error | string, statusCode?: number): void {
+  const timestamp = new Date().toISOString();
+  const msg = typeof error === 'string' ? error : error.message;
+  const details = statusCode ? ` (HTTP ${statusCode})` : '';
+  console.error(`[${timestamp}] API Error: ${path}${details} — ${msg}`);
+}
+
 async function api<T>(path: string): Promise<T | null> {
   try {
     const res = await fetch(`${API}${path}`);
-    if (!res.ok) return null;
+    if (!res.ok) {
+      logApiError(path, `HTTP ${res.status}: ${res.statusText}`, res.status);
+      return null;
+    }
     return (await res.json()) as T;
-  } catch {
+  } catch (e) {
+    const error = e instanceof Error ? e : new Error(String(e));
+    logApiError(path, error);
     return null;
   }
 }
@@ -236,9 +249,24 @@ function isClaim(tx: Transaction | MempoolTx): boolean {
 }
 
 function txTypeBadge(tx: Transaction | MempoolTx): string {
-  if (isCoinbase(tx)) return '<span class="px-2 py-0.5 rounded text-xs font-medium bg-entropy-cyan/20 text-entropy-cyan">Coinbase</span>';
-  if (isClaim(tx)) return '<span class="px-2 py-0.5 rounded text-xs font-medium bg-qubit-600/20 text-qubit-400">Claim</span>';
-  return '<span class="px-2 py-0.5 rounded text-xs font-medium bg-entropy-blue/20 text-entropy-blue">Transfer</span>';
+  if (isCoinbase(tx)) return badge('Coinbase', 'cyan');
+  if (isClaim(tx)) return badge('Claim', 'qubit');
+  return badge('Transfer', 'blue');
+}
+
+/** Badge utility for displaying status badges with consistent styling */
+function badge(text: string, colorScheme: 'cyan' | 'qubit' | 'blue'): string {
+  const colorClasses: Record<typeof colorScheme, string> = {
+    cyan: 'bg-entropy-cyan/20 text-entropy-cyan',
+    qubit: 'bg-qubit-600/20 text-qubit-400',
+    blue: 'bg-entropy-blue/20 text-entropy-blue',
+  };
+  return `<span class="px-2 py-0.5 rounded text-xs font-medium ${colorClasses[colorScheme]}">${escapeHtml(text)}</span>`;
+}
+
+/** HTTP method badge (GET → cyan, POST/other → qubit) */
+function methodBadge(method: string): string {
+  return badge(method, method === 'GET' ? 'cyan' : 'qubit');
 }
 
 function hashLink(hash: string, type: 'block' | 'tx' | 'address', display?: string): string {
@@ -1302,7 +1330,7 @@ ${docH2('Consensus-Critical Warning')}
 function renderDocsApi(): string {
   const ep = (method: string, path: string, desc: string) =>
     `<tr class="border-b border-border last:border-0">
-      <td class="py-2 pr-3"><span class="px-2 py-0.5 rounded text-xs font-medium ${method === 'GET' ? 'bg-entropy-cyan/20 text-entropy-cyan' : 'bg-qubit-600/20 text-qubit-400'}">${method}</span></td>
+      <td class="py-2 pr-3">${methodBadge(method)}</td>
       <td class="py-2 pr-3 font-mono text-xs text-qubit-300">${path}</td>
       <td class="py-2 text-text-muted text-xs">${desc}</td>
     </tr>`;

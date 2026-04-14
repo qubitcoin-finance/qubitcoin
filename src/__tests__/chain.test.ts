@@ -1055,3 +1055,85 @@ describe('resetToHeight with storage', () => {
     }
   })
 })
+
+describe('Transaction index (O(1) lookups)', () => {
+  it('indexes transactions when blocks are added', () => {
+    const chain = new Blockchain()
+    chain.difficulty = TEST_TARGET
+
+    const block1 = mineOnChain(chain, walletA.address)
+    const result = chain.addBlock(block1)
+    expect(result.success).toBe(true)
+
+    // Coinbase transaction should be indexed
+    const coinbaseTxId = block1.transactions[0].id
+    const foundBlock = chain.findTransactionBlock(coinbaseTxId)
+    expect(foundBlock).toBeDefined()
+    expect(foundBlock?.hash).toBe(block1.hash)
+  })
+
+  it('returns undefined for non-existent transaction', () => {
+    const chain = new Blockchain()
+    chain.difficulty = TEST_TARGET
+
+    const block = mineOnChain(chain, walletA.address)
+    chain.addBlock(block)
+
+    const result = chain.findTransactionBlock('a'.repeat(64))
+    expect(result).toBeUndefined()
+  })
+
+  it('maintains transaction index across multiple blocks', () => {
+    const chain = new Blockchain()
+    chain.difficulty = TEST_TARGET
+
+    const block1 = mineOnChain(chain, walletA.address)
+    const addResult1 = chain.addBlock(block1)
+    expect(addResult1.success).toBe(true)
+
+    const block2 = mineOnChain(chain, walletA.address)
+    const addResult2 = chain.addBlock(block2)
+    expect(addResult2.success).toBe(true)
+
+    // All transactions from both blocks should be indexed
+    for (const tx of block1.transactions) {
+      const foundBlock = chain.findTransactionBlock(tx.id)
+      expect(foundBlock).toBeDefined()
+    }
+    for (const tx of block2.transactions) {
+      const foundBlock = chain.findTransactionBlock(tx.id)
+      expect(foundBlock).toBeDefined()
+    }
+
+    // Should have genesis + 2 mined blocks
+    expect(chain.blocks.length).toBe(3)
+  })
+
+  it('clears transaction index when resetting to height', () => {
+    const chain = new Blockchain()
+    chain.difficulty = TEST_TARGET
+
+    const block1 = mineOnChain(chain, walletA.address)
+    chain.addBlock(block1)
+
+    const block2 = mineOnChain(chain, walletA.address)
+    chain.addBlock(block2)
+
+    // Verify block2's transactions are indexed
+    const block2TxIds = block2.transactions.map(t => t.id)
+    for (const txId of block2TxIds) {
+      expect(chain.findTransactionBlock(txId)).toBeDefined()
+    }
+
+    // Reset to height 1 (remove block2)
+    chain.resetToHeight(1)
+
+    // Block2's transactions should no longer be indexed
+    for (const txId of block2TxIds) {
+      expect(chain.findTransactionBlock(txId)).toBeUndefined()
+    }
+
+    // Verify we're at height 1
+    expect(chain.getHeight()).toBe(1)
+  })
+})

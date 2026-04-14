@@ -31,6 +31,7 @@ export interface BlockUndo {
   claimedAddresses: string[]                        // BTC addresses claimed — unclaim on disconnect
   previousDifficulty: string                        // difficulty before this block — restore on disconnect
   blockWork: bigint                                 // work contributed by this block — subtract on disconnect
+  transactionIds: string[]                          // transaction IDs in this block — remove from index on disconnect
 }
 
 export class Blockchain {
@@ -40,6 +41,8 @@ export class Blockchain {
   utxoSet: Map<string, UTXO> = new Map()
   /** Address → set of UTXO keys for O(1) balance/findUTXOs lookups */
   private utxosByAddress: Map<string, Set<string>> = new Map()
+  /** Transaction ID → Block for O(1) transaction lookups */
+  private transactionIndex: Map<string, Block> = new Map()
   difficulty: string = STARTING_DIFFICULTY
   btcSnapshot: BtcSnapshot | null = null
   claimedBtcAddresses: Set<string> = new Set() // btcAddress hex string
@@ -248,6 +251,11 @@ export class Blockchain {
     return this.difficulty
   }
 
+  /** Find a transaction by ID using O(1) lookup, returns containing block or undefined */
+  findTransactionBlock(txId: string): Block | undefined {
+    return this.transactionIndex.get(txId)
+  }
+
   /**
    * Adjust difficulty based on actual vs expected block time.
    * Clamped to 4x change in either direction (like Bitcoin).
@@ -445,6 +453,7 @@ export class Blockchain {
       this.blocksByHash.clear()
       for (const b of this.blocks) this.blocksByHash.set(b.hash, b)
       this.undoData.length = 0
+      this.transactionIndex.clear()
       this.utxoSet.clear()
       this.utxosByAddress.clear()
       this.claimedBtcAddresses.clear()
@@ -533,8 +542,15 @@ export class Blockchain {
       spentUtxos: [],
       createdUtxoKeys: [],
       claimedAddresses: [],
+      transactionIds: [],
       previousDifficulty: this.difficulty,
       blockWork: blockWork(block.header.target),
+    }
+
+    // Index all transactions in this block for O(1) lookup
+    for (const tx of block.transactions) {
+      this.transactionIndex.set(tx.id, block)
+      undo.transactionIds.push(tx.id)
     }
 
     for (const tx of block.transactions) {
@@ -616,6 +632,10 @@ export class Blockchain {
 
   /** Disconnect a block using its undo data — O(1) per block */
   private disconnectBlock(undo: BlockUndo): void {
+    // Remove transaction index entries
+    for (const txId of undo.transactionIds) {
+      this.transactionIndex.delete(txId)
+    }
     // Remove created UTXOs
     for (const key of undo.createdUtxoKeys) {
       const utxo = this.utxoSet.get(key)
