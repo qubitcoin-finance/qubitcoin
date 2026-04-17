@@ -114,10 +114,12 @@ test.describe('XSS prevention — transaction error view', () => {
 });
 
 test.describe('XSS prevention — address view', () => {
+  // Address view shows "Address not found: <truncated>" when both API calls return 404.
+  // The address is rendered via escapeHtml in a p.text-red-500 element.
   test('img onerror in address does not execute', async ({ page }) => {
     await mockApiWithStatus(page);
     await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await setHash(page, '#/address/<img src=x onerror="window.__xss_addr=1">', '#explorer-content p.font-mono.break-all');
+    await setHash(page, '#/address/<img src=x onerror="window.__xss_addr=1">');
 
     const xssExecuted = await page.evaluate(() => (window as any).__xss_addr);
     expect(xssExecuted).toBeUndefined();
@@ -126,18 +128,18 @@ test.describe('XSS prevention — address view', () => {
   test('angle brackets in address are HTML-escaped in address card', async ({ page }) => {
     await mockApiWithStatus(page);
     await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await setHash(page, '#/address/<img src=x onerror="window.__xss_addr2=1">', '#explorer-content p.font-mono.break-all');
+    await setHash(page, '#/address/<img src=x onerror="window.__xss_addr2=1">');
 
-    const addrEl = page.locator('#explorer-content p.font-mono.break-all').first();
-    await expect(addrEl).toBeVisible();
+    const errorEl = page.locator('#explorer-content p.text-red-500').first();
+    await expect(errorEl).toBeVisible();
 
-    // No actual <img> elements should exist inside the address paragraph
-    const imgInside = await addrEl.locator('img').count();
+    // No actual <img> elements should exist
+    const imgInside = await errorEl.locator('img').count();
     expect(imgInside).toBe(0);
 
     // innerHTML must not contain a live <img> tag (raw or unescaped)
     const innerHTML = await page.evaluate(() =>
-      document.querySelector('#explorer-content p.font-mono.break-all')?.innerHTML ?? ''
+      document.querySelector('#explorer-content p.text-red-500')?.innerHTML ?? ''
     );
     expect(innerHTML).not.toContain('<img');
   });
@@ -145,13 +147,13 @@ test.describe('XSS prevention — address view', () => {
   test('double-quote in address does not break out of HTML context', async ({ page }) => {
     await mockApiWithStatus(page);
     await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await setHash(page, '#/address/abc" onclick="window.__xss_addr_attr=1"', '#explorer-content p.font-mono.break-all');
+    await setHash(page, '#/address/abc" onclick="window.__xss_addr_attr=1"');
 
-    const addrEl = page.locator('#explorer-content p.font-mono.break-all').first();
-    await expect(addrEl).toBeVisible();
+    const errorEl = page.locator('#explorer-content p.text-red-500').first();
+    await expect(errorEl).toBeVisible();
 
     const innerHTML = await page.evaluate(() =>
-      document.querySelector('#explorer-content p.font-mono.break-all')?.innerHTML ?? ''
+      document.querySelector('#explorer-content p.text-red-500')?.innerHTML ?? ''
     );
     expect(innerHTML).not.toContain('" onclick=');
   });

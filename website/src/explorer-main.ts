@@ -91,6 +91,11 @@ interface UTXO {
 
 // --- API layer -------------------------------------------------------------
 
+type ApiResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; status: number; networkError: false }
+  | { ok: false; status: 0; networkError: true };
+
 /** Log errors with context for debugging */
 function logApiError(path: string, error: Error | string, statusCode?: number): void {
   const timestamp = new Date().toISOString();
@@ -99,19 +104,24 @@ function logApiError(path: string, error: Error | string, statusCode?: number): 
   console.error(`[${timestamp}] API Error: ${path}${details} — ${msg}`);
 }
 
-async function api<T>(path: string): Promise<T | null> {
+async function apiFull<T>(path: string): Promise<ApiResult<T>> {
   try {
     const res = await fetch(`${API}${path}`);
     if (!res.ok) {
       logApiError(path, `HTTP ${res.status}: ${res.statusText}`, res.status);
-      return null;
+      return { ok: false, status: res.status, networkError: false };
     }
-    return (await res.json()) as T;
+    return { ok: true, data: (await res.json()) as T };
   } catch (e) {
     const error = e instanceof Error ? e : new Error(String(e));
     logApiError(path, error);
-    return null;
+    return { ok: false, status: 0, networkError: true };
   }
+}
+
+async function api<T>(path: string): Promise<T | null> {
+  const result = await apiFull<T>(path);
+  return result.ok ? result.data : null;
 }
 
 const fetchStatus = () => api<Status>('/status');
@@ -506,10 +516,15 @@ async function renderDashboard(): Promise<void> {
 // Block detail --------------------------------------------------------------
 
 async function renderBlock(hash: string): Promise<void> {
-  let block = await fetchBlock(hash);
+  const blockResult = await apiFull<Block>(`/block/${hash}`);
 
-  // If not found as a block, try as a transaction (search disambiguation)
-  if (!block) {
+  if (!blockResult.ok) {
+    // Network error — show connection error
+    if (blockResult.networkError) {
+      renderError();
+      return;
+    }
+    // HTTP error (likely 404) — try as a transaction (search disambiguation)
     const tx = await fetchTx(hash);
     if (tx) {
       location.hash = `#/tx/${hash}`;
@@ -519,6 +534,8 @@ async function renderBlock(hash: string): Promise<void> {
       <a href="#/mempool" class="text-qubit-400 hover:text-qubit-300 text-sm mt-2 inline-block">Back</a>`;
     return;
   }
+
+  const block = blockResult.data;
 
   const h = block.header;
   let html = ``;
@@ -606,12 +623,17 @@ async function renderBlock(hash: string): Promise<void> {
 // Transaction detail --------------------------------------------------------
 
 async function renderTx(txid: string): Promise<void> {
-  const tx = await fetchTx(txid);
-  if (!tx) {
+  const txResult = await apiFull<Transaction>(`/tx/${txid}`);
+  if (!txResult.ok) {
+    if (txResult.networkError) {
+      renderError();
+      return;
+    }
     root.innerHTML = `<p class="text-red-500">Transaction not found: ${escapeHtml(truncHash(txid))}</p>
       <a href="#/mempool" class="text-qubit-400 hover:text-qubit-300 text-sm mt-2 inline-block">Back</a>`;
     return;
   }
+  const tx = txResult.data;
 
   const sender = await senderAddress(tx);
   const amount = transferAmount(tx, sender);
@@ -729,10 +751,27 @@ async function renderTx(txid: string): Promise<void> {
 // Address view --------------------------------------------------------------
 
 async function renderAddress(addr: string): Promise<void> {
-  const [balanceRes, utxos] = await Promise.all([
-    fetchBalance(addr),
-    fetchUtxos(addr),
+  const [balanceResult, utxoResult] = await Promise.all([
+    apiFull<{ balance: number }>(`/address/${addr}/balance`),
+    apiFull<UTXO[]>(`/address/${addr}/utxos`),
   ]);
+
+  // Both failed with network errors — show connection error
+  if (!balanceResult.ok && balanceResult.networkError && !utxoResult.ok && utxoResult.networkError) {
+    renderError();
+    return;
+  }
+
+  // Either returned 404 — address not found on-chain
+  if (!balanceResult.ok && !balanceResult.networkError && balanceResult.status === 404
+      && !utxoResult.ok && !utxoResult.networkError && utxoResult.status === 404) {
+    root.innerHTML = `<p class="text-red-500">Address not found: ${escapeHtml(truncHash(addr))}</p>
+      <a href="#/" class="text-qubit-400 hover:text-qubit-300 text-sm mt-2 inline-block">Back to explorer</a>`;
+    return;
+  }
+
+  const balance = balanceResult.ok ? balanceResult.data.balance : null;
+  const utxos = utxoResult.ok ? utxoResult.data : null;
 
   let html = ``;
   html += `<h1 class="text-2xl font-bold mb-6">Address</h1>`;
@@ -745,25 +784,32 @@ async function renderAddress(addr: string): Promise<void> {
       </div>
       <div>
         <p class="text-text-muted mb-1">Balance</p>
-        <p class="text-2xl font-bold">${formatQBTC(balanceRes?.balance ?? 0)} QBTC</p>
+        ${balance !== null
+          ? `<p class="text-2xl font-bold">${formatQBTC(balance)} QBTC</p>`
+          : `<p class="text-red-400 text-sm">Unable to load balance</p>`}
       </div>
     </div>
   </div>`;
 
-  html += `<h2 class="text-lg font-semibold mb-4">UTXOs (${utxos?.length ?? 0})</h2>`;
-  if (utxos && utxos.length > 0) {
-    html += `<div class="space-y-2">`;
-    for (const u of utxos) {
-      html += `<div class="bg-surface rounded-lg glow-border p-4 flex items-center justify-between">
-        <div>
-          ${hashLink(u.txId, 'tx')}<span class="text-text-muted">:${u.outputIndex}</span>
-        </div>
-        <span class="font-mono text-qubit-300">${formatQBTC(u.amount)} QBTC</span>
-      </div>`;
+  if (utxos !== null) {
+    html += `<h2 class="text-lg font-semibold mb-4">UTXOs (${utxos.length})</h2>`;
+    if (utxos.length > 0) {
+      html += `<div class="space-y-2">`;
+      for (const u of utxos) {
+        html += `<div class="bg-surface rounded-lg glow-border p-4 flex items-center justify-between">
+          <div>
+            ${hashLink(u.txId, 'tx')}<span class="text-text-muted">:${u.outputIndex}</span>
+          </div>
+          <span class="font-mono text-qubit-300">${formatQBTC(u.amount)} QBTC</span>
+        </div>`;
+      }
+      html += `</div>`;
+    } else {
+      html += `<p class="text-text-muted text-sm">No UTXOs for this address.</p>`;
     }
-    html += `</div>`;
   } else {
-    html += `<p class="text-text-muted text-sm">No UTXOs for this address.</p>`;
+    html += `<h2 class="text-lg font-semibold mb-4">UTXOs</h2>`;
+    html += `<p class="text-red-400 text-sm">Unable to load UTXOs</p>`;
   }
 
   root.innerHTML = html;

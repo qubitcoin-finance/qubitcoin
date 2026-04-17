@@ -722,3 +722,219 @@ describe('Mempool eviction', () => {
     expect(result.success).toBe(true)
   })
 })
+
+describe('Mempool getTransaction', () => {
+  it('returns the transaction by id', () => {
+    const mempool = new Mempool()
+    const utxoSet = makeUtxoSet(walletA)
+
+    const tx = createTransaction(
+      walletA,
+      [{ txId: 'a'.repeat(64), outputIndex: 0, address: walletA.address, amount: DEFAULT_AMOUNT }],
+      [{ address: 'b'.repeat(64), amount: 5_000_000_000 }],
+      DEFAULT_FEE
+    )
+    mempool.addTransaction(tx, utxoSet)
+
+    const found = mempool.getTransaction(tx.id)
+    expect(found).toBeDefined()
+    expect(found!.id).toBe(tx.id)
+    expect(found!.outputs).toEqual(tx.outputs)
+  })
+
+  it('returns undefined for nonexistent id', () => {
+    const mempool = new Mempool()
+    expect(mempool.getTransaction('f'.repeat(64))).toBeUndefined()
+  })
+
+  it('returns undefined after transaction is removed', () => {
+    const mempool = new Mempool()
+    const utxoSet = makeUtxoSet(walletA)
+
+    const tx = createTransaction(
+      walletA,
+      [{ txId: 'a'.repeat(64), outputIndex: 0, address: walletA.address, amount: DEFAULT_AMOUNT }],
+      [{ address: 'b'.repeat(64), amount: 5_000_000_000 }],
+      DEFAULT_FEE
+    )
+    mempool.addTransaction(tx, utxoSet)
+    mempool.removeTransactions([tx.id])
+
+    expect(mempool.getTransaction(tx.id)).toBeUndefined()
+  })
+})
+
+describe('Mempool removeTransactions edge cases', () => {
+  it('ignores nonexistent transaction ids without error', () => {
+    const mempool = new Mempool()
+    const utxoSet = makeUtxoSet(walletA)
+
+    const tx = createTransaction(
+      walletA,
+      [{ txId: 'a'.repeat(64), outputIndex: 0, address: walletA.address, amount: DEFAULT_AMOUNT }],
+      [{ address: 'b'.repeat(64), amount: 5_000_000_000 }],
+      DEFAULT_FEE
+    )
+    mempool.addTransaction(tx, utxoSet)
+    const bytesBeforeRemove = mempool.sizeBytes()
+
+    // Remove a nonexistent id along with the real one
+    mempool.removeTransactions(['nonexistent'.padEnd(64, '0'), tx.id])
+
+    expect(mempool.size()).toBe(0)
+    expect(mempool.sizeBytes()).toBe(0)
+  })
+
+  it('handles empty array gracefully', () => {
+    const mempool = new Mempool()
+    const utxoSet = makeUtxoSet(walletA)
+
+    const tx = createTransaction(
+      walletA,
+      [{ txId: 'a'.repeat(64), outputIndex: 0, address: walletA.address, amount: DEFAULT_AMOUNT }],
+      [{ address: 'b'.repeat(64), amount: 5_000_000_000 }],
+      DEFAULT_FEE
+    )
+    mempool.addTransaction(tx, utxoSet)
+
+    mempool.removeTransactions([])
+    expect(mempool.size()).toBe(1)
+  })
+
+  it('handles removing the same id twice without corrupting state', () => {
+    const mempool = new Mempool()
+    const utxoSet = makeUtxoSet(walletA)
+
+    const tx = createTransaction(
+      walletA,
+      [{ txId: 'a'.repeat(64), outputIndex: 0, address: walletA.address, amount: DEFAULT_AMOUNT }],
+      [{ address: 'b'.repeat(64), amount: 5_000_000_000 }],
+      DEFAULT_FEE
+    )
+    mempool.addTransaction(tx, utxoSet)
+
+    // Pass the same id twice in a single call
+    mempool.removeTransactions([tx.id, tx.id])
+    expect(mempool.size()).toBe(0)
+    expect(mempool.sizeBytes()).toBe(0)
+  })
+})
+
+describe('Mempool getTransactionsForBlock sorting', () => {
+  it('sorts regular txs by fee density descending when utxoSet provided', () => {
+    const mempool = new Mempool()
+
+    // Create two txs with different fee densities
+    // Higher fee → higher density (same tx size roughly)
+    const txIdA = 'a'.repeat(64)
+    const txIdB = 'b'.repeat(64)
+    const utxoSetA = new Map<string, UTXO>()
+    utxoSetA.set(utxoKey(txIdA, 0), {
+      txId: txIdA, outputIndex: 0, address: walletA.address, amount: DEFAULT_AMOUNT,
+    })
+    const utxoSetB = new Map<string, UTXO>()
+    utxoSetB.set(utxoKey(txIdB, 0), {
+      txId: txIdB, outputIndex: 0, address: walletB.address, amount: DEFAULT_AMOUNT,
+    })
+
+    // Low fee tx
+    const lowFeeTx = createTransaction(
+      walletA,
+      [{ txId: txIdA, outputIndex: 0, address: walletA.address, amount: DEFAULT_AMOUNT }],
+      [{ address: 'c'.repeat(64), amount: DEFAULT_AMOUNT - DEFAULT_FEE }],
+      DEFAULT_FEE
+    )
+    // High fee tx (10x the fee)
+    const highFeeTx = createTransaction(
+      walletB,
+      [{ txId: txIdB, outputIndex: 0, address: walletB.address, amount: DEFAULT_AMOUNT }],
+      [{ address: 'c'.repeat(64), amount: DEFAULT_AMOUNT - DEFAULT_FEE * 10 }],
+      DEFAULT_FEE * 10
+    )
+
+    // Add low fee first
+    mempool.addTransaction(lowFeeTx, utxoSetA)
+    mempool.addTransaction(highFeeTx, utxoSetB)
+
+    // Combine both UTXO sets for sorting
+    const combined = new Map([...utxoSetA, ...utxoSetB])
+    const forBlock = mempool.getTransactionsForBlock(combined)
+
+    expect(forBlock.length).toBe(2)
+    // High fee tx should come first
+    expect(forBlock[0].id).toBe(highFeeTx.id)
+    expect(forBlock[1].id).toBe(lowFeeTx.id)
+  })
+
+  it('returns unsorted transactions when no utxoSet provided', () => {
+    const mempool = new Mempool()
+
+    const txIdA = 'a'.repeat(64)
+    const utxoSet = new Map<string, UTXO>()
+    utxoSet.set(utxoKey(txIdA, 0), {
+      txId: txIdA, outputIndex: 0, address: walletA.address, amount: DEFAULT_AMOUNT,
+    })
+
+    const tx = createTransaction(
+      walletA,
+      [{ txId: txIdA, outputIndex: 0, address: walletA.address, amount: DEFAULT_AMOUNT }],
+      [{ address: 'b'.repeat(64), amount: DEFAULT_AMOUNT - DEFAULT_FEE }],
+      DEFAULT_FEE
+    )
+    mempool.addTransaction(tx, utxoSet)
+
+    // Should return all transactions without throwing
+    const forBlock = mempool.getTransactionsForBlock()
+    expect(forBlock.length).toBe(1)
+    expect(forBlock[0].id).toBe(tx.id)
+  })
+})
+
+describe('Mempool revalidate edge cases', () => {
+  it('preserves all transactions when everything is still valid', () => {
+    const mempool = new Mempool()
+    const utxoSet = makeUtxoSet(walletA)
+
+    const tx = createTransaction(
+      walletA,
+      [{ txId: 'a'.repeat(64), outputIndex: 0, address: walletA.address, amount: DEFAULT_AMOUNT }],
+      [{ address: 'b'.repeat(64), amount: 5_000_000_000 }],
+      DEFAULT_FEE
+    )
+    mempool.addTransaction(tx, utxoSet)
+    const bytesBeforeRevalidate = mempool.sizeBytes()
+
+    mempool.revalidate(utxoSet, new Set())
+
+    expect(mempool.size()).toBe(1)
+    expect(mempool.sizeBytes()).toBe(bytesBeforeRevalidate)
+    expect(mempool.getTransaction(tx.id)).toBeDefined()
+  })
+
+  it('rebuilds claimedUTXOs tracking set after revalidate', () => {
+    const mempool = new Mempool()
+    const utxoSet = makeUtxoSet(walletA)
+
+    const tx = createTransaction(
+      walletA,
+      [{ txId: 'a'.repeat(64), outputIndex: 0, address: walletA.address, amount: DEFAULT_AMOUNT }],
+      [{ address: 'b'.repeat(64), amount: 5_000_000_000 }],
+      DEFAULT_FEE
+    )
+    mempool.addTransaction(tx, utxoSet)
+
+    // Revalidate — should rebuild the claimedUTXOs set
+    mempool.revalidate(utxoSet, new Set())
+
+    // Double-spend should still be rejected after revalidate
+    const tx2 = createTransaction(
+      walletA,
+      [{ txId: 'a'.repeat(64), outputIndex: 0, address: walletA.address, amount: DEFAULT_AMOUNT }],
+      [{ address: 'c'.repeat(64), amount: 4_000_000_000 }],
+      DEFAULT_FEE
+    )
+    const result = mempool.addTransaction(tx2, utxoSet)
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('already claimed')
+  })
+})
