@@ -33,3 +33,17 @@ export function timeIt<T>(fn: () => T): { result: T; ms: number } {
   const ms = performance.now() - start
   return { result, ms }
 }
+
+/** Recursively convert Uint8Array fields to hex strings for JSON serialization */
+export function sanitize(obj: unknown): unknown {
+  if (obj instanceof Uint8Array) return hexEncode(obj)
+  if (Array.isArray(obj)) return obj.map(sanitize)
+  if (obj !== null && typeof obj === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(obj)) {
+      out[k] = sanitize(v)
+    }
+    return out
+  }
+  return obj
+}

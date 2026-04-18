@@ -218,14 +218,14 @@ describe('verifyClaimProof — P2TR edge cases', () => {
 
 describe('serializeClaimMessage', () => {
   it('is deterministic', () => {
-    const msg1 = serializeClaimMessage('a'.repeat(40), 'b'.repeat(64), 'c'.repeat(64))
-    const msg2 = serializeClaimMessage('a'.repeat(40), 'b'.repeat(64), 'c'.repeat(64))
+    const msg1 = serializeClaimMessage('a'.repeat(40), 'b'.repeat(64), 'c'.repeat(64), 'd'.repeat(64))
+    const msg2 = serializeClaimMessage('a'.repeat(40), 'b'.repeat(64), 'c'.repeat(64), 'd'.repeat(64))
     expect(bytesToHex(msg1)).toBe(bytesToHex(msg2))
   })
 
   it('different inputs produce different hashes', () => {
-    const msg1 = serializeClaimMessage('a'.repeat(40), 'b'.repeat(64), 'c'.repeat(64))
-    const msg2 = serializeClaimMessage('d'.repeat(40), 'b'.repeat(64), 'c'.repeat(64))
+    const msg1 = serializeClaimMessage('a'.repeat(40), 'b'.repeat(64), 'c'.repeat(64), 'd'.repeat(64))
+    const msg2 = serializeClaimMessage('d'.repeat(40), 'b'.repeat(64), 'c'.repeat(64), 'd'.repeat(64))
     expect(bytesToHex(msg1)).not.toBe(bytesToHex(msg2))
   })
 })

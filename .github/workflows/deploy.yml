@@ -100,55 +100,49 @@ jobs:
       group: deploy-qubitcoin
       cancel-in-progress: false
     env:
-      MINER_IMAGE: ghcr.io/qubitcoin-finance/qbtcd:main
-      MINER_CONTAINER: qbtc-miner
-      DATA_DIR: /home/qubitcoin/qbtc-data
-      RPC_PORT: 3001
-      P2P_PORT: 6001
+      RPC_PORT: 3010
 
     steps:
       - uses: actions/checkout@v4
         with:
           clean: false
 
-      # ----- Backend (Docker container) -----
+      # ----- Backend: docker compose manages qbtc-node, qbtc-q, qbtc-devtx -----
       - name: Login to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      - name: Pull latest miner image
-        run: docker pull $MINER_IMAGE
+      - name: Pull latest images
+        run: docker compose pull
 
-      # ----- Miner deployment -----
-      - name: Stop existing miner container
-        run: docker stop $MINER_CONTAINER && docker rm $MINER_CONTAINER || true
-
-      - name: Wait for ports to be released
-        run: sleep 5
-
-      - name: Start new miner container
+      # One-shot migration: remove legacy containers created outside of compose
+      # so `docker compose up` can claim the names. No-op once compose owns them.
+      - name: Adopt legacy containers
         run: |
-          docker run -d \
-            --name $MINER_CONTAINER \
-            --restart unless-stopped \
-            -p $RPC_PORT:3001 \
-            -p $P2P_PORT:6001 \
-            -v $DATA_DIR:/data \
-            $MINER_IMAGE \
-            --mine --datadir /data
+          for c in qbtc-node qbtc-q qbtc-devtx; do
+            if docker inspect "$c" >/dev/null 2>&1; then
+              project=$(docker inspect "$c" --format '{{index .Config.Labels "com.docker.compose.project"}}')
+              if [ -z "$project" ]; then
+                echo "Removing legacy non-compose container: $c"
+                docker rm -f "$c"
+              fi
+            fi
+          done
 
-      - name: Wait for miner to be healthy
+      - name: Apply compose stack
+        run: docker compose up -d --remove-orphans
+
+      - name: Wait for qbtc-node to be healthy
         run: |
-          echo "Waiting for miner to start..."
           for i in $(seq 1 30); do
             if curl -sf http://127.0.0.1:$RPC_PORT/api/v1/status; then
               echo ""
-              echo "Miner is up after $((i * 10))s"
+              echo "qbtc-node up after $((i * 10))s"
               exit 0
             fi
             sleep 10
           done
-          echo "Miner failed to start within 300s"
-          docker logs --tail 50 $MINER_CONTAINER
+          echo "qbtc-node failed to start within 300s"
+          docker compose logs --tail 50
           exit 1
 
       # ----- Website deployment (static files via nginx) -----

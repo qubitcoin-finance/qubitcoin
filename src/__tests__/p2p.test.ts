@@ -5,6 +5,7 @@ import os from 'node:os'
 import net from 'node:net'
 import { Node } from '../node.js'
 import { P2PServer } from '../p2p/server.js'
+import { Peer } from '../p2p/peer.js'
 import { FileBlockStorage } from '../storage.js'
 import { walletA, walletB } from './fixtures.js'
 
@@ -175,7 +176,7 @@ describe('P2P server integration', () => {
     // Should receive a reject message and then the connection should close
     const data = await new Promise<Buffer>((resolve, reject) => {
       const chunks: Buffer[] = []
-      socket.on('data', (chunk) => chunks.push(chunk))
+      socket.on('data', (chunk: Buffer) => chunks.push(chunk))
       socket.on('close', () => resolve(Buffer.concat(chunks)))
       setTimeout(() => reject(new Error('timeout')), 5_000)
     })
@@ -739,11 +740,11 @@ describe('P2P security hardening', () => {
       }
 
       // Get node1's view of the peer (to check misbehavior score)
-      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0]
+      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0] as Peer
       const scoreBefore = peerOnNode1.getMisbehaviorScore()
 
       // Get node2's peer (sends TO node1) and send the invalid block
-      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0]
+      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0] as Peer
       peerOnNode2.send({
         type: 'blocks',
         payload: { blocks: [invalidBlock] },
@@ -777,7 +778,7 @@ describe('P2P security hardening', () => {
       p2p2.connectOutbound('127.0.0.1', port)
       await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
 
-      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0]
+      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0] as Peer
       const scoreBefore = peerOnNode1.getMisbehaviorScore()
 
       // Send an invalid tx FROM node2 TO node1
@@ -787,7 +788,7 @@ describe('P2P security hardening', () => {
         outputs: [{ address: 'e'.repeat(64), amount: 100 }],
         timestamp: Date.now(),
       }
-      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0]
+      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0] as Peer
       peerOnNode2.send({
         type: 'tx',
         payload: { tx: invalidTx },
@@ -822,7 +823,7 @@ describe('P2P security hardening', () => {
       p2p2.connectOutbound('127.0.0.1', port)
       await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
 
-      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0]
+      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0] as Peer
 
       // Send oversized addr FROM node2 TO node1 (200 entries, limit is 100)
       const addresses = Array.from({ length: 200 }, (_, i) => ({
@@ -830,7 +831,7 @@ describe('P2P security hardening', () => {
         port: 6001,
         lastSeen: Date.now(),
       }))
-      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0]
+      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0] as Peer
       peerOnNode2.send({
         type: 'addr',
         payload: { addresses },
@@ -885,8 +886,8 @@ describe('P2P security hardening', () => {
         height: 1,
       }
 
-      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0]
-      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0]
+      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0] as Peer
+      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0] as Peer
 
       // Send first time
       peerOnNode2.send({
@@ -994,7 +995,7 @@ describe('P2P security hardening', () => {
       await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
 
       // Send already-known blocks from node2 to node1 (simulating duplicate connection IBD)
-      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0]
+      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0] as Peer
       peerOnNode2.send({
         type: 'blocks',
         payload: { blocks: [node1.chain.blocks[1], node1.chain.blocks[2]] },
@@ -1003,7 +1004,7 @@ describe('P2P security hardening', () => {
       await new Promise(r => setTimeout(r, 300))
 
       // Peer should NOT be disconnected or penalized
-      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0]
+      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0] as Peer
       expect(peerOnNode1).toBeDefined()
       expect(peerOnNode1.getMisbehaviorScore()).toBe(0)
       expect(p2p1.getPeers().length).toBeGreaterThanOrEqual(1)

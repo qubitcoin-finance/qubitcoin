@@ -7,7 +7,9 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { bytesToHex, hexToBytes } from './crypto.js'
+import { hexToBytes } from './crypto.js'
+import { sanitize } from './utils.js'
+import { log } from './log.js'
 import type { Block } from './block.js'
 import type { Transaction, TransactionInput, ClaimData } from './transaction.js'
 
@@ -26,18 +28,7 @@ export interface BlockStorage {
 }
 
 /** Recursively convert Uint8Array fields to hex strings for JSON serialization */
-export function sanitizeForStorage(obj: unknown): unknown {
-  if (obj instanceof Uint8Array) return bytesToHex(obj)
-  if (Array.isArray(obj)) return obj.map(sanitizeForStorage)
-  if (obj !== null && typeof obj === 'object') {
-    const out: Record<string, unknown> = {}
-    for (const [k, v] of Object.entries(obj)) {
-      out[k] = sanitizeForStorage(v)
-    }
-    return out
-  }
-  return obj
-}
+export { sanitize as sanitizeForStorage } from './utils.js'
 
 /** Known Uint8Array fields in transactions that need deserialization */
 export const TX_INPUT_BINARY_FIELDS = ['publicKey', 'signature'] as const
@@ -53,7 +44,7 @@ export function deserializeTransaction(raw: Record<string, unknown>): Transactio
       const input = inp as unknown as TransactionInput
       for (const field of TX_INPUT_BINARY_FIELDS) {
         if (typeof inp[field] === 'string') {
-          (input as Record<string, unknown>)[field] = hexToBytes(inp[field] as string)
+          (input as unknown as Record<string, unknown>)[field] = hexToBytes(inp[field] as string)
         }
       }
       return input
@@ -95,12 +86,12 @@ export class FileBlockStorage implements BlockStorage {
   }
 
   appendBlock(block: Block): void {
-    const serialized = JSON.stringify(sanitizeForStorage(block))
+    const serialized = JSON.stringify(sanitize(block))
     fs.appendFileSync(this.blocksPath, serialized + '\n')
   }
 
   rewriteBlocks(blocks: Block[]): void {
-    const lines = blocks.map((b) => JSON.stringify(sanitizeForStorage(b)))
+    const lines = blocks.map((b) => JSON.stringify(sanitize(b)))
     fs.writeFileSync(this.blocksPath, lines.join('\n') + (lines.length > 0 ? '\n' : ''))
   }
 
@@ -110,16 +101,26 @@ export class FileBlockStorage implements BlockStorage {
     const content = fs.readFileSync(this.blocksPath, 'utf-8').trimEnd()
     if (!content) return []
 
-    return content.split('\n').map((line) => {
-      const raw = JSON.parse(line)
-      return deserializeBlock(raw)
-    })
+    const blocks: Block[] = []
+    for (const [i, line] of content.split('\n').entries()) {
+      try {
+        blocks.push(deserializeBlock(JSON.parse(line)))
+      } catch (err) {
+        log.error({ component: 'storage', line: i, err }, 'Skipping corrupted block entry in blocks.jsonl')
+      }
+    }
+    return blocks
   }
 
   loadMetadata(): BlockStorageMetadata | null {
     if (!fs.existsSync(this.metadataPath)) return null
-    const content = fs.readFileSync(this.metadataPath, 'utf-8')
-    return JSON.parse(content) as BlockStorageMetadata
+    try {
+      const content = fs.readFileSync(this.metadataPath, 'utf-8')
+      return JSON.parse(content) as BlockStorageMetadata
+    } catch (err) {
+      log.error({ component: 'storage', err }, 'Failed to parse metadata.json; treating as missing')
+      return null
+    }
   }
 
   saveMetadata(meta: BlockStorageMetadata): void {

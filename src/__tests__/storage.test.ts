@@ -198,6 +198,38 @@ describe('FileBlockStorage', () => {
     expect(chain2.utxoSet.size).toBe(utxoCount1)
     expect(chain2.blocks[chain2.blocks.length - 1].hash).toBe(block2.hash)
   })
+
+  it('should skip corrupted lines in blocks.jsonl and load valid ones', () => {
+    const storage = new FileBlockStorage(tmpDir)
+    const chain = new Blockchain()
+    const wallet = walletA
+
+    const block1 = mineOnChain(chain, wallet.address)
+    chain.addBlock(block1)
+    storage.appendBlock(block1)
+
+    const block2 = mineOnChain(chain, wallet.address)
+    chain.addBlock(block2)
+    storage.appendBlock(block2)
+
+    // Inject a corrupted line between valid blocks
+    const blocksPath = path.join(tmpDir, 'blocks.jsonl')
+    const lines = fs.readFileSync(blocksPath, 'utf-8').trimEnd().split('\n')
+    lines.splice(1, 0, 'NOT VALID JSON {{{')
+    fs.writeFileSync(blocksPath, lines.join('\n') + '\n')
+
+    const loaded = storage.loadBlocks()
+    expect(loaded).toHaveLength(2)
+    expect(loaded[0].hash).toBe(block1.hash)
+    expect(loaded[1].hash).toBe(block2.hash)
+  })
+
+  it('should return null for corrupted metadata.json', () => {
+    const storage = new FileBlockStorage(tmpDir)
+    const metadataPath = path.join(tmpDir, 'metadata.json')
+    fs.writeFileSync(metadataPath, 'NOT VALID JSON {{{')
+    expect(storage.loadMetadata()).toBeNull()
+  })
 })
 
 describe('deserializeTransaction', () => {

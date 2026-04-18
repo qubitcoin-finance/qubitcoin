@@ -1,14 +1,14 @@
 
 import express from 'express';
 import { Node } from './node.js';
-import { bytesToHex, deriveAddress } from './crypto.js';
+import { deriveAddress } from './crypto.js';
 import cors from 'cors';
 import type { P2PServer } from './p2p/server.js';
 import { type Transaction, isClaimTransaction, COINBASE_TXID } from './transaction.js';
 import { deserializeTransaction } from './storage.js';
 import { DIFFICULTY_ADJUSTMENT_INTERVAL, STARTING_DIFFICULTY } from './block.js';
 import { log } from './log.js';
-import { isValidHash } from './utils.js';
+import { isValidHash, sanitize } from './utils.js';
 import type { Request, Response, NextFunction, Express } from 'express';
 
 /** Maximum JSON body size (1 MB) */
@@ -56,20 +56,7 @@ function createRateLimiter() {
   };
 }
 
-/** Recursively convert Uint8Array fields to hex strings for JSON serialization */
-export function sanitize(obj: unknown): unknown {
-  if (obj instanceof Uint8Array) return bytesToHex(obj);
-  if (Array.isArray(obj)) return obj.map(sanitize);
-  if (obj !== null && typeof obj === 'object') {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(obj)) {
-      out[k] = sanitize(v);
-    }
-    return out;
-  }
-  return obj;
-}
-
+export { sanitize };
 
 /** Validate that an address is a valid 64-character hex string */
 function isValidAddress(address: string): boolean {
@@ -171,7 +158,9 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
         res.status(400).json({ error: result.error });
       }
     } catch (err) {
-      res.status(400).json({ error: 'Invalid transaction' });
+      log.warn({ component: 'rpc', err }, 'Failed to deserialize submitted transaction');
+      const message = err instanceof Error ? err.message : 'Invalid transaction';
+      res.status(400).json({ error: message });
     }
   });
 

@@ -780,11 +780,11 @@ describe('P2P message error handling', () => {
       p2p2.connectOutbound('127.0.0.1', port)
       await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
 
-      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0]
+      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0] as Peer
       const scoreBefore = peerOnNode1.getMisbehaviorScore()
 
       // Send a tx with invalid hex (should throw in hexToBytes, caught by handleMessage)
-      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0]
+      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0] as Peer
       peerOnNode2.send({
         type: 'tx',
         payload: {
@@ -830,11 +830,11 @@ describe('P2P message error handling', () => {
       p2p2.connectOutbound('127.0.0.1', port)
       await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
 
-      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0]
+      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0] as Peer
       const scoreBefore = peerOnNode1.getMisbehaviorScore()
 
       // Send a message with unknown type
-      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0]
+      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0] as Peer
       peerOnNode2.send({ type: 'foobar' as any, payload: {} })
 
       await new Promise(r => setTimeout(r, 300))

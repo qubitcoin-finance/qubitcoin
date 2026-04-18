@@ -8,8 +8,10 @@
  */
 import { readFileSync } from 'node:fs'
 import { generateWallet } from './crypto.js'
+import type { Wallet } from './crypto.js'
 import { createTransaction } from './transaction.js'
 import type { UTXO } from './transaction.js'
+import { sanitize } from './utils.js'
 
 const RPC = process.argv[2] || 'http://127.0.0.1:3001'
 const WALLET_PATH = process.argv[3] || 'data/node/wallet.json'
@@ -21,25 +23,12 @@ async function api<T>(path: string, opts?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
-// Sanitize a wallet for JSON (Uint8Array → hex)
-function sanitizeTx(obj: unknown): unknown {
-  if (obj instanceof Uint8Array) {
-    return Array.from(obj).map(b => b.toString(16).padStart(2, '0')).join('')
-  }
-  if (Array.isArray(obj)) return obj.map(sanitizeTx)
-  if (obj !== null && typeof obj === 'object') {
-    const out: Record<string, unknown> = {}
-    for (const [k, v] of Object.entries(obj)) out[k] = sanitizeTx(v)
-    return out
-  }
-  return obj
-}
 
 async function main() {
   // Load miner wallet
-  let wallet
+  let wallet: Wallet
   try {
-    const raw = JSON.parse(readFileSync(WALLET_PATH, 'utf-8'))
+    const raw = JSON.parse(readFileSync(WALLET_PATH, 'utf-8')) as { publicKey: string; secretKey: string; address: string }
     wallet = {
       publicKey: new Uint8Array(Buffer.from(raw.publicKey, 'hex')),
       secretKey: new Uint8Array(Buffer.from(raw.secretKey, 'hex')),
@@ -116,7 +105,7 @@ async function main() {
       const result = await api<{ txid: string }>('/tx', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(sanitizeTx(tx)),
+        body: JSON.stringify(sanitize(tx)),
       })
 
       pendingSpent.add(`${utxo.txId}:${utxo.outputIndex}`)

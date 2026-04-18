@@ -60,7 +60,7 @@ class BufferedReader {
   private pos = 0 // position within logical buffer
   private stream: ReturnType<typeof createReadStream>
   private done = false
-  private pendingRead: { resolve: () => void; reject: (e: Error) => void } | null = null
+  private pendingRead: { resolve: () => void; reject: (e: Error) => void; needed: number } | null = null
 
   bytesRead = 0
 
