@@ -113,17 +113,18 @@ async function main() {
 
       const totalSat = outputs.reduce((s, o) => s + o.amount, 0)
       console.log(`TX ${result.txid.slice(0, 16)}... → ${numOutputs} outputs (${(totalSat / 1e8).toFixed(8)} QBTC, fee ${(fee / 1e8).toFixed(8)} QBTC)`)
-    } catch (err: any) {
-      if (err.message?.includes('already claimed')) {
-        const match = err.message.match(/UTXO ([0-9a-f]+:\d+)/)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (msg.includes('already claimed')) {
+        const match = msg.match(/UTXO ([0-9a-f]+:\d+)/)
         if (match) pendingSpent.add(match[1])
-      } else if (err.message?.includes('not mature')) {
+      } else if (msg.includes('not mature')) {
         if (!waitingForMaturity) {
           console.log('Waiting for UTXOs to mature...')
           waitingForMaturity = true
         }
       } else {
-        console.log(`Error: ${err.message}`)
+        console.log(`Error: ${msg}`)
       }
     }
   }

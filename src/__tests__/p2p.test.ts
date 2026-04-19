@@ -825,6 +825,9 @@ describe('P2P security hardening', () => {
 
       const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0] as Peer
 
+      // Reset rate limit state so the handshake addr exchange doesn't block our test message
+      peerOnNode1.lastAddrReceived = 0
+
       // Send oversized addr FROM node2 TO node1 (200 entries, limit is 100)
       const addresses = Array.from({ length: 200 }, (_, i) => ({
         host: `10.0.${Math.floor(i / 256)}.${i % 256}`,
@@ -1032,5 +1035,368 @@ describe('P2P security hardening', () => {
     expect(entry).toBeDefined()
     // Should be clamped to at most ~2 hours in the future
     expect(entry!.lastSeen).toBeLessThan(Date.now() + 3 * 3600_000)
+  })
+
+  it('should skip null/non-object entries in addr messages without crashing', async () => {
+    const storage1 = new FileBlockStorage(tmpDir1)
+    const storage2 = new FileBlockStorage(tmpDir2)
+    const node1 = new Node('alice', undefined, storage1)
+    const node2 = new Node('bob', undefined, storage2)
+
+    const p2p1 = new P2PServer(node1, 0, tmpDir1)
+    const p2p2 = new P2PServer(node2, 0, tmpDir2)
+    p2p1.setLocalMode(true)
+    p2p2.setLocalMode(true)
+    await p2p1.start()
+    await p2p2.start()
+
+    try {
+      const addr = (p2p1 as any).server.address()
+      const port = typeof addr === 'object' ? addr.port : 0
+      p2p2.connectOutbound('127.0.0.1', port)
+      await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
+
+      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0] as Peer
+      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0] as Peer
+
+      // Reset rate limit state so the handshake addr exchange doesn't block our test message
+      peerOnNode1.lastAddrReceived = 0
+
+      // Send addr message mixing null entries with valid ones
+      peerOnNode2.send({
+        type: 'addr',
+        payload: {
+          addresses: [
+            null,
+            { host: '10.0.0.1', port: 6001, lastSeen: Date.now() },
+            undefined,
+            { host: '10.0.0.2', port: 6002, lastSeen: Date.now() },
+            42,
+          ] as any,
+        },
+      })
+
+      await new Promise(r => setTimeout(r, 300))
+
+      // Server must not crash — both nodes still connected
+      expect(p2p1.getPeers().length).toBeGreaterThanOrEqual(1)
+      expect(p2p2.getPeers().length).toBeGreaterThanOrEqual(1)
+
+      // Valid entries (10.0.0.1:6001 and 10.0.0.2:6002) should be in the address book
+      const known = p2p1.getKnownAddresses()
+      expect(known.has('10.0.0.1:6001')).toBe(true)
+      expect(known.has('10.0.0.2:6002')).toBe(true)
+
+      // Peer should not have been penalized for the null entries alone
+      expect(peerOnNode1.getMisbehaviorScore()).toBe(0)
+    } finally {
+      await p2p1.stop()
+      await p2p2.stop()
+    }
+  })
+
+  it('should skip null entries in blocks messages and continue processing valid blocks', async () => {
+    const storage1 = new FileBlockStorage(tmpDir1)
+    const storage2 = new FileBlockStorage(tmpDir2)
+    const node1 = new Node('alice', undefined, storage1)
+    const node2 = new Node('bob', undefined, storage2)
+    node1.chain.difficulty = TEST_TARGET
+    node2.chain.difficulty = TEST_TARGET
+
+    const p2p1 = new P2PServer(node1, 0, tmpDir1)
+    const p2p2 = new P2PServer(node2, 0, tmpDir2)
+    await p2p1.start()
+    await p2p2.start()
+
+    try {
+      // Mine a block on node2
+      node2.mine(walletA.address, false)
+      expect(node2.chain.getHeight()).toBe(1)
+
+      const addr = (p2p1 as any).server.address()
+      const port = typeof addr === 'object' ? addr.port : 0
+      p2p2.connectOutbound('127.0.0.1', port)
+      await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
+
+      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0] as Peer
+
+      // Send blocks message with a null entry mixed in before a valid block
+      peerOnNode2.send({
+        type: 'blocks',
+        payload: {
+          blocks: [null, node2.chain.blocks[1]] as any,
+        },
+      })
+
+      await new Promise(r => setTimeout(r, 500))
+
+      // Server should not crash — nodes still connected
+      expect(p2p1.getPeers().length).toBeGreaterThanOrEqual(1)
+      // The valid block should have been accepted despite the preceding null entry
+      expect(node1.chain.getHeight()).toBe(1)
+    } finally {
+      await p2p1.stop()
+      await p2p2.stop()
+    }
+  })
+
+  it('should continue processing valid blocks after a malformed block in the batch', async () => {
+    const storage1 = new FileBlockStorage(tmpDir1)
+    const storage2 = new FileBlockStorage(tmpDir2)
+    const node1 = new Node('alice', undefined, storage1)
+    const node2 = new Node('bob', undefined, storage2)
+    node1.chain.difficulty = TEST_TARGET
+    node2.chain.difficulty = TEST_TARGET
+
+    const p2p1 = new P2PServer(node1, 0, tmpDir1)
+    const p2p2 = new P2PServer(node2, 0, tmpDir2)
+    await p2p1.start()
+    await p2p2.start()
+
+    try {
+      // Mine two blocks on node2
+      node2.mine(walletA.address, false)
+      node2.mine(walletA.address, false)
+      expect(node2.chain.getHeight()).toBe(2)
+
+      const addr = (p2p1 as any).server.address()
+      const port = typeof addr === 'object' ? addr.port : 0
+      p2p2.connectOutbound('127.0.0.1', port)
+      await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
+
+      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0] as Peer
+
+      // Send a batch with: valid block 1, then a malformed object (missing required fields),
+      // then valid block 2. Without per-block error isolation the exception from block 2
+      // deserialization would abort the loop and block 2 would never be processed.
+      peerOnNode2.send({
+        type: 'blocks',
+        payload: {
+          blocks: [
+            node2.chain.blocks[1],
+            { notABlock: true, garbage: 'data' },
+            node2.chain.blocks[2],
+          ] as any,
+        },
+      })
+
+      await new Promise(r => setTimeout(r, 500))
+
+      // Both nodes still connected
+      expect(p2p1.getPeers().length).toBeGreaterThanOrEqual(1)
+      // Both valid blocks should have been accepted
+      expect(node1.chain.getHeight()).toBe(2)
+    } finally {
+      await p2p1.stop()
+      await p2p2.stop()
+    }
+  })
+
+  it('should penalize non-handshake message sent before handshake completes', async () => {
+    const storage1 = new FileBlockStorage(tmpDir1)
+    const node1 = new Node('alice', undefined, storage1)
+    const p2p1 = new P2PServer(node1, 0, tmpDir1)
+    await p2p1.start()
+
+    try {
+      const addr = (p2p1 as any).server.address()
+      const port = typeof addr === 'object' ? addr.port : 0
+
+      // Connect a raw socket without completing the handshake
+      const socket = net.createConnection({ host: '127.0.0.1', port })
+      await new Promise<void>(r => socket.once('connect', r))
+
+      // Wait for the server to register the inbound peer
+      await waitFor(() => (p2p1 as any).peers.size >= 1, 2_000)
+
+      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0] as Peer
+      expect(peerOnNode1.handshakeComplete).toBe(false)
+      const scoreBefore = peerOnNode1.getMisbehaviorScore()
+
+      // Send a non-handshake message before completing version/verack
+      const blocksMsg = encodeMessage({ type: 'getblocks', payload: { fromHeight: 0 } })
+      socket.write(blocksMsg)
+
+      await new Promise(r => setTimeout(r, 200))
+
+      // Server should have penalized the peer for the pre-handshake message
+      const scoreAfter = peerOnNode1.getMisbehaviorScore()
+      expect(scoreAfter).toBeGreaterThan(scoreBefore)
+
+      socket.destroy()
+    } finally {
+      await p2p1.stop()
+    }
+  })
+
+  it('should penalize rapid addr messages (rate limiting)', async () => {
+    const storage1 = new FileBlockStorage(tmpDir1)
+    const storage2 = new FileBlockStorage(tmpDir2)
+    const node1 = new Node('alice', undefined, storage1)
+    const node2 = new Node('bob', undefined, storage2)
+
+    const p2p1 = new P2PServer(node1, 0, tmpDir1)
+    const p2p2 = new P2PServer(node2, 0, tmpDir2)
+    p2p1.setLocalMode(true)
+    p2p2.setLocalMode(true)
+    await p2p1.start()
+    await p2p2.start()
+
+    try {
+      const addr = (p2p1 as any).server.address()
+      const port = typeof addr === 'object' ? addr.port : 0
+      p2p2.connectOutbound('127.0.0.1', port)
+      await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
+
+      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0] as Peer
+      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0] as Peer
+
+      // Reset rate limit to allow first addr through
+      peerOnNode1.lastAddrReceived = 0
+
+      // First addr message — should be accepted, sets lastAddrReceived
+      peerOnNode2.send({
+        type: 'addr',
+        payload: { addresses: [{ host: '10.0.0.1', port: 6001, lastSeen: Date.now() }] },
+      })
+      await new Promise(r => setTimeout(r, 100))
+
+      const scoreAfterFirst = peerOnNode1.getMisbehaviorScore()
+
+      // Second addr message within 30s — should trigger rate limit penalty
+      peerOnNode2.send({
+        type: 'addr',
+        payload: { addresses: [{ host: '10.0.0.2', port: 6001, lastSeen: Date.now() }] },
+      })
+      await new Promise(r => setTimeout(r, 200))
+
+      const scoreAfterSecond = peerOnNode1.getMisbehaviorScore()
+      expect(scoreAfterSecond).toBeGreaterThan(scoreAfterFirst)
+    } finally {
+      await p2p1.stop()
+      await p2p2.stop()
+    }
+  })
+
+  it('should penalize rapid getheaders messages (rate limiting)', async () => {
+    const storage1 = new FileBlockStorage(tmpDir1)
+    const storage2 = new FileBlockStorage(tmpDir2)
+    const node1 = new Node('alice', undefined, storage1)
+    const node2 = new Node('bob', undefined, storage2)
+
+    const p2p1 = new P2PServer(node1, 0, tmpDir1)
+    const p2p2 = new P2PServer(node2, 0, tmpDir2)
+    await p2p1.start()
+    await p2p2.start()
+
+    try {
+      const addr = (p2p1 as any).server.address()
+      const port = typeof addr === 'object' ? addr.port : 0
+      p2p2.connectOutbound('127.0.0.1', port)
+      await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
+
+      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0] as Peer
+      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0] as Peer
+
+      const genesisHash = node1.chain.blocks[0].hash
+      const scoreBefore = peerOnNode1.getMisbehaviorScore()
+
+      // Send two getheaders in rapid succession (within 500ms window)
+      peerOnNode2.send({ type: 'getheaders', payload: { locatorHashes: [genesisHash] } })
+      peerOnNode2.send({ type: 'getheaders', payload: { locatorHashes: [genesisHash] } })
+
+      await new Promise(r => setTimeout(r, 300))
+
+      // Second rapid getheaders should have added misbehavior
+      const scoreAfter = peerOnNode1.getMisbehaviorScore()
+      expect(scoreAfter).toBeGreaterThan(scoreBefore)
+    } finally {
+      await p2p1.stop()
+      await p2p2.stop()
+    }
+  })
+
+  it('should penalize invalid cumulativeWork in version message', async () => {
+    const storage1 = new FileBlockStorage(tmpDir1)
+    const node1 = new Node('alice', undefined, storage1)
+    const p2p1 = new P2PServer(node1, 0, tmpDir1)
+    await p2p1.start()
+
+    try {
+      const addr = (p2p1 as any).server.address()
+      const port = typeof addr === 'object' ? addr.port : 0
+
+      const socket = net.createConnection({ host: '127.0.0.1', port })
+      await new Promise<void>(r => socket.once('connect', r))
+
+      // Send version message with invalid cumulativeWork (not valid hex)
+      const versionMsg = encodeMessage({
+        type: 'version',
+        payload: {
+          version: PROTOCOL_VERSION,
+          height: 0,
+          genesisHash: node1.chain.blocks[0].hash,
+          userAgent: 'bad-node',
+          cumulativeWork: 'not-valid-hex!!!',
+        },
+      })
+      socket.write(versionMsg)
+
+      await new Promise(r => setTimeout(r, 300))
+
+      // Peer should have received misbehavior for the bad cumulativeWork
+      // (connection may still be open since +10 is below the disconnect threshold)
+      await waitFor(() => (p2p1 as any).peers.size >= 1, 2_000)
+      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0] as Peer
+      expect(peerOnNode1.getMisbehaviorScore()).toBeGreaterThan(0)
+
+      socket.destroy()
+    } finally {
+      await p2p1.stop()
+    }
+  })
+})
+
+describe('P2P orphan block resolution', () => {
+  const TEST_TARGET = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+
+  it('should connect an orphan chain when the missing parent block arrives', async () => {
+    const tmpDir1 = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-orphan-1-'))
+    const tmpDir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-orphan-2-'))
+
+    const miner = new Node('miner', undefined, new FileBlockStorage(tmpDir2))
+    miner.chain.difficulty = TEST_TARGET
+    miner.mine(walletA.address, false)
+    miner.mine(walletA.address, false)
+    miner.mine(walletA.address, false)
+    const [, block1, block2, block3] = miner.chain.blocks
+
+    const receiver = new Node('receiver', undefined, new FileBlockStorage(tmpDir1))
+    receiver.chain.difficulty = TEST_TARGET
+    const p2p = new P2PServer(receiver, 0, tmpDir1)
+    await p2p.start()
+
+    try {
+      // Inject block2 and block3 as orphans (their parent is not yet in the chain)
+      ;(p2p as any).orphanBlocks.set(block1.hash, { block: block2, receivedAt: Date.now() })
+      ;(p2p as any).orphanBlocks.set(block2.hash, { block: block3, receivedAt: Date.now() })
+      expect((p2p as any).orphanBlocks.size).toBe(2)
+
+      // Receive block1 — the missing parent
+      const result = receiver.receiveBlock(block1)
+      expect(result.success).toBe(true)
+      expect(receiver.chain.getHeight()).toBe(1)
+
+      // Trigger orphan resolution as handleBlocks would after accepting block1
+      const connected = (p2p as any).processOrphans(block1.hash)
+
+      expect(connected).toBe(2)
+      expect(receiver.chain.getHeight()).toBe(3)
+      expect((p2p as any).orphanBlocks.size).toBe(0)
+    } finally {
+      await p2p.stop()
+      fs.rmSync(tmpDir1, { recursive: true, force: true })
+      fs.rmSync(tmpDir2, { recursive: true, force: true })
+    }
   })
 })

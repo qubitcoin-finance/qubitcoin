@@ -43,6 +43,7 @@ export class Peer {
   remoteListenPort = 0
   remoteCumulativeWork = 0n
   lastGetaddrResponse = 0
+  lastAddrReceived = 0
 
   private misbehaviorScore = 0
   private lastMisbehaviorDecay: number = Date.now()

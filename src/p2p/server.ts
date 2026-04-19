@@ -31,6 +31,8 @@ import type { Transaction } from '../transaction.js'
 import { log } from '../log.js'
 import { isValidHash } from '../utils.js'
 
+const PRE_HANDSHAKE_TYPES = new Set(['version', 'verack', 'reject', 'ping', 'pong'])
+
 const MAX_INBOUND = 25
 const MAX_OUTBOUND = 25
 const IBD_BATCH_SIZE = 200
@@ -120,6 +122,8 @@ export class P2PServer {
   private rejectedTxs: Set<string> = new Set()
   /** Per-peer last getblocks response timestamp (rate limiting) */
   private lastGetblocksTime: Map<string, number> = new Map()
+  /** Per-peer last getheaders request timestamp (rate limiting) */
+  private lastGetheadersTime: Map<string, number> = new Map()
 
   private localMode = false
   private anchorsPath: string | null = null
@@ -312,6 +316,7 @@ export class P2PServer {
 
     this.peers.delete(peer.id)
     this.lastGetblocksTime.delete(peer.id)
+    this.lastGetheadersTime.delete(peer.id)
     if (peer.inbound) this.inboundCount--
     else this.outboundCount--
 
@@ -337,6 +342,11 @@ export class P2PServer {
 
   private handleMessage(peer: Peer, msg: Message): void {
     try {
+      if (!PRE_HANDSHAKE_TYPES.has(msg.type) && !peer.handshakeComplete) {
+        peer.addMisbehavior(10)
+        return
+      }
+
       switch (msg.type) {
         case 'version':
           this.handleVersion(peer, msg.payload as VersionPayload)
@@ -478,7 +488,12 @@ export class P2PServer {
       peer.remoteListenPort = payload.listenPort
     }
     if (payload.cumulativeWork) {
-      try { peer.remoteCumulativeWork = BigInt('0x' + payload.cumulativeWork) } catch { /* ignore */ }
+      try {
+        peer.remoteCumulativeWork = BigInt('0x' + payload.cumulativeWork)
+      } catch {
+        log.warn({ component: 'p2p', peer: peer.id }, 'Invalid cumulativeWork in version message')
+        peer.addMisbehavior(10)
+      }
     }
 
     // If inbound, send our version back
@@ -559,10 +574,6 @@ export class P2PServer {
   }
 
   private handleGetBlocks(peer: Peer, payload: GetBlocksPayload): void {
-    if (!peer.handshakeComplete) {
-      peer.addMisbehavior(10)
-      return
-    }
     if (!payload || typeof payload.fromHeight !== 'number' || !Number.isFinite(payload.fromHeight) || !Number.isInteger(payload.fromHeight)) {
       peer.addMisbehavior(10)
       return
@@ -588,10 +599,6 @@ export class P2PServer {
   }
 
   private handleBlocks(peer: Peer, payload: BlocksPayload): void {
-    if (!peer.handshakeComplete) {
-      peer.addMisbehavior(10)
-      return
-    }
     if (!payload || !Array.isArray(payload.blocks)) {
       peer.addMisbehavior(10)
       return
@@ -611,7 +618,18 @@ export class P2PServer {
     let alreadyKnown = 0
     let forkDetected = false
     for (const raw of payload.blocks) {
-      const block = deserializeBlock(raw as Record<string, unknown>)
+      if (raw == null || typeof raw !== 'object') {
+        peer.addMisbehavior(10)
+        continue
+      }
+      let block: Block
+      try {
+        block = deserializeBlock(raw as Record<string, unknown>)
+      } catch (err) {
+        log.warn({ component: 'p2p', peer: peer.id, err }, 'Failed to deserialize block from peer')
+        peer.addMisbehavior(10)
+        continue
+      }
       if (this.seenBlocks.has(block.hash)) { alreadyKnown++; continue }
       if (this.rejectedBlocks.has(block.hash)) continue
 
@@ -688,10 +706,6 @@ export class P2PServer {
   }
 
   private handleTx(peer: Peer, payload: TxPayload): void {
-    if (!peer.handshakeComplete) {
-      peer.addMisbehavior(10)
-      return
-    }
     if (!payload || !payload.tx) {
       peer.addMisbehavior(10)
       return
@@ -700,7 +714,8 @@ export class P2PServer {
     let tx: Transaction
     try {
       tx = deserializeTransaction(payload.tx as Record<string, unknown>)
-    } catch {
+    } catch (err) {
+      log.warn({ component: 'p2p', peer: peer.id, err }, 'Failed to deserialize transaction from peer')
       peer.addMisbehavior(10)
       return
     }
@@ -727,10 +742,6 @@ export class P2PServer {
   }
 
   private handleInv(peer: Peer, payload: InvPayload): void {
-    if (!peer.handshakeComplete) {
-      peer.addMisbehavior(10)
-      return
-    }
     if (!payload || (payload.type !== 'block' && payload.type !== 'tx') || !isValidHash(payload.hash)) {
       peer.addMisbehavior(10)
       return
@@ -750,10 +761,6 @@ export class P2PServer {
   }
 
   private handleGetData(peer: Peer, payload: GetDataPayload): void {
-    if (!peer.handshakeComplete) {
-      peer.addMisbehavior(10)
-      return
-    }
     if (!payload || (payload.type !== 'block' && payload.type !== 'tx') || !isValidHash(payload.hash)) {
       peer.addMisbehavior(10)
       return
@@ -833,14 +840,18 @@ export class P2PServer {
 
   /** Handle getheaders: find common ancestor from locator, respond with headers */
   private handleGetHeaders(peer: Peer, payload: GetHeadersPayload): void {
-    if (!peer.handshakeComplete) {
-      peer.addMisbehavior(10)
-      return
-    }
     if (!payload || !Array.isArray(payload.locatorHashes)) {
       peer.addMisbehavior(10)
       return
     }
+
+    // Rate limit: penalize rapid getheaders to discourage fork-resolution abuse
+    const nowGH = Date.now()
+    const lastGH = this.lastGetheadersTime.get(peer.id) ?? 0
+    if (nowGH - lastGH < 500) {
+      peer.addMisbehavior(5)
+    }
+    this.lastGetheadersTime.set(peer.id, nowGH)
 
     // Cap locator length to prevent CPU abuse (Bitcoin Core uses 101)
     const MAX_LOCATOR_HASHES = 101
@@ -883,10 +894,6 @@ export class P2PServer {
 
   /** Handle headers response: determine if peer chain is longer, reorg if so */
   private handleHeaders(peer: Peer, payload: HeadersPayload): void {
-    if (!peer.handshakeComplete) {
-      peer.addMisbehavior(10)
-      return
-    }
     if (!payload || !Array.isArray(payload.headers)) {
       peer.addMisbehavior(10)
       this.clearForkResolution()
@@ -1086,11 +1093,6 @@ export class P2PServer {
   }
 
   private handleGetAddr(peer: Peer): void {
-    if (!peer.handshakeComplete) {
-      peer.addMisbehavior(10)
-      return
-    }
-
     // Rate limit: max 1 getaddr response per peer per 60 seconds
     const now = Date.now()
     if (now - peer.lastGetaddrResponse < 60_000) {
@@ -1110,14 +1112,18 @@ export class P2PServer {
   }
 
   private handleAddr(peer: Peer, payload: AddrPayload): void {
-    if (!peer.handshakeComplete) {
-      peer.addMisbehavior(10)
-      return
-    }
     if (!payload || !Array.isArray(payload.addresses)) {
       peer.addMisbehavior(10)
       return
     }
+
+    // Rate limit: max 1 addr message per peer per 30 seconds
+    const now = Date.now()
+    if (now - peer.lastAddrReceived < 30_000) {
+      peer.addMisbehavior(5)
+      return
+    }
+    peer.lastAddrReceived = now
 
     // Cap incoming addr entries to prevent address book flooding
     if (payload.addresses.length > MAX_ADDR_RESPONSE) {
@@ -1128,6 +1134,8 @@ export class P2PServer {
 
     const newAddresses: Array<{ host: string; port: number; lastSeen?: number }> = []
     for (const entry of payload.addresses) {
+      // Skip null/non-object entries — a peer sending these is malformed but we continue processing valid ones
+      if (entry == null || typeof entry !== 'object') continue
       // Validate host: must be a non-empty string with reasonable length (IPv6 max ~45 chars)
       if (typeof entry.host !== 'string' || entry.host.length === 0 || entry.host.length > 45) continue
       // Validate port: must be an integer in valid range
@@ -1267,7 +1275,7 @@ export class P2PServer {
     let added = 0
     let currentHash = parentHash
 
-    while (this.orphanBlocks.has(currentHash)) {
+    while (this.orphanBlocks.has(currentHash) && added < MAX_ORPHAN_BLOCKS) {
       const orphan = this.orphanBlocks.get(currentHash)!
       this.orphanBlocks.delete(currentHash)
 

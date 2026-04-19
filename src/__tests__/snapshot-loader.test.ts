@@ -73,6 +73,68 @@ describe('loadSnapshot', () => {
     expect(snapshot.entries).toHaveLength(1)
     expect(snapshot.entries[0].amount).toBe(42)
   })
+
+  it('should parse entry type fields (p2sh, p2tr, p2wsh, multisig)', async () => {
+    const filePath = path.join(tmpDir, 'types.jsonl')
+    const lines = [
+      '{"a":"aabbccdd0011223344556677889900aabbccddee","b":100}',
+      '{"a":"11223344556677889900aabbccddeeff00112233","b":200,"t":"p2sh"}',
+      '{"a":"22334455667788990011aabbccddeeff00112233","b":300,"t":"p2tr"}',
+      '{"a":"33445566778899001122bbccddeeff00112233aa","b":400,"t":"p2wsh"}',
+      '{"a":"44556677889900112233ccddeeff00112233aabb","b":500,"t":"multisig"}',
+      '{"a":"55667788990011223344ddeeff00112233aabbcc","b":600,"t":"unknown"}',
+    ]
+    fs.writeFileSync(filePath, lines.join('\n') + '\n')
+
+    const snapshot = await loadSnapshot(filePath)
+
+    expect(snapshot.entries).toHaveLength(6)
+    expect(snapshot.entries[0].type).toBeUndefined()
+    expect(snapshot.entries[1].type).toBe('p2sh')
+    expect(snapshot.entries[2].type).toBe('p2tr')
+    expect(snapshot.entries[3].type).toBe('p2wsh')
+    expect(snapshot.entries[4].type).toBe('multisig')
+    expect(snapshot.entries[5].type).toBeUndefined()
+  })
+
+  it('should throw when header has merkleRoot but missing timestamp', async () => {
+    const filePath = path.join(tmpDir, 'no-timestamp.jsonl')
+    const lines = [
+      JSON.stringify({ height: 100, hash: 'deadbeef', count: 1, merkleRoot: 'ff'.repeat(32) }),
+      '{"a":"aabbccdd0011223344556677889900aabbccddee","b":100}',
+    ]
+    fs.writeFileSync(filePath, lines.join('\n') + '\n')
+
+    await expect(loadSnapshot(filePath)).rejects.toThrow('btcTimestamp')
+  })
+
+  it('should use hardcoded timestamp for known block hash', async () => {
+    const filePath = path.join(tmpDir, 'known-hash.jsonl')
+    const knownHash = '3aafae11a317cdd4fa7802ad577e741501e1fa0e970101000000000000000000'
+    const lines = [
+      JSON.stringify({ height: 935941, hash: knownHash, count: 1, merkleRoot: 'ff'.repeat(32) }),
+      '{"a":"aabbccdd0011223344556677889900aabbccddee","b":100}',
+    ]
+    fs.writeFileSync(filePath, lines.join('\n') + '\n')
+
+    const snapshot = await loadSnapshot(filePath)
+    expect(snapshot.btcTimestamp).toBe(1739482182)
+    expect(snapshot.btcBlockHash).toBe(knownHash)
+  })
+
+  it('should parse btcBlockHeight and btcBlockHash from header', async () => {
+    const filePath = path.join(tmpDir, 'full-header.jsonl')
+    const lines = [
+      JSON.stringify({ height: 800000, hash: 'cafebabe', timestamp: 1700000000, count: 1, merkleRoot: 'ab'.repeat(32) }),
+      '{"a":"aabbccdd0011223344556677889900aabbccddee","b":100}',
+    ]
+    fs.writeFileSync(filePath, lines.join('\n') + '\n')
+
+    const snapshot = await loadSnapshot(filePath)
+    expect(snapshot.btcBlockHeight).toBe(800000)
+    expect(snapshot.btcBlockHash).toBe('cafebabe')
+    expect(snapshot.btcTimestamp).toBe(1700000000)
+  })
 })
 
 describe('getSnapshotIndex', () => {

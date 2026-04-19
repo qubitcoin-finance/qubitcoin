@@ -51,7 +51,8 @@ export class Mempool {
   private getFeeDensity(tx: Transaction, utxoSet: Map<string, UTXO>): number {
     let d = this.feeDensityCache.get(tx.id)
     if (d === undefined) {
-      d = calculateFee(tx, utxoSet) / this.getTxSize(tx)
+      const size = this.getTxSize(tx)
+      d = size > 0 ? calculateFee(tx, utxoSet) / size : 0
       this.feeDensityCache.set(tx.id, d)
     }
     return d
@@ -122,8 +123,11 @@ export class Mempool {
 
     // Enforce minimum relay fee (fee rate in sat/KB)
     const fee = calculateFee(tx, utxoSet)
+    if (txSize <= 0) {
+      return { success: false, error: 'Transaction has invalid size' }
+    }
     const feeRatePerKB = (fee / txSize) * 1000
-    if (feeRatePerKB < MIN_RELAY_FEE_PER_KB) {
+    if (!Number.isFinite(feeRatePerKB) || feeRatePerKB < MIN_RELAY_FEE_PER_KB) {
       return { success: false, error: `Fee rate ${feeRatePerKB} sat/KB below minimum ${MIN_RELAY_FEE_PER_KB}` }
     }
 
