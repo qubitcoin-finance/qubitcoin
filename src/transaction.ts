@@ -70,6 +70,12 @@ export const DUST_THRESHOLD = 546
 /** Maximum total money supply in satoshis (21M QBTC, same as Bitcoin) */
 export const MAX_MONEY = 2_100_000_000_000_000
 
+/** Maximum number of inputs per transaction — prevents DoS via expensive ML-DSA-65 signature loops */
+export const MAX_TX_INPUTS = 1000
+
+/** Maximum number of outputs per transaction — prevents DoS via unbounded output loops */
+export const MAX_TX_OUTPUTS = 1000
+
 export const COINBASE_TXID = '0'.repeat(64)
 export const CLAIM_TXID = 'c'.repeat(64) // sentinel for BTC claim transactions
 export const HALVING_INTERVAL = 210_000
@@ -258,8 +264,20 @@ export function validateTransaction(
     return { valid: false, error: 'Transaction has no inputs' }
   }
 
+  if (tx.inputs.length > MAX_TX_INPUTS) {
+    return { valid: false, error: `Transaction has too many inputs: ${tx.inputs.length} (max ${MAX_TX_INPUTS})` }
+  }
+
   if (tx.outputs.length === 0) {
     return { valid: false, error: 'Transaction has no outputs' }
+  }
+
+  if (tx.outputs.length > MAX_TX_OUTPUTS) {
+    return { valid: false, error: `Transaction has too many outputs: ${tx.outputs.length} (max ${MAX_TX_OUTPUTS})` }
+  }
+
+  if (!Number.isFinite(tx.timestamp) || tx.timestamp <= 0) {
+    return { valid: false, error: 'Transaction timestamp must be a positive finite number' }
   }
 
   // Check all outputs are positive integers within valid range

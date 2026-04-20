@@ -14,6 +14,8 @@ import {
   COINBASE_MATURITY,
   CLAIM_MATURITY,
   DUST_THRESHOLD,
+  MAX_TX_INPUTS,
+  MAX_TX_OUTPUTS,
   type Transaction,
   type UTXO,
 } from '../transaction.js'
@@ -198,6 +200,46 @@ describe('validateTransaction', () => {
     const result = validateTransaction(tx, utxoSet)
     expect(result.valid).toBe(false)
     expect(result.error).toContain('non-integer amount')
+  })
+
+  it('rejects transaction with too many inputs', () => {
+    const wallet = walletA
+    const txId = 'a'.repeat(64)
+    const fakeInput = {
+      txId,
+      outputIndex: 0,
+      publicKey: wallet.publicKey,
+      signature: new Uint8Array(3309),
+    }
+    const tx: Transaction = {
+      id: 'x'.repeat(64),
+      inputs: Array.from({ length: MAX_TX_INPUTS + 1 }, (_, i) => ({ ...fakeInput, outputIndex: i })),
+      outputs: [{ address: 'b'.repeat(64), amount: 5000 }],
+      timestamp: Date.now(),
+    }
+    const result = validateTransaction(tx, new Map())
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('too many inputs')
+  })
+
+  it('rejects transaction with too many outputs', () => {
+    const wallet = walletA
+    const txId = 'a'.repeat(64)
+    const fakeInput = {
+      txId,
+      outputIndex: 0,
+      publicKey: wallet.publicKey,
+      signature: new Uint8Array(3309),
+    }
+    const tx: Transaction = {
+      id: 'x'.repeat(64),
+      inputs: [fakeInput],
+      outputs: Array.from({ length: MAX_TX_OUTPUTS + 1 }, () => ({ address: 'b'.repeat(64), amount: 546 })),
+      timestamp: Date.now(),
+    }
+    const result = validateTransaction(tx, new Map())
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('too many outputs')
   })
 
   it('passes coinbase through', () => {
@@ -586,6 +628,78 @@ describe('validateTransaction additional edge cases', () => {
     // At exactly CLAIM_MATURITY blocks after the claim, spending should be allowed
     const result = validateTransaction(tx, utxoSet, claimHeight + CLAIM_MATURITY)
     expect(result.valid).toBe(true)
+  })
+
+  it('rejects transaction with NaN timestamp', () => {
+    const fakeInput = {
+      txId: 'a'.repeat(64),
+      outputIndex: 0,
+      publicKey: walletA.publicKey,
+      signature: new Uint8Array(3309),
+    }
+    const tx: Transaction = {
+      id: 'x'.repeat(64),
+      inputs: [fakeInput],
+      outputs: [{ address: 'b'.repeat(64), amount: 5000 }],
+      timestamp: NaN,
+    }
+    const result = validateTransaction(tx, new Map())
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('timestamp')
+  })
+
+  it('rejects transaction with zero timestamp', () => {
+    const fakeInput = {
+      txId: 'a'.repeat(64),
+      outputIndex: 0,
+      publicKey: walletA.publicKey,
+      signature: new Uint8Array(3309),
+    }
+    const tx: Transaction = {
+      id: 'x'.repeat(64),
+      inputs: [fakeInput],
+      outputs: [{ address: 'b'.repeat(64), amount: 5000 }],
+      timestamp: 0,
+    }
+    const result = validateTransaction(tx, new Map())
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('timestamp')
+  })
+
+  it('rejects transaction with negative timestamp', () => {
+    const fakeInput = {
+      txId: 'a'.repeat(64),
+      outputIndex: 0,
+      publicKey: walletA.publicKey,
+      signature: new Uint8Array(3309),
+    }
+    const tx: Transaction = {
+      id: 'x'.repeat(64),
+      inputs: [fakeInput],
+      outputs: [{ address: 'b'.repeat(64), amount: 5000 }],
+      timestamp: -1,
+    }
+    const result = validateTransaction(tx, new Map())
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('timestamp')
+  })
+
+  it('rejects transaction with Infinity timestamp', () => {
+    const fakeInput = {
+      txId: 'a'.repeat(64),
+      outputIndex: 0,
+      publicKey: walletA.publicKey,
+      signature: new Uint8Array(3309),
+    }
+    const tx: Transaction = {
+      id: 'x'.repeat(64),
+      inputs: [fakeInput],
+      outputs: [{ address: 'b'.repeat(64), amount: 5000 }],
+      timestamp: Infinity,
+    }
+    const result = validateTransaction(tx, new Map())
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('timestamp')
   })
 
   it('skips maturity check when currentHeight is undefined', () => {

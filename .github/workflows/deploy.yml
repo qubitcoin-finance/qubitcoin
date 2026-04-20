@@ -107,7 +107,7 @@ jobs:
         with:
           clean: false
 
-      # ----- Backend: docker compose manages qbtc-node, qbtc-q, qbtc-devtx -----
+      # ----- Backend: docker compose manages qbtc-miner -----
       - name: Login to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
@@ -131,17 +131,17 @@ jobs:
       - name: Apply compose stack
         run: docker compose up -d --remove-orphans
 
-      - name: Wait for qbtc-node to be healthy
+      - name: Wait for qbtc-miner to be healthy
         run: |
           for i in $(seq 1 30); do
             if curl -sf http://127.0.0.1:$RPC_PORT/api/v1/status; then
               echo ""
-              echo "qbtc-node up after $((i * 10))s"
+              echo "qbtc-miner up after $((i * 10))s"
               exit 0
             fi
             sleep 10
           done
-          echo "qbtc-node failed to start within 300s"
+          echo "qbtc-miner failed to start within 300s"
           docker compose logs --tail 50
           exit 1
 

@@ -65,8 +65,13 @@ Options:
       flags.add('full')
     } else if (arg === '--local') {
       flags.add('local')
-    } else if (arg.startsWith('--') && i + 1 < args.length) {
-      opts[arg.slice(2)] = args[++i]
+    } else if (arg.startsWith('--')) {
+      const eq = arg.indexOf('=')
+      if (eq !== -1) {
+        opts[arg.slice(2, eq)] = arg.slice(eq + 1)
+      } else if (i + 1 < args.length) {
+        opts[arg.slice(2)] = args[++i]
+      }
     }
   }
 

@@ -1,18 +1,14 @@
 # Production deployment for qubitcoin.finance.
 # Used by .github/workflows/deploy.yml on the self-hosted runner.
-# All services share the same GHCR image and use host networking.
-
-x-qbtcd-common: &qbtcd-common
-  image: ghcr.io/qubitcoin-finance/qbtcd:main
-  restart: unless-stopped
-  network_mode: host
-  environment:
-    NODE_OPTIONS: --max-old-space-size=12288
 
 services:
-  qbtc-node:
-    <<: *qbtcd-common
-    container_name: qbtc-node
+  qbtc-miner:
+    image: ghcr.io/qubitcoin-finance/qbtcd:main
+    container_name: qbtc-miner
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      NODE_OPTIONS: --max-old-space-size=12288
     volumes:
       - /home/qubitcoin/qbtc-data:/data
       - /home/qubitcoin/qbtc-snapshot.jsonl:/snapshot.jsonl
@@ -22,34 +18,3 @@ services:
       - --port=3010
       - --snapshot=/snapshot.jsonl
       - --rpc-bind=127.0.0.1
-
-  qbtc-q:
-    <<: *qbtcd-common
-    container_name: qbtc-q
-    volumes:
-      - /home/qubitcoin/qbtc-q-data:/data
-      - /home/qubitcoin/qbtc-snapshot.jsonl:/snapshot.jsonl
-    command:
-      - --mine
-      - --datadir=/data
-      - --port=3011
-      - --p2p-port=6002
-      - --seeds=localhost:6001
-      - --message=mined by q
-      - --rpc-bind=127.0.0.1
-      - --snapshot=/snapshot.jsonl
-
-  qbtc-devtx:
-    <<: *qbtcd-common
-    container_name: qbtc-devtx
-    volumes:
-      - /home/qubitcoin/qbtc-data:/data
-    entrypoint: ["node"]
-    command:
-      - --loader
-      - ts-node/esm
-      - src/dev-tx.ts
-      - http://127.0.0.1:3010
-      - /data/wallet.json
-    depends_on:
-      - qbtc-node
