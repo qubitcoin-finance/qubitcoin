@@ -274,6 +274,33 @@ function verifyMultisig(
 }
 
 /**
+ * Verify signatures against a parsed witness/redeem script (single-key or multisig).
+ * Returns an error string on failure, undefined on success.
+ */
+function verifyParsedScript(
+  parsed: ReturnType<typeof parseWitnessScript>,
+  signatures: Uint8Array | undefined,
+  msgHash: Uint8Array,
+  typeLabel: string,
+): string | undefined {
+  if (parsed.type === 'single-key') {
+    if (!signatures || signatures.length !== 64) {
+      return `${typeLabel} single-key claim requires exactly one 64-byte signature`
+    }
+    if (!verifyEcdsaSignature(signatures, msgHash, parsed.pubkey)) {
+      return `Invalid ECDSA signature for ${typeLabel} single-key`
+    }
+  } else {
+    const { m, pubkeys } = parsed
+    if (!signatures) {
+      return `${typeLabel} ${m}-of-${pubkeys.length} claim missing signatures`
+    }
+    return verifyMultisig(signatures, msgHash, m, pubkeys, typeLabel)
+  }
+  return undefined
+}
+
+/**
  * Verify a claim transaction's ECDSA proof against the BTC snapshot.
  *
  * Checks:
@@ -329,24 +356,9 @@ export function verifyClaimProof(
       return { valid: false, error: `Failed to parse witness script: ${detail}` }
     }
 
-    if (parsed.type === 'single-key') {
-      // Single-key P2WSH: PUSH33 <pubkey> OP_CHECKSIG
-      if (!claim.witnessSignatures || claim.witnessSignatures.length !== 64) {
-        return { valid: false, error: 'P2WSH single-key claim requires exactly one 64-byte signature' }
-      }
-      if (!verifyEcdsaSignature(claim.witnessSignatures, claimMsgHash, parsed.pubkey)) {
-        return { valid: false, error: 'Invalid ECDSA signature for P2WSH single-key' }
-      }
-    } else {
-      // Multisig: verify m-of-n CHECKMULTISIG-style ordered signatures
-      const { m, pubkeys } = parsed
-      if (!claim.witnessSignatures) {
-        return { valid: false, error: `P2WSH ${m}-of-${pubkeys.length} claim missing signatures` }
-      }
-      const multisigErr = verifyMultisig(claim.witnessSignatures, claimMsgHash, m, pubkeys, 'P2WSH')
-      if (multisigErr) {
-        return { valid: false, error: multisigErr }
-      }
+    const scriptErr = verifyParsedScript(parsed, claim.witnessSignatures, claimMsgHash, typeLabel)
+    if (scriptErr) {
+      return { valid: false, error: scriptErr }
     }
   } else if (entry.type === 'p2tr') {
     // P2TR: verify Schnorr signature against internal key, check tweaked key matches address
@@ -392,22 +404,9 @@ export function verifyClaimProof(
         return { valid: false, error: `Failed to parse redeem script: ${detail}` }
       }
 
-      if (parsed.type === 'single-key') {
-        if (!claim.witnessSignatures || claim.witnessSignatures.length !== 64) {
-          return { valid: false, error: 'P2SH single-key claim requires exactly one 64-byte signature' }
-        }
-        if (!verifyEcdsaSignature(claim.witnessSignatures, claimMsgHash, parsed.pubkey)) {
-          return { valid: false, error: 'Invalid ECDSA signature for P2SH single-key' }
-        }
-      } else {
-        const { m, pubkeys } = parsed
-        if (!claim.witnessSignatures) {
-          return { valid: false, error: `P2SH ${m}-of-${pubkeys.length} claim missing signatures` }
-        }
-        const multisigErr = verifyMultisig(claim.witnessSignatures, claimMsgHash, m, pubkeys, 'P2SH')
-        if (multisigErr) {
-          return { valid: false, error: multisigErr }
-        }
+      const scriptErr = verifyParsedScript(parsed, claim.witnessSignatures, claimMsgHash, 'P2SH')
+      if (scriptErr) {
+        return { valid: false, error: scriptErr }
       }
     } else {
       // P2SH-P2WPKH: HASH160(0x0014 || HASH160(pubkey)) === btcAddress

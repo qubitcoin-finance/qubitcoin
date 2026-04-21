@@ -32,6 +32,7 @@ import { log } from '../log.js'
 import { isValidHash } from '../utils.js'
 
 const PRE_HANDSHAKE_TYPES = new Set(['version', 'verack', 'reject', 'ping', 'pong'])
+const INV_TYPES = new Set(['block', 'tx'])
 
 const MAX_INBOUND = 25
 const MAX_OUTBOUND = 25
@@ -52,6 +53,11 @@ function getSubnet16(ip: string): string {
   const normalized = ip.replace(/^::ffff:/i, '')
   const match = normalized.match(/^(\d+\.\d+)\.\d+\.\d+$/)
   return match ? match[1] : ip // non-IPv4 addresses use full IP as "subnet"
+}
+
+/** Returns true if host is a valid IPv4 or IPv6 address string */
+function isValidIPAddress(host: string): boolean {
+  return net.isIP(host) !== 0
 }
 
 /** Check if an IP address is publicly routable (not private/loopback/link-local) */
@@ -741,8 +747,12 @@ export class P2PServer {
     }
   }
 
+  private isValidInvPayload(payload: InvPayload | GetDataPayload): boolean {
+    return !!payload && INV_TYPES.has(payload.type) && isValidHash(payload.hash)
+  }
+
   private handleInv(peer: Peer, payload: InvPayload): void {
-    if (!payload || (payload.type !== 'block' && payload.type !== 'tx') || !isValidHash(payload.hash)) {
+    if (!this.isValidInvPayload(payload)) {
       peer.addMisbehavior(10)
       return
     }
@@ -761,7 +771,7 @@ export class P2PServer {
   }
 
   private handleGetData(peer: Peer, payload: GetDataPayload): void {
-    if (!payload || (payload.type !== 'block' && payload.type !== 'tx') || !isValidHash(payload.hash)) {
+    if (!this.isValidInvPayload(payload)) {
       peer.addMisbehavior(10)
       return
     }
@@ -1136,8 +1146,8 @@ export class P2PServer {
     for (const entry of payload.addresses) {
       // Skip null/non-object entries — a peer sending these is malformed but we continue processing valid ones
       if (entry == null || typeof entry !== 'object') continue
-      // Validate host: must be a non-empty string with reasonable length (IPv6 max ~45 chars)
-      if (typeof entry.host !== 'string' || entry.host.length === 0 || entry.host.length > 45) continue
+      // Validate host: must be a valid IPv4 or IPv6 address (rejects hostnames, paths, etc.)
+      if (typeof entry.host !== 'string' || !isValidIPAddress(entry.host)) continue
       // Validate port: must be an integer in valid range
       if (typeof entry.port !== 'number' || !Number.isInteger(entry.port) || entry.port <= 0 || entry.port > 65535) continue
       // Validate lastSeen: must be a number if present
