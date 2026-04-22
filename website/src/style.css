@@ -125,7 +125,7 @@ body {
 
 
 /* Blog post prose — headings, paragraphs, and anchors carry inline Tailwind
-   utility classes from the h2/p helpers in blog-posts.ts, so only <strong>
+   utility classes from the h2/p helpers in blog/types.ts, so only <strong>
    (used bare) needs a rule. */
 .prose-blog strong { color: var(--color-text-primary); font-weight: 600; }
 
