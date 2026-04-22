@@ -2,6 +2,8 @@
 // QubitCoin Block Explorer - vanilla TS, hash-based routing, polling
 // ---------------------------------------------------------------------------
 
+import { BLOG_POSTS, BLOG_TAG_COLORS } from './blog-posts';
+
 const API = '/api/v1';
 
 // --- Types -----------------------------------------------------------------
@@ -335,7 +337,8 @@ type Route =
   | { view: 'tx'; txid: string }
   | { view: 'address'; addr: string }
   | { view: 'mempool' }
-  | { view: 'docs'; section?: string };
+  | { view: 'docs'; section?: string }
+  | { view: 'blog'; slug?: string };
 
 function parseRoute(): Route {
   const hash = location.hash || '#/';
@@ -346,6 +349,7 @@ function parseRoute(): Route {
   if (parts[0] === 'address' && parts[1]) return { view: 'address', addr: parts[1] };
   if (parts[0] === 'mempool') return { view: 'mempool' };
   if (parts[0] === 'docs') return { view: 'docs', section: parts[1] };
+  if (parts[0] === 'blog') return { view: 'blog', slug: parts[1] };
   return { view: 'dashboard' };
 }
 
@@ -1992,6 +1996,80 @@ function docIcon(paths: string, cls: string): string {
   return `<svg class="w-4 h-4 ${cls} shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">${paths}</svg>`;
 }
 
+// --- Blog ------------------------------------------------------------------
+
+
+function renderBlogList(): void {
+  const cards = BLOG_POSTS.map(post => {
+    const tags = post.tags.map(t => {
+      const cls = BLOG_TAG_COLORS[t] || 'text-text-muted bg-surface border-border';
+      return `<span class="px-2 py-0.5 rounded text-[10px] font-mono border ${cls}">${t}</span>`;
+    }).join('');
+    return `<a href="#/blog/${post.slug}" class="block group">
+      <div class="bg-surface rounded-2xl glow-border p-7 transition-all group-hover:border-qubit-600/40">
+        <div class="flex items-center gap-2 mb-4 flex-wrap">
+          <span class="text-xs font-mono text-text-muted">${post.date}</span>
+          <span class="text-text-muted/30">·</span>
+          ${tags}
+        </div>
+        <h2 class="text-lg font-semibold text-text-primary mb-3 group-hover:text-qubit-300 transition-colors">${post.title}</h2>
+        <p class="text-text-muted text-sm leading-relaxed">${post.excerpt}</p>
+        <div class="mt-5 flex items-center gap-1.5 text-qubit-400 text-xs font-medium">
+          Read post
+          <svg class="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        </div>
+      </div>
+    </a>`;
+  }).join('');
+
+  root.innerHTML = `
+    <div class="mb-10">
+      <p class="text-qubit-400 font-mono text-sm tracking-widest mb-2">BLOG</p>
+      <h1 class="text-3xl font-bold">Thinking Out Loud</h1>
+      <p class="text-text-muted mt-2 text-sm">QubitCoin development updates, cryptography deep-dives, and the thinking behind the project.</p>
+    </div>
+    <div class="grid md:grid-cols-2 gap-6 lg:grid-cols-3">
+      ${cards}
+    </div>`;
+}
+
+function renderBlogPost(slug: string): void {
+  const post = BLOG_POSTS.find(p => p.slug === slug);
+  if (!post) {
+    root.innerHTML = `<div class="flex flex-col items-center justify-center py-24 text-center gap-4">
+      <p class="text-qubit-400 font-mono text-xs tracking-widest">404</p>
+      <h1 class="text-2xl font-bold">Post not found</h1>
+      <p class="text-text-muted text-sm max-w-md">The blog post you're looking for doesn't exist or may have been moved.</p>
+      <div class="flex items-center gap-3 mt-2">
+        <a href="#/blog" class="px-4 py-2 rounded-lg bg-qubit-600/20 border border-qubit-600/40 text-qubit-300 hover:bg-qubit-600/30 transition-all text-sm">← All Posts</a>
+        <a href="#/" class="px-4 py-2 rounded-lg border border-border text-text-muted hover:text-text-primary hover:border-qubit-600/40 transition-all text-sm">Home</a>
+      </div>
+    </div>`;
+    return;
+  }
+
+  const tags = post.tags.map(t => {
+    const cls = BLOG_TAG_COLORS[t] || 'text-text-muted bg-surface border-border';
+    return `<span class="px-2 py-0.5 rounded text-[10px] font-mono border ${cls}">${t}</span>`;
+  }).join('');
+
+  root.innerHTML = `
+    <div class="max-w-2xl mx-auto">
+      <a href="#/blog" class="inline-flex items-center gap-1.5 text-text-muted hover:text-qubit-400 transition-colors text-sm mb-8">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+        All Posts
+      </a>
+      <div class="flex items-center gap-2 mb-4 flex-wrap">
+        <span class="text-xs font-mono text-text-muted">${post.date}</span>
+        <span class="text-text-muted/30">·</span>
+        ${tags}
+      </div>
+      <div class="prose-blog">
+        ${post.content()}
+      </div>
+    </div>`;
+}
+
 function renderDocs(section?: string): void {
   const activeSection = section || 'overview';
   const sectionData = DOC_SECTIONS.find(s => s.id === activeSection) || DOC_SECTIONS[0];
@@ -2130,11 +2208,11 @@ async function dispatch(): Promise<void> {
 
   const route = parseRoute();
 
-  // Hide search bar on docs route; widen container for sidebar
+  // Hide search bar on docs/blog routes; widen container for docs (sidebar) and blog (3-col grid).
   const searchBar = document.querySelector('#explorer-main > .mb-6') as HTMLElement | null;
-  if (searchBar) searchBar.style.display = route.view === 'docs' ? 'none' : '';
+  if (searchBar) searchBar.style.display = (route.view === 'docs' || route.view === 'blog') ? 'none' : '';
   if (explorerEl) {
-    if (route.view === 'docs') {
+    if (route.view === 'docs' || route.view === 'blog') {
       explorerEl.classList.remove('max-w-6xl');
       explorerEl.classList.add('max-w-[90rem]');
     } else {
@@ -2143,7 +2221,7 @@ async function dispatch(): Promise<void> {
     }
   }
 
-  if (route.view !== 'docs') renderLoading();
+  if (route.view !== 'docs' && route.view !== 'blog') renderLoading();
 
   switch (route.view) {
     case 'mempool':
@@ -2165,6 +2243,13 @@ async function dispatch(): Promise<void> {
       break;
     case 'docs':
       renderDocs(route.section);
+      break;
+    case 'blog':
+      if (route.slug) {
+        renderBlogPost(route.slug);
+      } else {
+        renderBlogList();
+      }
       break;
   }
   window.scrollTo(0, 0);

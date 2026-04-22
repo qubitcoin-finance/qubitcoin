@@ -344,6 +344,52 @@ describe('RPC transaction endpoints', () => {
     expect(Array.isArray(body)).toBe(true)
     expect(body.length).toBeGreaterThan(0)
   })
+
+  it('GET /mempool/txs claim tx has null sender and defined claimData', async () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const genesisHash = node.chain.blocks[0].hash
+    const claimTx = createClaimTransaction(
+      holders[2].secretKey,
+      holders[2].publicKey,
+      snapshot.entries[2],
+      walletB,
+      snapshot.btcBlockHash,
+      genesisHash
+    )
+    node.receiveTransaction(claimTx)
+
+    const res = await fetch(`${baseUrl}/api/v1/mempool/txs`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    const claimEntry = body.find((tx: { id: string; claimData?: unknown }) => tx.id === claimTx.id)
+    expect(claimEntry).toBeDefined()
+    expect(claimEntry.sender).toBeNull()
+    expect(typeof claimEntry.claimData).toBe('object')
+  })
+
+  it('POST /tx with valid claim transaction returns 200 with txid', async () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const genesisHash = node.chain.blocks[0].hash
+    // Use holders[1] — holders[0] is already pending in mempool from the earlier test
+    const claimTx = createClaimTransaction(
+      holders[1].secretKey,
+      holders[1].publicKey,
+      snapshot.entries[1],
+      walletB,
+      snapshot.btcBlockHash,
+      genesisHash
+    )
+    const body = sanitizeForStorage(claimTx)
+
+    const res = await fetch(`${baseUrl}/api/v1/tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    expect(res.status).toBe(200)
+    const json = await res.json()
+    expect(json.txid).toBe(claimTx.id)
+  })
 })
 
 describe('RPC edge cases', () => {
@@ -440,6 +486,14 @@ describe('RPC edge cases', () => {
     expect(res.status).toBe(400)
     const body = await res.json()
     expect(body.error).toContain('non-negative integer')
+  })
+
+  it('GET /block-by-height/:height beyond chain length returns 404', async () => {
+    const beyondTip = node.chain.blocks.length
+    const res = await fetch(`${baseUrl}/api/v1/block-by-height/${beyondTip}`)
+    expect(res.status).toBe(404)
+    const body = await res.json()
+    expect(body.error).toContain('not found')
   })
 
   it('GET /blocks?count=100abc returns 400 (not 100 blocks)', async () => {
