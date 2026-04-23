@@ -1137,3 +1137,92 @@ describe('Transaction index (O(1) lookups)', () => {
     expect(chain.getHeight()).toBe(1)
   })
 })
+
+describe('validateChain completeness', () => {
+  it('reports invalidAtHeight for tampered block', () => {
+    const chain = new Blockchain()
+    chain.addBlock(mineOnChain(chain, walletA.address))
+    chain.addBlock(mineOnChain(chain, walletA.address))
+
+    chain.blocks[1].hash = 'ff'.repeat(32)
+    const result = chain.validateChain()
+    expect(result.valid).toBe(false)
+    expect(result.invalidAtHeight).toBe(1)
+  })
+
+  it('detects tampered block height field', () => {
+    const chain = new Blockchain()
+    chain.addBlock(mineOnChain(chain, walletA.address))
+
+    // Tamper height without touching the hash
+    chain.blocks[1].height = 99
+    const result = chain.validateChain()
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('height field is 99')
+    expect(result.invalidAtHeight).toBe(1)
+  })
+
+  it('detects coinbase overreach (more than subsidy)', () => {
+    const chain = new Blockchain()
+    chain.difficulty = TEST_TARGET
+    chain.addBlock(mineOnChain(chain, walletA.address))
+
+    // Inflate the coinbase output amount directly on the stored block
+    chain.blocks[1].transactions[0].outputs[0].amount = 999_999_999_999
+
+    // Recompute merkle root and rehash so hash/merkle checks still pass
+    const txIds = chain.blocks[1].transactions.map((t) => t.id)
+    chain.blocks[1].header.merkleRoot = computeMerkleRoot(txIds)
+    chain.blocks[1].hash = computeBlockHash(chain.blocks[1].header)
+
+    const result = chain.validateChain()
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('coinbase amount')
+    expect(result.invalidAtHeight).toBe(1)
+  })
+
+  it('detects duplicate transaction IDs within a block', () => {
+    const chain = new Blockchain()
+    chain.difficulty = TEST_TARGET
+
+    // Build a block with a duplicate txid manually, then mine a valid PoW
+    const tip = chain.getChainTip()
+    const height = 1
+    const coinbase = createCoinbaseTransaction(walletA.address, height, 0)
+    // Two copies of the same coinbase → duplicate txid
+    const txs = [coinbase, { ...coinbase }]
+    const merkleRoot = computeMerkleRoot(txs.map((t) => t.id))
+
+    const header: BlockHeader = {
+      version: 1,
+      previousHash: tip.hash,
+      merkleRoot,
+      timestamp: tip.header.timestamp + 1,
+      target: TEST_TARGET,
+      nonce: 0,
+    }
+
+    let hash = computeBlockHash(header)
+    while (!hashMeetsTarget(hash, header.target)) {
+      header.nonce++
+      hash = computeBlockHash(header)
+    }
+
+    // Push directly to bypass addBlock validation (which would catch the duplicate)
+    chain.blocks.push({ header, hash, transactions: txs, height })
+    chain.blocksByHash.set(hash, chain.blocks[1])
+
+    const result = chain.validateChain()
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('duplicate transaction ID')
+    expect(result.invalidAtHeight).toBe(1)
+  })
+
+  it('returns valid for a clean multi-block chain', () => {
+    const chain = new Blockchain()
+    for (let i = 0; i < 3; i++) {
+      chain.addBlock(mineOnChain(chain, walletA.address))
+    }
+    expect(chain.validateChain().valid).toBe(true)
+  })
+})

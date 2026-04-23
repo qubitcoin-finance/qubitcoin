@@ -3,7 +3,7 @@
  *
  * Maintains the canonical chain, UTXO set, and handles difficulty adjustment.
  */
-import { type UTXO, utxoKey, isCoinbase, isClaimTransaction, validateTransaction, COINBASE_MATURITY } from './transaction.js'
+import { type UTXO, utxoKey, isCoinbase, isClaimTransaction, validateTransaction, COINBASE_MATURITY, blockSubsidy, calculateFee } from './transaction.js'
 import { type BtcSnapshot } from './snapshot.js'
 import { verifyClaimProof } from './claim.js'
 import {
@@ -15,9 +15,11 @@ import {
   computeMerkleRoot,
   hashMeetsTarget,
   blockWork,
+  blockSize,
   DIFFICULTY_ADJUSTMENT_INTERVAL,
   TARGET_BLOCK_TIME_MS,
   STARTING_DIFFICULTY,
+  MAX_BLOCK_SIZE,
 } from './block.js'
 import { type BlockStorage } from './storage.js'
 import { getSnapshotIndex, type ShardedIndex } from './snapshot.js'
@@ -331,6 +333,25 @@ export class Blockchain {
         }
       }
 
+      // Re-verify block height matches chain position
+      if (block.height !== i) {
+        return {
+          valid: false,
+          error: `Block ${i}: height field is ${block.height}, expected ${i}`,
+          invalidAtHeight: i,
+        }
+      }
+
+      // Re-verify block size
+      const size = blockSize(block)
+      if (size > MAX_BLOCK_SIZE) {
+        return {
+          valid: false,
+          error: `Block ${i}: size ${size} exceeds max ${MAX_BLOCK_SIZE}`,
+          invalidAtHeight: i,
+        }
+      }
+
       // Re-verify merkle root
       const txIds = block.transactions.map((tx) => tx.id)
       const expectedMerkle = computeMerkleRoot(txIds)
@@ -342,7 +363,21 @@ export class Blockchain {
         }
       }
 
+      // Re-verify no duplicate transaction IDs (CVE-2012-2459)
+      const txIdSet = new Set<string>()
+      for (const tx of block.transactions) {
+        if (txIdSet.has(tx.id)) {
+          return {
+            valid: false,
+            error: `Block ${i}: duplicate transaction ID ${tx.id.slice(0, 16)}…`,
+            invalidAtHeight: i,
+          }
+        }
+        txIdSet.add(tx.id)
+      }
+
       // Validate non-coinbase transactions against temp UTXO set
+      let totalFees = 0
       for (let j = 1; j < block.transactions.length; j++) {
         const tx = block.transactions[j]
         // Re-verify claim transactions
@@ -370,6 +405,21 @@ export class Blockchain {
           return {
             valid: false,
             error: `Block ${i}, tx ${j}: ${result.error}`,
+            invalidAtHeight: i,
+          }
+        }
+        totalFees += calculateFee(tx, tempUtxoSet)
+      }
+
+      // Re-verify coinbase amount does not exceed subsidy + fees (skip genesis burn address)
+      if (i > 0) {
+        const coinbase = block.transactions[0]
+        const coinbaseAmount = coinbase.outputs.reduce((sum, o) => sum + o.amount, 0)
+        const maxReward = blockSubsidy(block.height) + totalFees
+        if (coinbaseAmount > maxReward) {
+          return {
+            valid: false,
+            error: `Block ${i}: coinbase amount ${coinbaseAmount} exceeds max reward ${maxReward}`,
             invalidAtHeight: i,
           }
         }
