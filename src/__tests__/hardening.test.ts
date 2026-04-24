@@ -460,7 +460,7 @@ describe('RPC hardening', () => {
     }
   })
 
-  it('should handle NaN mempool limit gracefully', async () => {
+  it('should reject non-integer mempool limit with 400', async () => {
     const { startRpcServer } = await import('../rpc.js')
     const node = new Node('rpc-mlimit')
     const app = startRpcServer(node, 0)
@@ -469,9 +469,9 @@ describe('RPC hardening', () => {
 
     try {
       const res = await fetch(`http://127.0.0.1:${addr.port}/api/v1/mempool/txs?limit=xyz`)
-      expect(res.status).toBe(200) // should fall back to default limit, not crash
+      expect(res.status).toBe(400) // invalid input must be rejected, not silently ignored
       const body = await res.json()
-      expect(Array.isArray(body)).toBe(true)
+      expect(body.error).toContain('Invalid limit parameter')
     } finally {
       server.close()
     }

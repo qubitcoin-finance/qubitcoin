@@ -557,11 +557,26 @@ describe('RPC edge cases', () => {
     expect(body.length).toBe(0)
   })
 
-  it('GET /mempool/txs?limit=abc defaults to 1000 cap', async () => {
+  it('GET /mempool/txs?limit=abc returns 400', async () => {
     const res = await fetch(`${baseUrl}/api/v1/mempool/txs?limit=abc`)
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(400)
     const body = await res.json()
-    expect(Array.isArray(body)).toBe(true)
+    expect(body.error).toContain('Invalid limit parameter')
+  })
+
+  it('GET /mempool/txs?limit=-1 returns 400', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/mempool/txs?limit=-1`)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('Invalid limit parameter')
+  })
+
+  it('GET /mempool/txs?limit=100abc returns 400 (not 100 results)', async () => {
+    // parseInt("100abc", 10) === 100 — without regex guard this would silently use 100
+    const res = await fetch(`${baseUrl}/api/v1/mempool/txs?limit=100abc`)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('Invalid limit parameter')
   })
 
   // POST /tx edge cases

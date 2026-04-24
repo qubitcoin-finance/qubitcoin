@@ -174,8 +174,12 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
 
   // Endpoint to get mempool transactions (lightweight: no signatures/publicKeys, includes sender)
   app.get('/api/v1/mempool/txs', (req, res) => {
-    const parsedLimit = parseInt(req.query.limit as string, 10);
-    const limit = Math.min(isNaN(parsedLimit) || parsedLimit < 0 ? 1000 : parsedLimit, 1000);
+    if (req.query.limit !== undefined && !/^\d+$/.test(req.query.limit as string)) {
+      res.status(400).json({ error: 'Invalid limit parameter' });
+      return;
+    }
+    const parsedLimit = req.query.limit ? parseInt(req.query.limit as string, 10) : 1000;
+    const limit = Math.min(parsedLimit, 1000);
     const txs = node.mempool.getTransactionsForBlock().slice(0, limit);
     const summaries = txs.map(tx => {
       const isCoinbase = tx.inputs.length === 1 && tx.inputs[0].txId === COINBASE_TXID;
