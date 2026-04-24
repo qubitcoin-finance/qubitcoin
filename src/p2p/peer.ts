@@ -173,9 +173,11 @@ export class Peer {
         }
         this.onMessage(this, msg)
       }
-    } catch {
-      // Malformed message framing — penalize peer for sending garbage
-      this.addMisbehavior(25)
+    } catch (err) {
+      // Malformed message framing — disconnect immediately rather than partial penalty,
+      // since we can no longer trust the byte stream from this peer
+      const reason = err instanceof Error ? err.message : String(err)
+      this.disconnect(`message framing error: ${reason}`)
     }
   }
 

@@ -727,3 +727,62 @@ describe('validateTransaction additional edge cases', () => {
     expect(result.valid).toBe(true)
   })
 })
+
+describe('validateTransaction output address validation', () => {
+  function makeFakeTx(outputAddress: string): Transaction {
+    // Build a minimal transaction with the given output address.
+    // Signatures / txId are irrelevant — address format is checked before UTXO or txId validation.
+    return {
+      id: 'f'.repeat(64),
+      inputs: [
+        {
+          txId: 'a'.repeat(64),
+          outputIndex: 0,
+          publicKey: new Uint8Array(0),
+          signature: new Uint8Array(0),
+        },
+      ],
+      outputs: [{ address: outputAddress, amount: DUST_THRESHOLD }],
+      timestamp: Date.now(),
+    }
+  }
+
+  it('rejects output with empty address', () => {
+    const result = validateTransaction(makeFakeTx(''), new Map())
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('invalid address format')
+  })
+
+  it('rejects output with address shorter than 64 chars', () => {
+    const result = validateTransaction(makeFakeTx('ab'.repeat(16)), new Map()) // 32 chars
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('invalid address format')
+  })
+
+  it('rejects output with address longer than 64 chars', () => {
+    const result = validateTransaction(makeFakeTx('a'.repeat(65)), new Map())
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('invalid address format')
+  })
+
+  it('rejects output with uppercase hex address', () => {
+    // isValidHash requires lowercase; uppercase must be rejected so addresses stay canonical
+    const result = validateTransaction(makeFakeTx('A'.repeat(64)), new Map())
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('invalid address format')
+  })
+
+  it('rejects output with non-hex address', () => {
+    const result = validateTransaction(makeFakeTx('z'.repeat(64)), new Map())
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('invalid address format')
+  })
+
+  it('accepts output with valid 64-char lowercase hex address', () => {
+    // A well-formed address gets past format validation;
+    // subsequent UTXO lookup will fail (expected — we pass an empty UTXO set).
+    const result = validateTransaction(makeFakeTx('a'.repeat(64)), new Map())
+    expect(result.valid).toBe(false)
+    expect(result.error).not.toContain('invalid address format')
+  })
+})

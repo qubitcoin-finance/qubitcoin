@@ -16,6 +16,7 @@ import {
   bytesToHex,
   type Wallet,
 } from './crypto.js'
+import { isValidHash } from './utils.js'
 
 export interface TransactionInput {
   txId: string           // hex txid of the UTXO being spent
@@ -280,8 +281,11 @@ export function validateTransaction(
     return { valid: false, error: 'Transaction timestamp must be a positive finite number' }
   }
 
-  // Check all outputs are positive integers within valid range
+  // Check all outputs have valid addresses and amounts
   for (let i = 0; i < tx.outputs.length; i++) {
+    if (!isValidHash(tx.outputs[i].address)) {
+      return { valid: false, error: `Output ${i} has invalid address format` }
+    }
     if (tx.outputs[i].amount <= 0) {
       return { valid: false, error: `Output ${i} has non-positive amount` }
     }

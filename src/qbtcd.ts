@@ -226,7 +226,10 @@ async function main() {
   }
 
   // Start RPC
-  startRpcServer(node, config.port, p2p, config.rpcBind)
+  const rpcApp = startRpcServer(node, config.port, p2p, config.rpcBind)
+  rpcApp.listen(config.port, config.rpcBind, () => {
+    log.info({ component: 'rpc', port: config.port, bind: config.rpcBind, url: `http://${config.rpcBind}:${config.port}` }, 'RPC server listening')
+  })
 
   // Mining mode — load or generate a wallet, then mine continuously
   if (config.mine) {

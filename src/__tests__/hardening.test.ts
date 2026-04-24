@@ -496,7 +496,7 @@ describe('RPC hardening', () => {
     const { startRpcServer } = await import('../rpc.js')
     const node = new Node('rpc-cors')
     // Bind to 0.0.0.0 — CORS should be restrictive
-    // startRpcServer calls app.listen internally, so we create our own app
+    // Build a minimal express app to test CORS behavior directly
     const express = (await import('express')).default
     const cors = (await import('cors')).default
     const app = express()
@@ -830,17 +830,15 @@ describe('P2P message error handling', () => {
       p2p2.connectOutbound('127.0.0.1', port)
       await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
 
-      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0] as Peer
-      const scoreBefore = peerOnNode1.getMisbehaviorScore()
-
       // Send a message with unknown type
       const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0] as Peer
       peerOnNode2.send({ type: 'foobar' as any, payload: {} })
 
       await new Promise(r => setTimeout(r, 300))
 
-      // Unknown type is rejected during decode (malformed framing), adds +25 misbehavior
-      expect(peerOnNode1.getMisbehaviorScore()).toBe(scoreBefore + 25)
+      // Unknown type causes a framing decode error — peer is immediately disconnected
+      // rather than accumulating misbehavior points, since the byte stream is untrustworthy.
+      expect(p2p1.getPeers().length).toBe(0)
     } finally {
       await p2p1.stop()
       await p2p2.stop()

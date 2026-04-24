@@ -1,11 +1,15 @@
 import { describe, it, expect, afterAll, beforeAll } from 'vitest'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { Node } from '../node.js'
 import { startRpcServer } from '../rpc.js'
 import { walletA, walletB } from './fixtures.js'
 import { createMockSnapshot } from '../snapshot.js'
 import { createClaimTransaction } from '../claim.js'
 import { createTransaction } from '../transaction.js'
-import { sanitizeForStorage } from '../storage.js'
+import { sanitizeForStorage, FileBlockStorage } from '../storage.js'
+import { P2PServer } from '../p2p/server.js'
 import type { AddressInfo } from 'node:net'
 import type { Server } from 'node:http'
 
@@ -496,6 +500,13 @@ describe('RPC edge cases', () => {
     expect(body.error).toContain('not found')
   })
 
+  it('GET /block-by-height/:height rejects values exceeding INT32 max', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/block-by-height/2147483648`)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('too large')
+  })
+
   it('GET /blocks?count=100abc returns 400 (not 100 blocks)', async () => {
     // parseInt("100abc", 10) === 100, so without the regex guard this would
     // silently use 100 instead of rejecting the malformed parameter.
@@ -590,5 +601,121 @@ describe('RPC edge cases', () => {
       body: JSON.stringify([]),
     })
     expect(res.status).toBe(400)
+  })
+})
+
+describe('RPC rate limiting', () => {
+  let node: Node
+  let server: Server
+  let baseUrl: string
+
+  beforeAll(() => {
+    node = new Node('rpc-rate-test')
+    const app = startRpcServer(node, 0)
+    server = app.listen(0)
+    const addr = server.address() as AddressInfo
+    baseUrl = `http://127.0.0.1:${addr.port}`
+  })
+
+  afterAll(() => {
+    server.close()
+  })
+
+  it('POST /tx is rate-limited at 100 requests/min per IP', async () => {
+    // Send 101 POST requests concurrently from the same IP.
+    // After 100 accepted requests, the 101st must be rejected with 429.
+    const responses = await Promise.all(
+      Array.from({ length: 101 }, () =>
+        fetch(`${baseUrl}/api/v1/tx`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        })
+      )
+    )
+    const statuses = responses.map(r => r.status)
+    // Most responses will be 400 (invalid tx body), at least one must be 429
+    expect(statuses.filter(s => s === 429).length).toBeGreaterThanOrEqual(1)
+  })
+})
+
+describe('RPC with p2pServer', () => {
+  it('GET /status includes peers count from p2pServer', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-rpc-status-'))
+    try {
+      const storage = new FileBlockStorage(tmpDir)
+      const n = new Node('rpc-status-p2p-test', undefined, storage)
+      const p2p = new P2PServer(n, 0, tmpDir)
+      await p2p.start()
+
+      const app = startRpcServer(n, 0, p2p)
+      const srv = app.listen(0)
+      const addr = srv.address() as AddressInfo
+      const url = `http://127.0.0.1:${addr.port}`
+
+      try {
+        const res = await fetch(`${url}/api/v1/status`)
+        expect(res.status).toBe(200)
+        const body = await res.json()
+        // peers field must be present and numeric (0 — no connected peers yet)
+        expect(typeof body.peers).toBe('number')
+        expect(body.peers).toBe(0)
+      } finally {
+        srv.close()
+        await p2p.stop()
+      }
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true })
+    }
+  })
+
+  it('GET /peers filters out localhost peers when p2pServer is provided', async () => {
+    const tmpDir1 = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-rpc-peers1-'))
+    const tmpDir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-rpc-peers2-'))
+    try {
+      const n1 = new Node('rpc-peers-test-1', undefined, new FileBlockStorage(tmpDir1))
+      const p2p1 = new P2PServer(n1, 0, tmpDir1)
+      p2p1.setLocalMode(true) // allow private IPs in address book for this test
+      await p2p1.start()
+      const p2pPort = (p2p1 as any).server.address().port
+
+      const n2 = new Node('rpc-peers-test-2', undefined, new FileBlockStorage(tmpDir2))
+      const p2p2 = new P2PServer(n2, 0, tmpDir2)
+      p2p2.setLocalMode(true)
+      await p2p2.start()
+
+      // Connect node2 → node1 and wait for handshake
+      p2p2.connectOutbound('127.0.0.1', p2pPort)
+      await new Promise<void>((resolve, reject) => {
+        const deadline = Date.now() + 5_000
+        const check = () => {
+          if (p2p1.getPeers().length > 0) return resolve()
+          if (Date.now() > deadline) return reject(new Error('handshake timeout'))
+          setTimeout(check, 20)
+        }
+        setTimeout(check, 20)
+      })
+
+      const app = startRpcServer(n1, 0, p2p1)
+      const srv = app.listen(0)
+      const addr = srv.address() as AddressInfo
+      const url = `http://127.0.0.1:${addr.port}`
+
+      try {
+        const res = await fetch(`${url}/api/v1/peers`)
+        expect(res.status).toBe(200)
+        const body = await res.json()
+        expect(Array.isArray(body)).toBe(true)
+        // The connected peer is on 127.0.0.1, so it must be filtered out
+        expect(body.length).toBe(0)
+      } finally {
+        srv.close()
+        await p2p1.stop()
+        await p2p2.stop()
+      }
+    } finally {
+      fs.rmSync(tmpDir1, { recursive: true })
+      fs.rmSync(tmpDir2, { recursive: true })
+    }
   })
 })

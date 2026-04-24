@@ -106,6 +106,10 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
       return;
     }
     const height = parseInt(req.params.height, 10);
+    if (height > 2_147_483_647) {
+      res.status(400).json({ error: 'Invalid height: value too large' });
+      return;
+    }
     if (height >= node.chain.blocks.length) {
       res.status(404).json({ error: 'Block not found' });
       return;
@@ -140,7 +144,11 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
     // Look in the chain using O(1) transaction index
     const block = node.chain.findTransactionBlock(txid);
     if (block) {
-      const foundTx = block.transactions.find(t => t.id === txid)!;
+      const foundTx = block.transactions.find(t => t.id === txid);
+      if (!foundTx) {
+        res.status(404).json({ error: 'Transaction not found' });
+        return;
+      }
       res.json(sanitize(foundTx));
       return;
     }
@@ -257,10 +265,6 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
     } else {
       res.json([]);
     }
-  });
-
-  app.listen(port, bindAddress, () => {
-    log.info({ component: 'rpc', port, bind: bindAddress, url: `http://${bindAddress}:${port}` }, 'RPC server listening');
   });
 
   return app;

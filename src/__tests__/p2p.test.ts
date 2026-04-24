@@ -1370,6 +1370,39 @@ describe('P2P security hardening', () => {
     }
   })
 
+  it('should disconnect peer that sends malformed (garbage) bytes', async () => {
+    const storage1 = new FileBlockStorage(tmpDir1)
+    const node1 = new Node('alice', undefined, storage1)
+    const p2p1 = new P2PServer(node1, 0, tmpDir1)
+    await p2p1.start()
+
+    try {
+      const addr = (p2p1 as any).server.address()
+      const port = typeof addr === 'object' ? addr.port : 0
+
+      const socket = net.createConnection({ host: '127.0.0.1', port })
+      await new Promise<void>(r => socket.once('connect', r))
+
+      // Send 4 bytes whose length prefix exceeds MAX_MESSAGE_SIZE (5 MB).
+      // decodeMessages throws "Message size exceeds max" and the peer disconnects.
+      const garbage = Buffer.alloc(4)
+      garbage.writeUInt32BE(5_242_881, 0) // MAX_MESSAGE_SIZE + 1
+      socket.write(garbage)
+
+      // Connection should close because the peer disconnects on framing error
+      await new Promise<void>((resolve, reject) => {
+        socket.once('close', resolve)
+        setTimeout(() => reject(new Error('socket did not close within 3s')), 3_000)
+      })
+
+      // After disconnect the server should have removed the peer
+      await new Promise(r => setTimeout(r, 100))
+      expect(p2p1.getPeers().length).toBe(0)
+    } finally {
+      await p2p1.stop()
+    }
+  })
+
   it('should penalize invalid cumulativeWork in version message', async () => {
     const storage1 = new FileBlockStorage(tmpDir1)
     const node1 = new Node('alice', undefined, storage1)
