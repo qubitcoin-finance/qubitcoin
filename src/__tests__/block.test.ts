@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   computeMerkleRoot,
   computeBlockHash,
+  serializeBlockHeader,
   hashMeetsTarget,
   createGenesisBlock,
   createForkGenesisBlock,
@@ -14,6 +15,61 @@ import { createCoinbaseTransaction, createTransaction, utxoKey, type UTXO, type 
 import { doubleSha256Hex } from '../crypto.js'
 import { createMockSnapshot } from '../snapshot.js'
 import { walletA } from './fixtures.js'
+
+describe('serializeBlockHeader', () => {
+  const sampleHeader: BlockHeader = {
+    version: 1,
+    previousHash: 'a'.repeat(64),
+    merkleRoot: 'b'.repeat(64),
+    timestamp: 1_700_000_000_000,
+    target: 'f'.repeat(64),
+    nonce: 42,
+  }
+
+  it('returns exactly 112 bytes', () => {
+    const bytes = serializeBlockHeader(sampleHeader)
+    expect(bytes.length).toBe(112)
+  })
+
+  it('is deterministic for the same input', () => {
+    const a = serializeBlockHeader(sampleHeader)
+    const b = serializeBlockHeader(sampleHeader)
+    expect(a).toEqual(b)
+  })
+
+  it('produces different bytes when version changes', () => {
+    const modified = { ...sampleHeader, version: 2 }
+    expect(serializeBlockHeader(modified)).not.toEqual(serializeBlockHeader(sampleHeader))
+  })
+
+  it('produces different bytes when previousHash changes', () => {
+    const modified = { ...sampleHeader, previousHash: 'c'.repeat(64) }
+    expect(serializeBlockHeader(modified)).not.toEqual(serializeBlockHeader(sampleHeader))
+  })
+
+  it('produces different bytes when nonce changes', () => {
+    const modified = { ...sampleHeader, nonce: 43 }
+    expect(serializeBlockHeader(modified)).not.toEqual(serializeBlockHeader(sampleHeader))
+  })
+
+  it('encodes version as 4-byte little-endian at offset 0', () => {
+    const header: BlockHeader = { ...sampleHeader, version: 0x01020304 }
+    const bytes = serializeBlockHeader(header)
+    expect(bytes[0]).toBe(0x04)
+    expect(bytes[1]).toBe(0x03)
+    expect(bytes[2]).toBe(0x02)
+    expect(bytes[3]).toBe(0x01)
+  })
+
+  it('encodes nonce as 4-byte little-endian at offset 108', () => {
+    const header: BlockHeader = { ...sampleHeader, nonce: 0x01020304 }
+    const bytes = serializeBlockHeader(header)
+    expect(bytes[108]).toBe(0x04)
+    expect(bytes[109]).toBe(0x03)
+    expect(bytes[110]).toBe(0x02)
+    expect(bytes[111]).toBe(0x01)
+  })
+})
 
 describe('computeMerkleRoot', () => {
   it('returns zeros for empty list', () => {

@@ -14,6 +14,7 @@ import {
 import {
   createCoinbaseTransaction,
   createTransaction,
+  blockSubsidy,
   type Transaction,
   type UTXO,
   utxoKey,
@@ -490,5 +491,175 @@ describe('mineBlockAsync', () => {
     setTimeout(() => abort.abort(), 100)
     const result = await promise
     expect(result).toBeNull()
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
+// 6. mineBlock (synchronous)
+// ─────────────────────────────────────────────────────────────
+describe('mineBlock', () => {
+  it('returns a block with a valid hash meeting the target', () => {
+    const chain = new Blockchain()
+    const tip = chain.getChainTip()
+    const height = chain.getHeight() + 1
+    const coinbase = createCoinbaseTransaction(walletA.address, height, 0)
+    const merkleRoot = computeMerkleRoot([coinbase.id])
+
+    const header: BlockHeader = {
+      version: 1,
+      previousHash: tip.hash,
+      merkleRoot,
+      timestamp: Date.now(),
+      target: TEST_TARGET,
+      nonce: 0,
+    }
+
+    const candidate: Block = { header, hash: '', transactions: [coinbase], height }
+    const mined = mineBlock(candidate, false)
+
+    expect(mined.hash.length).toBe(64)
+    expect(hashMeetsTarget(mined.hash, TEST_TARGET)).toBe(true)
+    expect(mined.hash).toBe(computeBlockHash(mined.header))
+  })
+
+  it('returns the same block object with hash set', () => {
+    const chain = new Blockchain()
+    const tip = chain.getChainTip()
+    const height = chain.getHeight() + 1
+    const coinbase = createCoinbaseTransaction(walletA.address, height, 0)
+    const merkleRoot = computeMerkleRoot([coinbase.id])
+
+    const header: BlockHeader = {
+      version: 1,
+      previousHash: tip.hash,
+      merkleRoot,
+      timestamp: Date.now(),
+      target: TEST_TARGET,
+      nonce: 0,
+    }
+
+    const candidate: Block = { header, hash: '', transactions: [coinbase], height }
+    const mined = mineBlock(candidate, false)
+
+    expect(mined).toBe(candidate)
+    expect(mined.hash).not.toBe('')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
+// 7. assembleCandidateBlock edge cases
+// ─────────────────────────────────────────────────────────────
+describe('assembleCandidateBlock edge cases', () => {
+  it('produces coinbase-only block when mempool is empty', () => {
+    const chain = new Blockchain()
+    chain.difficulty = TEST_TARGET
+    const mempool = new Mempool()
+
+    const candidate = assembleCandidateBlock(chain, mempool, walletA.address)
+
+    expect(candidate.transactions.length).toBe(1)
+    expect(candidate.transactions[0].inputs[0].txId).toBe('0'.repeat(64))
+  })
+
+  it('sets height to chain height + 1', () => {
+    const chain = new Blockchain()
+    chain.difficulty = TEST_TARGET
+
+    const block1 = mineOnChain(chain, walletA.address)
+    chain.addBlock(block1)
+    const block2 = mineOnChain(chain, walletA.address)
+    chain.addBlock(block2)
+
+    const mempool = new Mempool()
+    const candidate = assembleCandidateBlock(chain, mempool, walletA.address)
+
+    expect(candidate.height).toBe(3)
+  })
+
+  it('sets previousHash to chain tip hash', () => {
+    const chain = new Blockchain()
+    chain.difficulty = TEST_TARGET
+
+    const block1 = mineOnChain(chain, walletA.address)
+    chain.addBlock(block1)
+
+    const mempool = new Mempool()
+    const candidate = assembleCandidateBlock(chain, mempool, walletA.address)
+
+    expect(candidate.header.previousHash).toBe(block1.hash)
+  })
+
+  it('accumulates fees from mempool transactions into coinbase', () => {
+    const chain = new Blockchain()
+    chain.difficulty = TEST_TARGET
+    const mempool = new Mempool()
+
+    // Inject a spendable UTXO directly (no maturity restriction)
+    const spendableTxId = 'a'.repeat(64)
+    const utxoAmount = 100_000_000
+    chain.utxoSet.set(utxoKey(spendableTxId, 0), {
+      txId: spendableTxId,
+      outputIndex: 0,
+      address: walletA.address,
+      amount: utxoAmount,
+    })
+
+    const fee = 10_000
+    const tx = createTransaction(
+      walletA,
+      [{ txId: spendableTxId, outputIndex: 0, address: walletA.address, amount: utxoAmount }],
+      [{ address: walletB.address, amount: utxoAmount - fee }],
+      fee
+    )
+    mempool.addTransaction(tx, chain.utxoSet)
+
+    const candidate = assembleCandidateBlock(chain, mempool, walletA.address)
+
+    const coinbase = candidate.transactions[0]
+    const coinbaseTotal = coinbase.outputs.reduce((sum, o) => sum + o.amount, 0)
+    expect(coinbaseTotal).toBe(blockSubsidy(1) + fee)
+  })
+
+  it('candidate block timestamp is at least MTP + 1', () => {
+    const chain = new Blockchain()
+    chain.difficulty = TEST_TARGET
+
+    for (let i = 0; i < 11; i++) {
+      const b = mineOnChain(chain, walletA.address)
+      chain.addBlock(b)
+    }
+
+    const mempool = new Mempool()
+    const candidate = assembleCandidateBlock(chain, mempool, walletA.address)
+
+    const timestamps = chain.blocks.slice(-11).map((b) => b.header.timestamp).sort((a, b) => a - b)
+    const mtp = timestamps[Math.floor(timestamps.length / 2)]
+
+    expect(candidate.header.timestamp).toBeGreaterThan(mtp)
+  })
+
+  it('includes mempool transactions in the candidate block', () => {
+    const chain = new Blockchain()
+    chain.difficulty = TEST_TARGET
+    const mempool = new Mempool()
+
+    const claimTx: Transaction = {
+      id: doubleSha256Hex(new TextEncoder().encode('claim-1')),
+      inputs: [{ txId: CLAIM_TXID, outputIndex: 0, publicKey: new Uint8Array(0), signature: new Uint8Array(0) }],
+      outputs: [{ address: walletB.address, amount: 100_000_000 }],
+      timestamp: Date.now(),
+      claimData: {
+        btcAddress: 'b'.repeat(40),
+        ecdsaPublicKey: new Uint8Array(33),
+        ecdsaSignature: new Uint8Array(64),
+        qbtcAddress: walletB.address,
+      },
+    }
+    mempool.addTransaction(claimTx, chain.utxoSet)
+
+    const candidate = assembleCandidateBlock(chain, mempool, walletA.address)
+
+    expect(candidate.transactions.length).toBe(2)
+    expect(candidate.transactions[1].id).toBe(claimTx.id)
   })
 })
