@@ -298,6 +298,52 @@ describe('deserializeTransaction', () => {
     const tx = deserializeTransaction(raw as any)
     expect(tx.inputs[0].publicKey).toBe(existingBytes)
   })
+
+  it('throws when publicKey hex exceeds 3904 chars (1952 bytes)', () => {
+    const oversized = 'ab'.repeat(1953) // 3906 chars — 1 byte over ML-DSA-65 key size
+    const raw = {
+      id: 'abc',
+      inputs: [{ txId: 'x', outputIndex: 0, publicKey: oversized, signature: '00' }],
+      outputs: [],
+      timestamp: 1,
+    }
+    expect(() => deserializeTransaction(raw as any)).toThrow("Field 'publicKey' hex string too large")
+  })
+
+  it('throws when signature hex exceeds 6618 chars (3309 bytes)', () => {
+    const oversized = 'ab'.repeat(3310) // 6620 chars — 1 byte over ML-DSA-65 signature size
+    const raw = {
+      id: 'abc',
+      inputs: [{ txId: 'x', outputIndex: 0, publicKey: '00', signature: oversized }],
+      outputs: [],
+      timestamp: 1,
+    }
+    expect(() => deserializeTransaction(raw as any)).toThrow("Field 'signature' hex string too large")
+  })
+
+  it('throws when ecdsaPublicKey hex exceeds 66 chars (33 bytes)', () => {
+    const oversized = 'ab'.repeat(34) // 68 chars — over compressed secp256k1 key size
+    const raw = {
+      id: 'abc',
+      inputs: [],
+      outputs: [],
+      timestamp: 1,
+      claimData: { btcAddress: 'addr', qbtcAddress: 'qaddr', ecdsaPublicKey: oversized, ecdsaSignature: '00' },
+    }
+    expect(() => deserializeTransaction(raw as any)).toThrow("Field 'ecdsaPublicKey' hex string too large")
+  })
+
+  it('accepts publicKey hex at exactly the maximum length (3904 chars)', () => {
+    const maxSize = 'ab'.repeat(1952) // exactly 3904 chars
+    const raw = {
+      id: 'abc',
+      inputs: [{ txId: 'x', outputIndex: 0, publicKey: maxSize, signature: '00' }],
+      outputs: [],
+      timestamp: 1,
+    }
+    const tx = deserializeTransaction(raw as any)
+    expect(tx.inputs[0].publicKey).toHaveLength(1952)
+  })
 })
 
 describe('deserializeBlock', () => {

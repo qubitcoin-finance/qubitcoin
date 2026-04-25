@@ -34,6 +34,30 @@ export { sanitize as sanitizeForStorage } from './utils.js'
 export const TX_INPUT_BINARY_FIELDS = ['publicKey', 'signature'] as const
 export const CLAIM_DATA_BINARY_FIELDS = ['ecdsaPublicKey', 'ecdsaSignature', 'schnorrPublicKey', 'schnorrSignature', 'witnessScript', 'witnessSignatures'] as const
 
+/**
+ * Maximum hex string lengths for binary fields.
+ * Prevents DoS via unbounded hexToBytes allocations on untrusted input.
+ * Limits are derived from protocol-defined field sizes (2 hex chars per byte).
+ */
+const BINARY_FIELD_MAX_HEX_LEN: Record<string, number> = {
+  publicKey:          3904,  // ML-DSA-65 public key: 1,952 bytes
+  signature:          6618,  // ML-DSA-65 signature: 3,309 bytes
+  ecdsaPublicKey:       66,  // compressed secp256k1: 33 bytes (0 for P2TR/P2WSH)
+  ecdsaSignature:      128,  // ECDSA signature: 64 bytes (0 for P2TR/P2WSH)
+  schnorrPublicKey:     64,  // x-only Schnorr pubkey: 32 bytes
+  schnorrSignature:    128,  // BIP340 Schnorr signature: 64 bytes
+  witnessScript:     10240,  // witness/redeem script: max 5,120 bytes
+  witnessSignatures:  3840,  // up to 30 × 64-byte ECDSA sigs
+}
+
+function safeHexToBytes(field: string, hex: string): Uint8Array {
+  const maxLen = BINARY_FIELD_MAX_HEX_LEN[field]
+  if (maxLen !== undefined && hex.length > maxLen) {
+    throw new Error(`Field '${field}' hex string too large: ${hex.length} chars (max ${maxLen})`)
+  }
+  return hexToBytes(hex)
+}
+
 /** Restore hex strings back to Uint8Array for known binary fields */
 export function deserializeTransaction(raw: Record<string, unknown>): Transaction {
   const tx = raw as unknown as Transaction
@@ -44,7 +68,7 @@ export function deserializeTransaction(raw: Record<string, unknown>): Transactio
       const input = inp as unknown as TransactionInput
       for (const field of TX_INPUT_BINARY_FIELDS) {
         if (typeof inp[field] === 'string') {
-          (input as unknown as Record<string, unknown>)[field] = hexToBytes(inp[field] as string)
+          (input as unknown as Record<string, unknown>)[field] = safeHexToBytes(field, inp[field] as string)
         }
       }
       return input
@@ -56,7 +80,7 @@ export function deserializeTransaction(raw: Record<string, unknown>): Transactio
     const cd = raw.claimData as Record<string, unknown>
     for (const field of CLAIM_DATA_BINARY_FIELDS) {
       if (typeof cd[field] === 'string') {
-        (cd as Record<string, unknown>)[field] = hexToBytes(cd[field] as string)
+        (cd as Record<string, unknown>)[field] = safeHexToBytes(field, cd[field] as string)
       }
     }
     tx.claimData = cd as unknown as ClaimData
