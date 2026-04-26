@@ -22,28 +22,48 @@ export async function loadSnapshot(filePath: string): Promise<BtcSnapshot> {
     crlfDelay: Infinity,
   })
 
+  let lineNum = 0
   for await (const line of rl) {
+    lineNum++
     if (!line) continue
 
     if (isFirstLine) {
       isFirstLine = false
-      // Try to parse as header (has 'merkleRoot' field)
-      const raw = JSON.parse(line)
+      let raw: Record<string, unknown>
+      try {
+        raw = JSON.parse(line)
+      } catch {
+        throw new Error(`Snapshot line ${lineNum}: invalid JSON in header`)
+      }
       if (raw.merkleRoot) {
-        merkleRoot = raw.merkleRoot
-        btcBlockHash = raw.hash || ''
-        btcBlockHeight = raw.height || 0
-        btcTimestamp = raw.timestamp || 0
+        merkleRoot = String(raw.merkleRoot)
+        btcBlockHash = raw.hash != null ? String(raw.hash) : ''
+        btcBlockHeight = Number(raw.height) || 0
+        btcTimestamp = Number(raw.timestamp) || 0
         continue
       }
-      // No header — treat as a regular entry
+      // No header — treat as a regular entry (fall through)
     }
 
-    const raw = JSON.parse(line) as { a: string; b: number; t?: string }
+    let raw: { a: unknown; b: unknown; t?: unknown }
+    try {
+      raw = JSON.parse(line)
+    } catch {
+      throw new Error(`Snapshot line ${lineNum}: invalid JSON in entry`)
+    }
+
+    if (typeof raw.a !== 'string' || !/^[0-9a-f]{40}$|^[0-9a-f]{64}$/.test(raw.a)) {
+      throw new Error(`Snapshot line ${lineNum}: invalid address "${raw.a}" (expected 40 or 64 hex chars)`)
+    }
+    if (typeof raw.b !== 'number' || !Number.isSafeInteger(raw.b) || raw.b < 0) {
+      throw new Error(`Snapshot line ${lineNum}: invalid amount "${raw.b}" (expected non-negative integer)`)
+    }
+
+    const t = raw.t
     entries.push({
       btcAddress: raw.a,
       amount: raw.b,
-      ...(raw.t === 'p2sh' ? { type: 'p2sh' as const } : raw.t === 'p2tr' ? { type: 'p2tr' as const } : raw.t === 'p2wsh' ? { type: 'p2wsh' as const } : raw.t === 'multisig' ? { type: 'multisig' as const } : {}),
+      ...(t === 'p2sh' ? { type: 'p2sh' as const } : t === 'p2tr' ? { type: 'p2tr' as const } : t === 'p2wsh' ? { type: 'p2wsh' as const } : t === 'multisig' ? { type: 'multisig' as const } : {}),
     })
   }
 

@@ -122,6 +122,73 @@ describe('loadSnapshot', () => {
     expect(snapshot.btcBlockHash).toBe(knownHash)
   })
 
+  it('should throw on malformed JSON in header', async () => {
+    const filePath = path.join(tmpDir, 'bad-header.jsonl')
+    fs.writeFileSync(filePath, 'not valid json\n{"a":"aabbccdd0011223344556677889900aabbccddee","b":100}\n')
+    await expect(loadSnapshot(filePath)).rejects.toThrow(/line 1.*invalid JSON/)
+  })
+
+  it('should throw on malformed JSON in entry', async () => {
+    const filePath = path.join(tmpDir, 'bad-entry.jsonl')
+    fs.writeFileSync(filePath, '{"a":"aabbccdd0011223344556677889900aabbccddee","b":100}\nnot valid json\n')
+    await expect(loadSnapshot(filePath)).rejects.toThrow(/line 2.*invalid JSON/)
+  })
+
+  it('should throw on entry with address too short', async () => {
+    const filePath = path.join(tmpDir, 'short-addr.jsonl')
+    fs.writeFileSync(filePath, '{"a":"aabbcc","b":100}\n')
+    await expect(loadSnapshot(filePath)).rejects.toThrow(/invalid address/)
+  })
+
+  it('should throw on entry with uppercase address', async () => {
+    const filePath = path.join(tmpDir, 'upper-addr.jsonl')
+    fs.writeFileSync(filePath, '{"a":"AABBCCDD0011223344556677889900AABBCCDDEE","b":100}\n')
+    await expect(loadSnapshot(filePath)).rejects.toThrow(/invalid address/)
+  })
+
+  it('should throw on entry with non-hex address', async () => {
+    const filePath = path.join(tmpDir, 'nonhex-addr.jsonl')
+    fs.writeFileSync(filePath, '{"a":"zz223344556677889900aabbccddeeff00112233","b":100}\n')
+    await expect(loadSnapshot(filePath)).rejects.toThrow(/invalid address/)
+  })
+
+  it('should throw on entry with negative amount', async () => {
+    const filePath = path.join(tmpDir, 'neg-amount.jsonl')
+    fs.writeFileSync(filePath, '{"a":"aabbccdd0011223344556677889900aabbccddee","b":-1}\n')
+    await expect(loadSnapshot(filePath)).rejects.toThrow(/invalid amount/)
+  })
+
+  it('should throw on entry with non-integer amount', async () => {
+    const filePath = path.join(tmpDir, 'float-amount.jsonl')
+    fs.writeFileSync(filePath, '{"a":"aabbccdd0011223344556677889900aabbccddee","b":1.5}\n')
+    await expect(loadSnapshot(filePath)).rejects.toThrow(/invalid amount/)
+  })
+
+  it('should throw on entry with string amount', async () => {
+    const filePath = path.join(tmpDir, 'str-amount.jsonl')
+    fs.writeFileSync(filePath, '{"a":"aabbccdd0011223344556677889900aabbccddee","b":"100"}\n')
+    await expect(loadSnapshot(filePath)).rejects.toThrow(/invalid amount/)
+  })
+
+  it('should accept 64-char hex address (P2TR/P2WSH)', async () => {
+    const filePath = path.join(tmpDir, '64-addr.jsonl')
+    const addr64 = 'ab'.repeat(32)
+    fs.writeFileSync(filePath, `{"a":"${addr64}","b":100}\n`)
+    const snapshot = await loadSnapshot(filePath)
+    expect(snapshot.entries[0].btcAddress).toBe(addr64)
+  })
+
+  it('should include line number in entry error message', async () => {
+    const filePath = path.join(tmpDir, 'line-num.jsonl')
+    const lines = [
+      '{"a":"aabbccdd0011223344556677889900aabbccddee","b":1}',
+      '{"a":"aabbccdd0011223344556677889900aabbccddee","b":2}',
+      '{"a":"bad","b":3}',
+    ]
+    fs.writeFileSync(filePath, lines.join('\n') + '\n')
+    await expect(loadSnapshot(filePath)).rejects.toThrow(/line 3/)
+  })
+
   it('should parse btcBlockHeight and btcBlockHash from header', async () => {
     const filePath = path.join(tmpDir, 'full-header.jsonl')
     const lines = [
