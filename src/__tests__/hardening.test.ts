@@ -2296,4 +2296,85 @@ describe('P2P input validation hardening', () => {
       await p2p2.stop()
     }
   })
+
+  it('should penalize peer sending headers with non-sequential heights', async () => {
+    const { p2p1, p2p2, peerOnNode1, peerOnNode2 } = await makePair()
+    try {
+      const scoreBefore = peerOnNode1.getMisbehaviorScore()
+      const genesisHash = (p2p1 as any).node.chain.blocks[0].hash
+
+      // Heights jump from 1 to 3 (gap), violating monotonic +1 requirement
+      peerOnNode2.send({
+        type: 'headers',
+        payload: {
+          headers: [
+            { hash: 'a'.repeat(64), height: 1, previousHash: genesisHash },
+            { hash: 'b'.repeat(64), height: 3, previousHash: 'a'.repeat(64) },
+          ],
+        },
+      })
+
+      await new Promise(r => setTimeout(r, 300))
+
+      const scoreAfter = peerOnNode1.getMisbehaviorScore()
+      expect(scoreAfter).toBeGreaterThan(scoreBefore)
+    } finally {
+      await p2p1.stop()
+      await p2p2.stop()
+    }
+  })
+
+  it('should penalize peer sending headers where previousHash does not link to prior header hash', async () => {
+    const { p2p1, p2p2, peerOnNode1, peerOnNode2 } = await makePair()
+    try {
+      const scoreBefore = peerOnNode1.getMisbehaviorScore()
+      const genesisHash = (p2p1 as any).node.chain.blocks[0].hash
+
+      // Header at height 2 claims a previousHash that doesn't match height 1's hash
+      peerOnNode2.send({
+        type: 'headers',
+        payload: {
+          headers: [
+            { hash: 'a'.repeat(64), height: 1, previousHash: genesisHash },
+            { hash: 'b'.repeat(64), height: 2, previousHash: 'c'.repeat(64) }, // should be 'a'.repeat(64)
+          ],
+        },
+      })
+
+      await new Promise(r => setTimeout(r, 300))
+
+      const scoreAfter = peerOnNode1.getMisbehaviorScore()
+      expect(scoreAfter).toBeGreaterThan(scoreBefore)
+    } finally {
+      await p2p1.stop()
+      await p2p2.stop()
+    }
+  })
+
+  it('should penalize peer sending headers with decreasing heights', async () => {
+    const { p2p1, p2p2, peerOnNode1, peerOnNode2 } = await makePair()
+    try {
+      const scoreBefore = peerOnNode1.getMisbehaviorScore()
+      const genesisHash = (p2p1 as any).node.chain.blocks[0].hash
+
+      // Heights go backwards: 2 then 1
+      peerOnNode2.send({
+        type: 'headers',
+        payload: {
+          headers: [
+            { hash: 'a'.repeat(64), height: 2, previousHash: genesisHash },
+            { hash: 'b'.repeat(64), height: 1, previousHash: 'a'.repeat(64) },
+          ],
+        },
+      })
+
+      await new Promise(r => setTimeout(r, 300))
+
+      const scoreAfter = peerOnNode1.getMisbehaviorScore()
+      expect(scoreAfter).toBeGreaterThan(scoreBefore)
+    } finally {
+      await p2p1.stop()
+      await p2p2.stop()
+    }
+  })
 })

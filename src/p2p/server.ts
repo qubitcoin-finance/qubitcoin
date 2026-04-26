@@ -922,11 +922,21 @@ export class P2PServer {
       this.clearForkResolution()
       return
     }
-    for (const h of payload.headers) {
+    for (let i = 0; i < payload.headers.length; i++) {
+      const h = payload.headers[i]
       if (!h || !isValidHash(h.hash) || typeof h.height !== 'number' || !Number.isInteger(h.height) || h.height < 0 || !isValidHash(h.previousHash)) {
         peer.addMisbehavior(25)
         this.clearForkResolution()
         return
+      }
+      if (i > 0) {
+        const prev = payload.headers[i - 1]
+        if (h.height !== prev.height + 1 || h.previousHash !== prev.hash) {
+          log.warn({ component: 'p2p', peer: peer.id, index: i, height: h.height, prevHeight: prev.height }, 'Headers not forming a valid chain — banning peer')
+          peer.addMisbehavior(50)
+          this.clearForkResolution()
+          return
+        }
       }
     }
 
