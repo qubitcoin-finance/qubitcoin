@@ -619,6 +619,80 @@ describe('RPC edge cases', () => {
   })
 })
 
+describe('RPC /difficulty endpoint edge cases', () => {
+  it('genesis-only chain returns exactly one entry', async () => {
+    const node = new Node('rpc-diff-genesis')
+    const app = startRpcServer(node, 0)
+    const srv = app.listen(0)
+    const addr = srv.address() as AddressInfo
+    const url = `http://127.0.0.1:${addr.port}`
+    try {
+      const res = await fetch(`${url}/api/v1/difficulty`)
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(Array.isArray(body)).toBe(true)
+      expect(body.length).toBe(1)
+      expect(body[0].height).toBe(0)
+    } finally {
+      srv.close()
+    }
+  })
+
+  it('chain at exact adjustment boundary does not duplicate the tip', async () => {
+    const { DIFFICULTY_ADJUSTMENT_INTERVAL } = await import('../block.js')
+    const node = new Node('rpc-diff-boundary')
+    node.chain.difficulty = TEST_TARGET
+    for (let i = 0; i < DIFFICULTY_ADJUSTMENT_INTERVAL; i++) {
+      node.mine('f'.repeat(64), false)
+    }
+    expect(node.chain.getHeight()).toBe(DIFFICULTY_ADJUSTMENT_INTERVAL)
+
+    const app = startRpcServer(node, 0)
+    const srv = app.listen(0)
+    const addr = srv.address() as AddressInfo
+    const url = `http://127.0.0.1:${addr.port}`
+    try {
+      const res = await fetch(`${url}/api/v1/difficulty`)
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      const heights: number[] = body.map((e: { height: number }) => e.height)
+      // genesis (0) + adjustment block (DIFFICULTY_ADJUSTMENT_INTERVAL); tip must not be duplicated
+      expect(heights.filter(h => h === DIFFICULTY_ADJUSTMENT_INTERVAL).length).toBe(1)
+    } finally {
+      srv.close()
+    }
+  })
+
+  it('chain past adjustment boundary includes genesis, adjustment point, and tip', async () => {
+    const { DIFFICULTY_ADJUSTMENT_INTERVAL } = await import('../block.js')
+    const node = new Node('rpc-diff-past-boundary')
+    node.chain.difficulty = TEST_TARGET
+    for (let i = 0; i <= DIFFICULTY_ADJUSTMENT_INTERVAL; i++) {
+      node.chain.difficulty = TEST_TARGET
+      node.mine('f'.repeat(64), false)
+    }
+    const tipHeight = node.chain.getHeight()
+    expect(tipHeight).toBe(DIFFICULTY_ADJUSTMENT_INTERVAL + 1)
+
+    const app = startRpcServer(node, 0)
+    const srv = app.listen(0)
+    const addr = srv.address() as AddressInfo
+    const url = `http://127.0.0.1:${addr.port}`
+    try {
+      const res = await fetch(`${url}/api/v1/difficulty`)
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(Array.isArray(body)).toBe(true)
+      const heights: number[] = body.map((e: { height: number }) => e.height)
+      expect(heights[0]).toBe(0) // genesis
+      expect(heights).toContain(DIFFICULTY_ADJUSTMENT_INTERVAL) // adjustment point
+      expect(heights[heights.length - 1]).toBe(tipHeight) // current tip
+    } finally {
+      srv.close()
+    }
+  })
+})
+
 describe('RPC rate limiting', () => {
   let node: Node
   let server: Server

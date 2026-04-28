@@ -1019,6 +1019,69 @@ describe('addBlock edge cases', () => {
   })
 })
 
+describe('Blockchain getClaimableEntries / getUnclaimedValue', () => {
+  it('returns empty array and zero when no snapshot is loaded', () => {
+    const chain = new Blockchain()
+    expect(chain.getClaimableEntries()).toEqual([])
+    expect(chain.getUnclaimedValue()).toBe(0)
+  })
+
+  it('returns all entries and total value before any claims', () => {
+    const { snapshot } = createMockSnapshot()
+    const chain = new Blockchain(snapshot)
+
+    const entries = chain.getClaimableEntries()
+    expect(entries.length).toBe(snapshot.entries.length)
+    const total = snapshot.entries.reduce((s, e) => s + e.amount, 0)
+    expect(chain.getUnclaimedValue()).toBe(total)
+  })
+
+  it('excludes claimed entries after a claim is mined', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const chain = new Blockchain(snapshot)
+    const genesisHash = chain.blocks[0].hash
+
+    const claimTx = createClaimTransaction(
+      holders[0].secretKey,
+      holders[0].publicKey,
+      snapshot.entries[0],
+      walletB,
+      snapshot.btcBlockHash,
+      genesisHash
+    )
+    chain.addBlock(mineOnChain(chain, 'f'.repeat(64), [claimTx]))
+
+    const entries = chain.getClaimableEntries()
+    expect(entries.length).toBe(snapshot.entries.length - 1)
+    expect(entries.find(e => e.btcAddress === snapshot.entries[0].btcAddress)).toBeUndefined()
+
+    const expectedUnclaimed = snapshot.entries.reduce((s, e) => s + e.amount, 0) - holders[0].amount
+    expect(chain.getUnclaimedValue()).toBe(expectedUnclaimed)
+  })
+
+  it('restores claimed entry after chain rollback', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const chain = new Blockchain(snapshot)
+    const genesisHash = chain.blocks[0].hash
+
+    const claimTx = createClaimTransaction(
+      holders[0].secretKey,
+      holders[0].publicKey,
+      snapshot.entries[0],
+      walletB,
+      snapshot.btcBlockHash,
+      genesisHash
+    )
+    chain.addBlock(mineOnChain(chain, 'f'.repeat(64), [claimTx]))
+    expect(chain.getClaimableEntries().length).toBe(snapshot.entries.length - 1)
+
+    chain.resetToHeight(0)
+    expect(chain.getClaimableEntries().length).toBe(snapshot.entries.length)
+    const total = snapshot.entries.reduce((s, e) => s + e.amount, 0)
+    expect(chain.getUnclaimedValue()).toBe(total)
+  })
+})
+
 describe('resetToHeight with storage', () => {
   it('persists correctly — replay from storage matches', async () => {
     const fs = await import('node:fs')
