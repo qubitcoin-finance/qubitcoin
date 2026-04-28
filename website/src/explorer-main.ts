@@ -2000,27 +2000,52 @@ function docIcon(paths: string, cls: string): string {
 
 
 function renderBlogList(): void {
-  const cards = BLOG_POSTS.map(post => {
-    const tags = post.tags.map(t => {
+  const sorted = [...BLOG_POSTS].sort((a, b) => b.date.localeCompare(a.date));
+  const [featured, ...rest] = sorted;
+
+  function tagBadges(post: typeof featured): string {
+    return post.tags.map(t => {
       const cls = BLOG_TAG_COLORS[t] || 'text-text-muted bg-surface border-border';
       return `<span class="px-2 py-0.5 rounded text-[10px] font-mono border ${cls}">${t}</span>`;
     }).join('');
-    return `<a href="#/blog/${post.slug}" class="block group">
-      <div class="bg-surface rounded-2xl glow-border p-7 transition-all group-hover:border-qubit-600/40">
-        <div class="flex items-center gap-2 mb-4 flex-wrap">
-          <span class="text-xs font-mono text-text-muted">${post.date}</span>
+  }
+
+  const readArrow = `<svg class="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>`;
+
+  const featuredCard = `
+    <a href="#/blog/${featured.slug}" class="block group mb-8">
+      <div class="bg-surface rounded-2xl glow-border p-8 md:p-10 transition-all group-hover:border-qubit-600/40 relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-64 h-64 bg-qubit-600/5 rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+        <div class="flex items-center gap-2 mb-5 flex-wrap">
+          <span class="px-2 py-0.5 rounded text-[10px] font-mono border text-qubit-400 bg-qubit-600/10 border-qubit-600/20">Latest</span>
           <span class="text-text-muted/30">·</span>
-          ${tags}
+          <span class="text-xs font-mono text-text-muted">${featured.date}</span>
+          <span class="text-text-muted/30">·</span>
+          ${tagBadges(featured)}
         </div>
-        <h2 class="text-lg font-semibold text-text-primary mb-3 group-hover:text-qubit-300 transition-colors">${post.title}</h2>
-        <p class="text-text-muted text-sm leading-relaxed">${post.excerpt}</p>
-        <div class="mt-5 flex items-center gap-1.5 text-qubit-400 text-xs font-medium">
-          Read post
-          <svg class="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        <h2 class="text-2xl font-bold text-text-primary mb-4 group-hover:text-qubit-300 transition-colors max-w-2xl">${featured.title}</h2>
+        <p class="text-text-muted text-sm leading-relaxed max-w-2xl">${featured.excerpt}</p>
+        <div class="mt-6 flex items-center gap-1.5 text-qubit-400 text-xs font-medium">
+          Read post ${readArrow}
         </div>
       </div>
     </a>`;
-  }).join('');
+
+  const cards = rest.map(post => `
+    <a href="#/blog/${post.slug}" class="block group h-full">
+      <div class="bg-surface rounded-2xl glow-border p-7 transition-all group-hover:border-qubit-600/40 h-full flex flex-col">
+        <div class="flex items-center gap-2 mb-4 flex-wrap">
+          <span class="text-xs font-mono text-text-muted">${post.date}</span>
+          <span class="text-text-muted/30">·</span>
+          ${tagBadges(post)}
+        </div>
+        <h2 class="text-base font-semibold text-text-primary mb-3 group-hover:text-qubit-300 transition-colors leading-snug">${post.title}</h2>
+        <p class="text-text-muted text-sm leading-relaxed flex-1">${post.excerpt}</p>
+        <div class="mt-5 flex items-center gap-1.5 text-qubit-400 text-xs font-medium">
+          Read post ${readArrow}
+        </div>
+      </div>
+    </a>`).join('');
 
   root.innerHTML = `
     <div class="mb-10">
@@ -2028,7 +2053,8 @@ function renderBlogList(): void {
       <h1 class="text-3xl font-bold">Thinking Out Loud</h1>
       <p class="text-text-muted mt-2 text-sm">QubitCoin development updates, cryptography deep-dives, and the thinking behind the project.</p>
     </div>
-    <div class="grid md:grid-cols-2 gap-6 lg:grid-cols-3">
+    ${featuredCard}
+    <div class="grid md:grid-cols-2 gap-6">
       ${cards}
     </div>`;
 }
