@@ -1,0 +1,114 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - generic [ref=e3]:
+      - link "QubitCoin QubitCoin testnet" [ref=e4] [cursor=pointer]:
+        - /url: /
+        - img "QubitCoin" [ref=e5]
+        - generic [ref=e6]: QubitCoin
+        - generic [ref=e7]: testnet
+      - generic [ref=e8]:
+        - link "About" [ref=e9] [cursor=pointer]:
+          - /url: "#about"
+        - link "Technology" [ref=e10] [cursor=pointer]:
+          - /url: "#technology"
+        - link "How It Works" [ref=e11] [cursor=pointer]:
+          - /url: "#how-it-works"
+        - link "Docs" [ref=e12] [cursor=pointer]:
+          - /url: /#/docs
+        - link "Blog" [ref=e13] [cursor=pointer]:
+          - /url: /#/blog
+        - link "Mempool" [ref=e14] [cursor=pointer]:
+          - /url: /#/mempool
+  - main [ref=e15]:
+    - generic [ref=e16]:
+      - generic [ref=e17]:
+        - paragraph [ref=e18]: BLOG
+        - heading "Thinking Out Loud" [level=1] [ref=e19]
+        - paragraph [ref=e20]: QubitCoin development updates, cryptography deep-dives, and the thinking behind the project.
+      - generic [ref=e21]:
+        - link "2026-04-01 · bitcoin cryptography quantum Why Post-Quantum Bitcoin Needs to Exist Quantum computers are no longer science fiction. Here's why Bitcoin's ECDSA signatures are a ticking clock — and what we're doing about it. Read post" [ref=e22] [cursor=pointer]:
+          - /url: "#/blog/why-post-quantum-bitcoin-needs-to-exist"
+          - generic [ref=e23]:
+            - generic [ref=e24]:
+              - generic [ref=e25]: 2026-04-01
+              - generic [ref=e26]: ·
+              - generic [ref=e27]: bitcoin
+              - generic [ref=e28]: cryptography
+              - generic [ref=e29]: quantum
+            - heading "Why Post-Quantum Bitcoin Needs to Exist" [level=2] [ref=e30]
+            - paragraph [ref=e31]: Quantum computers are no longer science fiction. Here's why Bitcoin's ECDSA signatures are a ticking clock — and what we're doing about it.
+            - generic [ref=e32]:
+              - text: Read post
+              - img [ref=e33]
+        - 'link "2026-04-10 · cryptography ml-dsa dilithium technical Inside ML-DSA-65: The Signature Algorithm Securing QubitCoin A technical walkthrough of Module-Lattice Digital Signature Algorithm — why NIST chose it, how it works at a high level, and what the tradeoffs mean for a Bitcoin-style UTXO chain. Read post" [ref=e35] [cursor=pointer]':
+          - /url: "#/blog/inside-ml-dsa-65"
+          - generic [ref=e36]:
+            - generic [ref=e37]:
+              - generic [ref=e38]: 2026-04-10
+              - generic [ref=e39]: ·
+              - generic [ref=e40]: cryptography
+              - generic [ref=e41]: ml-dsa
+              - generic [ref=e42]: dilithium
+              - generic [ref=e43]: technical
+            - 'heading "Inside ML-DSA-65: The Signature Algorithm Securing QubitCoin" [level=2] [ref=e44]'
+            - paragraph [ref=e45]: A technical walkthrough of Module-Lattice Digital Signature Algorithm — why NIST chose it, how it works at a high level, and what the tradeoffs mean for a Bitcoin-style UTXO chain.
+            - generic [ref=e46]:
+              - text: Read post
+              - img [ref=e47]
+        - 'link "2026-04-20 · development testnet engineering Building on Testnet: What We''ve Learned Six weeks into testnet. What worked, what surprised us, and what changed from the original design — an engineering retrospective. Read post" [ref=e49] [cursor=pointer]':
+          - /url: "#/blog/testnet-what-weve-learned"
+          - generic [ref=e50]:
+            - generic [ref=e51]:
+              - generic [ref=e52]: 2026-04-20
+              - generic [ref=e53]: ·
+              - generic [ref=e54]: development
+              - generic [ref=e55]: testnet
+              - generic [ref=e56]: engineering
+            - 'heading "Building on Testnet: What We''ve Learned" [level=2] [ref=e57]'
+            - paragraph [ref=e58]: Six weeks into testnet. What worked, what surprised us, and what changed from the original design — an engineering retrospective.
+            - generic [ref=e59]:
+              - text: Read post
+              - img [ref=e60]
+        - 'link "2026-04-22 · development engineering Fixing the Deploy: How Every Push Was Breaking the Node The block explorer was showing \"Unable to reach the node\" after every deploy, yet the node ran fine on the server. Here''s what was happening and how we fixed it. Read post" [ref=e62] [cursor=pointer]':
+          - /url: "#/blog/fixing-the-deploy"
+          - generic [ref=e63]:
+            - generic [ref=e64]:
+              - generic [ref=e65]: 2026-04-22
+              - generic [ref=e66]: ·
+              - generic [ref=e67]: development
+              - generic [ref=e68]: engineering
+            - 'heading "Fixing the Deploy: How Every Push Was Breaking the Node" [level=2] [ref=e69]'
+            - paragraph [ref=e70]: The block explorer was showing "Unable to reach the node" after every deploy, yet the node ran fine on the server. Here's what was happening and how we fixed it.
+            - generic [ref=e71]:
+              - text: Read post
+              - img [ref=e72]
+        - link "2026-04-22 · testnet development Run a Node. Help Build the Network. QubitCoin is a one-node testnet right now. That needs to change. Here's how to spin up a node in minutes and why it matters. Read post" [ref=e74] [cursor=pointer]:
+          - /url: "#/blog/run-a-node"
+          - generic [ref=e75]:
+            - generic [ref=e76]:
+              - generic [ref=e77]: 2026-04-22
+              - generic [ref=e78]: ·
+              - generic [ref=e79]: testnet
+              - generic [ref=e80]: development
+            - heading "Run a Node. Help Build the Network." [level=2] [ref=e81]
+            - paragraph [ref=e82]: QubitCoin is a one-node testnet right now. That needs to change. Here's how to spin up a node in minutes and why it matters.
+            - generic [ref=e83]:
+              - text: Read post
+              - img [ref=e84]
+  - contentinfo [ref=e86]:
+    - generic [ref=e87]:
+      - generic [ref=e88]:
+        - generic [ref=e89]:
+          - img "QubitCoin" [ref=e90]
+          - generic [ref=e91]: QubitCoin (QBTC) — Post-Quantum Digital Currency
+        - generic [ref=e92]:
+          - link "GitHub" [ref=e93] [cursor=pointer]:
+            - /url: https://github.com/qubitcoin-finance/qubitcoin
+            - img [ref=e94]
+          - link "X (Twitter)" [ref=e96] [cursor=pointer]:
+            - /url: https://x.com/qubitcoin_
+            - img [ref=e97]
+          - link "Telegram" [ref=e99] [cursor=pointer]:
+            - /url: https://t.me/qubitcoin_finance
+            - img [ref=e100]
+      - generic [ref=e103]: Built with ML-DSA-65 · Open Source

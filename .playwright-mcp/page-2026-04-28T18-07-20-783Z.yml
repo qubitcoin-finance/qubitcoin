@@ -1,0 +1,130 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - generic [ref=e3]:
+      - link "QubitCoin QubitCoin testnet" [ref=e4] [cursor=pointer]:
+        - /url: /
+        - img "QubitCoin" [ref=e5]
+        - generic [ref=e6]: QubitCoin
+        - generic [ref=e7]: testnet
+      - generic [ref=e8]:
+        - link "About" [ref=e9] [cursor=pointer]:
+          - /url: "#about"
+        - link "Technology" [ref=e10] [cursor=pointer]:
+          - /url: "#technology"
+        - link "How It Works" [ref=e11] [cursor=pointer]:
+          - /url: "#how-it-works"
+        - link "Docs" [ref=e12] [cursor=pointer]:
+          - /url: /#/docs
+        - link "Blog" [ref=e13] [cursor=pointer]:
+          - /url: /#/blog
+        - link "Mempool" [ref=e14] [cursor=pointer]:
+          - /url: /#/mempool
+  - main [ref=e15]:
+    - generic [ref=e16]:
+      - generic [ref=e17]:
+        - paragraph [ref=e18]: BLOG
+        - heading "Thinking Out Loud" [level=1] [ref=e19]
+        - paragraph [ref=e20]: QubitCoin development updates, cryptography deep-dives, and the thinking behind the project.
+      - 'link "Latest · 2026-04-28 · technical engineering development Hardening the Node: Five Layers of DoS Defense Opening a testnet immediately raises the question: what happens when adversarial peers show up? We added five layers of defense — from RPC input validation to P2P chain continuity checks — and why each one matters. Read post" [ref=e21] [cursor=pointer]':
+        - /url: "#/blog/hardening-the-node-against-dos"
+        - generic [ref=e22]:
+          - generic [ref=e23]:
+            - generic [ref=e24]: Latest
+            - generic [ref=e25]: ·
+            - generic [ref=e26]: 2026-04-28
+            - generic [ref=e27]: ·
+            - generic [ref=e28]: technical
+            - generic [ref=e29]: engineering
+            - generic [ref=e30]: development
+          - 'heading "Hardening the Node: Five Layers of DoS Defense" [level=2] [ref=e31]'
+          - paragraph [ref=e32]: "Opening a testnet immediately raises the question: what happens when adversarial peers show up? We added five layers of defense — from RPC input validation to P2P chain continuity checks — and why each one matters."
+          - generic [ref=e33]:
+            - text: Read post
+            - img [ref=e34]
+      - generic [ref=e36]:
+        - 'link "2026-04-22 · development engineering Fixing the Deploy: How Every Push Was Breaking the Node The block explorer was showing \"Unable to reach the node\" after every deploy, yet the node ran fine on the server. Here''s what was happening and how we fixed it. Read post" [ref=e37] [cursor=pointer]':
+          - /url: "#/blog/fixing-the-deploy"
+          - generic [ref=e38]:
+            - generic [ref=e39]:
+              - generic [ref=e40]: 2026-04-22
+              - generic [ref=e41]: ·
+              - generic [ref=e42]: development
+              - generic [ref=e43]: engineering
+            - 'heading "Fixing the Deploy: How Every Push Was Breaking the Node" [level=2] [ref=e44]'
+            - paragraph [ref=e45]: The block explorer was showing "Unable to reach the node" after every deploy, yet the node ran fine on the server. Here's what was happening and how we fixed it.
+            - generic [ref=e46]:
+              - text: Read post
+              - img [ref=e47]
+        - link "2026-04-22 · testnet development Run a Node. Help Build the Network. QubitCoin is a one-node testnet right now. That needs to change. Here's how to spin up a node in minutes and why it matters. Read post" [ref=e49] [cursor=pointer]:
+          - /url: "#/blog/run-a-node"
+          - generic [ref=e50]:
+            - generic [ref=e51]:
+              - generic [ref=e52]: 2026-04-22
+              - generic [ref=e53]: ·
+              - generic [ref=e54]: testnet
+              - generic [ref=e55]: development
+            - heading "Run a Node. Help Build the Network." [level=2] [ref=e56]
+            - paragraph [ref=e57]: QubitCoin is a one-node testnet right now. That needs to change. Here's how to spin up a node in minutes and why it matters.
+            - generic [ref=e58]:
+              - text: Read post
+              - img [ref=e59]
+        - 'link "2026-04-20 · development testnet engineering Building on Testnet: What We''ve Learned Six weeks into testnet. What worked, what surprised us, and what changed from the original design — an engineering retrospective. Read post" [ref=e61] [cursor=pointer]':
+          - /url: "#/blog/testnet-what-weve-learned"
+          - generic [ref=e62]:
+            - generic [ref=e63]:
+              - generic [ref=e64]: 2026-04-20
+              - generic [ref=e65]: ·
+              - generic [ref=e66]: development
+              - generic [ref=e67]: testnet
+              - generic [ref=e68]: engineering
+            - 'heading "Building on Testnet: What We''ve Learned" [level=2] [ref=e69]'
+            - paragraph [ref=e70]: Six weeks into testnet. What worked, what surprised us, and what changed from the original design — an engineering retrospective.
+            - generic [ref=e71]:
+              - text: Read post
+              - img [ref=e72]
+        - 'link "2026-04-10 · cryptography ml-dsa dilithium technical Inside ML-DSA-65: The Signature Algorithm Securing QubitCoin A technical walkthrough of Module-Lattice Digital Signature Algorithm — why NIST chose it, how it works at a high level, and what the tradeoffs mean for a Bitcoin-style UTXO chain. Read post" [ref=e74] [cursor=pointer]':
+          - /url: "#/blog/inside-ml-dsa-65"
+          - generic [ref=e75]:
+            - generic [ref=e76]:
+              - generic [ref=e77]: 2026-04-10
+              - generic [ref=e78]: ·
+              - generic [ref=e79]: cryptography
+              - generic [ref=e80]: ml-dsa
+              - generic [ref=e81]: dilithium
+              - generic [ref=e82]: technical
+            - 'heading "Inside ML-DSA-65: The Signature Algorithm Securing QubitCoin" [level=2] [ref=e83]'
+            - paragraph [ref=e84]: A technical walkthrough of Module-Lattice Digital Signature Algorithm — why NIST chose it, how it works at a high level, and what the tradeoffs mean for a Bitcoin-style UTXO chain.
+            - generic [ref=e85]:
+              - text: Read post
+              - img [ref=e86]
+        - link "2026-04-01 · bitcoin cryptography quantum Why Post-Quantum Bitcoin Needs to Exist Quantum computers are no longer science fiction. Here's why Bitcoin's ECDSA signatures are a ticking clock — and what we're doing about it. Read post" [ref=e88] [cursor=pointer]:
+          - /url: "#/blog/why-post-quantum-bitcoin-needs-to-exist"
+          - generic [ref=e89]:
+            - generic [ref=e90]:
+              - generic [ref=e91]: 2026-04-01
+              - generic [ref=e92]: ·
+              - generic [ref=e93]: bitcoin
+              - generic [ref=e94]: cryptography
+              - generic [ref=e95]: quantum
+            - heading "Why Post-Quantum Bitcoin Needs to Exist" [level=2] [ref=e96]
+            - paragraph [ref=e97]: Quantum computers are no longer science fiction. Here's why Bitcoin's ECDSA signatures are a ticking clock — and what we're doing about it.
+            - generic [ref=e98]:
+              - text: Read post
+              - img [ref=e99]
+  - contentinfo [ref=e101]:
+    - generic [ref=e102]:
+      - generic [ref=e103]:
+        - generic [ref=e104]:
+          - img "QubitCoin" [ref=e105]
+          - generic [ref=e106]: QubitCoin (QBTC) — Post-Quantum Digital Currency
+        - generic [ref=e107]:
+          - link "GitHub" [ref=e108] [cursor=pointer]:
+            - /url: https://github.com/qubitcoin-finance/qubitcoin
+            - img [ref=e109]
+          - link "X (Twitter)" [ref=e111] [cursor=pointer]:
+            - /url: https://x.com/qubitcoin_
+            - img [ref=e112]
+          - link "Telegram" [ref=e114] [cursor=pointer]:
+            - /url: https://t.me/qubitcoin_finance
+            - img [ref=e115]
+      - generic [ref=e118]: Built with ML-DSA-65 · Open Source
