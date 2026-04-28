@@ -12,6 +12,7 @@ import {
   computeMerkleRoot,
   computeBlockHash,
   hashMeetsTarget,
+  MAX_BLOCK_TRANSACTIONS,
   type Block,
   type BlockHeader,
 } from '../block.js'
@@ -384,6 +385,16 @@ describe('deserializeBlock', () => {
     }
     const block = deserializeBlock(raw as any)
     expect(block.transactions).toHaveLength(0)
+  })
+
+  it('throws when transaction count exceeds MAX_BLOCK_TRANSACTIONS', () => {
+    const raw = {
+      hash: 'bh',
+      height: 1,
+      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: 0 },
+      transactions: new Array(MAX_BLOCK_TRANSACTIONS + 1).fill({ id: 'x', inputs: [], outputs: [], timestamp: 0 }),
+    }
+    expect(() => deserializeBlock(raw as any)).toThrow(/exceeds limit/)
   })
 })
 

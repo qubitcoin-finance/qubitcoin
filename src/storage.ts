@@ -10,6 +10,7 @@ import path from 'node:path'
 import { hexToBytes } from './crypto.js'
 import { sanitize } from './utils.js'
 import { log } from './log.js'
+import { MAX_BLOCK_TRANSACTIONS } from './block.js'
 import type { Block } from './block.js'
 import type { Transaction, TransactionInput, ClaimData } from './transaction.js'
 
@@ -92,6 +93,9 @@ export function deserializeTransaction(raw: Record<string, unknown>): Transactio
 export function deserializeBlock(raw: Record<string, unknown>): Block {
   const block = raw as unknown as Block
   if (Array.isArray(raw.transactions)) {
+    if (raw.transactions.length > MAX_BLOCK_TRANSACTIONS) {
+      throw new Error(`Block transaction count ${raw.transactions.length} exceeds limit ${MAX_BLOCK_TRANSACTIONS}`)
+    }
     block.transactions = raw.transactions.map((t: Record<string, unknown>) =>
       deserializeTransaction(t)
     )

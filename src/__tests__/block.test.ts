@@ -8,6 +8,7 @@ import {
   createForkGenesisBlock,
   validateBlock,
   INITIAL_TARGET,
+  MAX_BLOCK_TRANSACTIONS,
   type Block,
   type BlockHeader,
 } from '../block.js'
@@ -525,5 +526,24 @@ describe('validateBlock edge cases', () => {
     const result = validateBlock(block, genesis, new Map())
     expect(result.valid).toBe(false)
     expect(result.error).toContain('Merkle root mismatch')
+  })
+
+  it('rejects block exceeding MAX_BLOCK_TRANSACTIONS without computing merkle root', () => {
+    const genesis = createGenesisBlock()
+    const coinbase = createCoinbaseTransaction('a'.repeat(64), 1, 0)
+    // Build a transactions array that exceeds the limit without worrying about merkle root
+    const txs: Block['transactions'] = [
+      coinbase,
+      ...new Array(MAX_BLOCK_TRANSACTIONS).fill(coinbase),
+    ]
+    const block: Block = {
+      header: { version: 1, previousHash: genesis.hash, merkleRoot: '0'.repeat(64), timestamp: Date.now(), target: easyTarget, nonce: 0 },
+      hash: '0'.repeat(64),
+      transactions: txs,
+      height: 1,
+    }
+    const result = validateBlock(block, genesis, new Map())
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('too many transactions')
   })
 })

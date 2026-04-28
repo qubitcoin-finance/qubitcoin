@@ -66,6 +66,9 @@ export const TARGET_BLOCK_TIME_MS = 10 * 60_000
 /** Maximum block size in bytes (1 MB, same as Bitcoin) */
 export const MAX_BLOCK_SIZE = 1_000_000
 
+/** Maximum transactions per block — first-line defence before expensive merkle/size ops */
+export const MAX_BLOCK_TRANSACTIONS = 10_000
+
 /** Maximum allowed future block timestamp (2 hours, same as Bitcoin) */
 export const MAX_FUTURE_BLOCK_TIME_MS = 2 * 60 * 60 * 1000
 
@@ -309,6 +312,11 @@ export function validateBlock(
   utxoSet: Map<string, UTXO>,
   chainBlocks?: Block[]
 ): { valid: boolean; error?: string } {
+  // Reject absurdly large transaction counts first — O(1) check, no crypto needed
+  if (block.transactions.length > MAX_BLOCK_TRANSACTIONS) {
+    return { valid: false, error: `Block has too many transactions: ${block.transactions.length} (max ${MAX_BLOCK_TRANSACTIONS})` }
+  }
+
   // Verify block hash
   const expectedHash = computeBlockHash(block.header)
   if (block.hash !== expectedHash) {
@@ -350,6 +358,12 @@ export function validateBlock(
     }
   }
 
+  // Verify block size before expensive merkle/dup-scan operations
+  const size = blockSize(block)
+  if (size > MAX_BLOCK_SIZE) {
+    return { valid: false, error: `Block size ${size} exceeds max ${MAX_BLOCK_SIZE}` }
+  }
+
   // Verify merkle root
   const txIds = block.transactions.map((tx) => tx.id)
   const expectedMerkle = computeMerkleRoot(txIds)
@@ -364,12 +378,6 @@ export function validateBlock(
       return { valid: false, error: `Duplicate transaction ID: ${tx.id}` }
     }
     txIdSet.add(tx.id)
-  }
-
-  // Verify block size
-  const size = blockSize(block)
-  if (size > MAX_BLOCK_SIZE) {
-    return { valid: false, error: `Block size ${size} exceeds max ${MAX_BLOCK_SIZE}` }
   }
 
   // First transaction must be coinbase
