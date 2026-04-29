@@ -3,7 +3,7 @@ import { Blockchain, MAX_REORG_DEPTH } from '../chain.js'
 import { createCoinbaseTransaction, createTransaction, COINBASE_MATURITY, validateTransaction, utxoKey, type UTXO } from '../transaction.js'
 import { computeMerkleRoot, computeBlockHash, hashMeetsTarget, medianTimestamp, MAX_FUTURE_BLOCK_TIME_MS, type Block, type BlockHeader, DIFFICULTY_ADJUSTMENT_INTERVAL, TARGET_BLOCK_TIME_MS, STARTING_DIFFICULTY } from '../block.js'
 import { createMockSnapshot } from '../snapshot.js'
-import { createClaimTransaction } from '../claim.js'
+import { createClaimTransaction, createP2wshClaimTransaction, createP2shMultisigClaimTransaction } from '../claim.js'
 import { walletA, walletB } from './fixtures.js'
 
 // Easy target for tests: ~16 attempts to find valid hash
@@ -1079,6 +1079,104 @@ describe('Blockchain getClaimableEntries / getUnclaimedValue', () => {
     expect(chain.getClaimableEntries().length).toBe(snapshot.entries.length)
     const total = snapshot.entries.reduce((s, e) => s + e.amount, 0)
     expect(chain.getUnclaimedValue()).toBe(total)
+  })
+
+  it('excludes P2SH-P2WPKH entry after claim is mined', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const chain = new Blockchain(snapshot)
+    const genesisHash = chain.blocks[0].hash
+
+    const p2shHolder = holders.find(h => h.type === 'p2sh' && !h.signerKeys)!
+    const p2shEntry = snapshot.entries.find(e => e.type === 'p2sh' && e.btcAddress === p2shHolder.address)!
+
+    const claimTx = createClaimTransaction(
+      p2shHolder.secretKey,
+      p2shHolder.publicKey,
+      p2shEntry,
+      walletA,
+      snapshot.btcBlockHash,
+      genesisHash
+    )
+    chain.addBlock(mineOnChain(chain, 'f'.repeat(64), [claimTx]))
+
+    const entries = chain.getClaimableEntries()
+    expect(entries.find(e => e.btcAddress === p2shEntry.btcAddress)).toBeUndefined()
+    expect(entries.length).toBe(snapshot.entries.length - 1)
+    expect(chain.isClaimed(p2shEntry.btcAddress)).toBe(true)
+  })
+
+  it('excludes P2TR entry after claim is mined', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const chain = new Blockchain(snapshot)
+    const genesisHash = chain.blocks[0].hash
+
+    const p2trHolder = holders.find(h => h.type === 'p2tr')!
+    const p2trEntry = snapshot.entries.find(e => e.type === 'p2tr')!
+
+    const claimTx = createClaimTransaction(
+      p2trHolder.secretKey,
+      p2trHolder.publicKey,
+      p2trEntry,
+      walletA,
+      snapshot.btcBlockHash,
+      genesisHash
+    )
+    chain.addBlock(mineOnChain(chain, 'f'.repeat(64), [claimTx]))
+
+    const entries = chain.getClaimableEntries()
+    expect(entries.find(e => e.btcAddress === p2trEntry.btcAddress)).toBeUndefined()
+    expect(entries.length).toBe(snapshot.entries.length - 1)
+    expect(chain.isClaimed(p2trEntry.btcAddress)).toBe(true)
+  })
+
+  it('excludes P2WSH entry after claim is mined', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const chain = new Blockchain(snapshot)
+    const genesisHash = chain.blocks[0].hash
+
+    const p2wshHolder = holders.find(h => h.type === 'p2wsh')!
+    const p2wshEntry = snapshot.entries.find(e => e.type === 'p2wsh')!
+
+    const claimTx = createP2wshClaimTransaction(
+      [p2wshHolder.signerKeys![0].secretKey, p2wshHolder.signerKeys![1].secretKey],
+      p2wshHolder.witnessScript!,
+      p2wshEntry,
+      walletA,
+      snapshot.btcBlockHash,
+      genesisHash
+    )
+    chain.addBlock(mineOnChain(chain, 'f'.repeat(64), [claimTx]))
+
+    const entries = chain.getClaimableEntries()
+    expect(entries.find(e => e.btcAddress === p2wshEntry.btcAddress)).toBeUndefined()
+    expect(entries.length).toBe(snapshot.entries.length - 1)
+    expect(chain.isClaimed(p2wshEntry.btcAddress)).toBe(true)
+  })
+
+  it('excludes P2SH multisig entry after claim is mined', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const chain = new Blockchain(snapshot)
+    const genesisHash = chain.blocks[0].hash
+
+    const p2shMultisigHolder = holders.find(h => h.type === 'p2sh' && h.signerKeys)!
+    const p2shMultisigEntry = snapshot.entries.find(e =>
+      e.type === 'p2sh' && e.btcAddress === p2shMultisigHolder.address
+    )!
+
+    const claimTx = createP2shMultisigClaimTransaction(
+      [p2shMultisigHolder.signerKeys![0].secretKey, p2shMultisigHolder.signerKeys![1].secretKey],
+      p2shMultisigHolder.witnessScript!,
+      p2shMultisigEntry,
+      walletA,
+      snapshot.btcBlockHash,
+      genesisHash
+    )
+    chain.addBlock(mineOnChain(chain, 'f'.repeat(64), [claimTx]))
+
+    const entries = chain.getClaimableEntries()
+    expect(entries.find(e => e.btcAddress === p2shMultisigEntry.btcAddress)).toBeUndefined()
+    expect(entries.length).toBe(snapshot.entries.length - 1)
+    expect(chain.isClaimed(p2shMultisigEntry.btcAddress)).toBe(true)
   })
 })
 
