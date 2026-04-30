@@ -12,6 +12,7 @@ import { sanitize } from './utils.js'
 import { log } from './log.js'
 import { MAX_BLOCK_TRANSACTIONS } from './block.js'
 import type { Block } from './block.js'
+import { MAX_TX_INPUTS } from './transaction.js'
 import type { Transaction, TransactionInput, ClaimData } from './transaction.js'
 
 export interface BlockStorageMetadata {
@@ -65,6 +66,9 @@ export function deserializeTransaction(raw: Record<string, unknown>): Transactio
 
   // Restore inputs
   if (Array.isArray(raw.inputs)) {
+    if (raw.inputs.length > MAX_TX_INPUTS) {
+      throw new Error(`Transaction input count ${raw.inputs.length} exceeds limit ${MAX_TX_INPUTS}`)
+    }
     tx.inputs = raw.inputs.map((inp: Record<string, unknown>) => {
       const input = inp as unknown as TransactionInput
       for (const field of TX_INPUT_BINARY_FIELDS) {

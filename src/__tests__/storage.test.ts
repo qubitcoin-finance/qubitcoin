@@ -7,6 +7,7 @@ import { Blockchain } from '../chain.js'
 import {
   createCoinbaseTransaction,
   utxoKey,
+  MAX_TX_INPUTS,
 } from '../transaction.js'
 import {
   computeMerkleRoot,
@@ -344,6 +345,16 @@ describe('deserializeTransaction', () => {
     }
     const tx = deserializeTransaction(raw as any)
     expect(tx.inputs[0].publicKey).toHaveLength(1952)
+  })
+
+  it('throws when input count exceeds MAX_TX_INPUTS before any hex conversion', () => {
+    const raw = {
+      id: 'abc',
+      inputs: new Array(MAX_TX_INPUTS + 1).fill({ txId: 'x', outputIndex: 0, publicKey: '00', signature: '00' }),
+      outputs: [],
+      timestamp: 1,
+    }
+    expect(() => deserializeTransaction(raw as any)).toThrow(/input count.*exceeds limit/)
   })
 })
 
