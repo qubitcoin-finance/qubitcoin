@@ -2377,4 +2377,35 @@ describe('P2P input validation hardening', () => {
       await p2p2.stop()
     }
   })
+
+  it('should penalize peer sending tx messages too rapidly', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-txrate-'))
+    try {
+      const node = new Node('alice', undefined, new FileBlockStorage(tmpDir))
+      const p2p = new P2PServer(node, 0, tmpDir)
+
+      let misbehaviorAdded = 0
+      const fakePeer = {
+        id: 'test-peer',
+        addMisbehavior(n: number) { misbehaviorAdded += n },
+        send() {},
+      }
+      const handleTx = (p2p as any).handleTx.bind(p2p)
+
+      // Simulate a tx that just arrived: set lastTxTime to now
+      ;(p2p as any).lastTxTime.set('test-peer', Date.now())
+
+      // Immediate second tx — rate limit fires (+5) then invalid hash (+10) = 15
+      handleTx(fakePeer, { tx: {} })
+      expect(misbehaviorAdded).toBe(15)
+
+      // After sufficient gap (200ms): no rate limit, only invalid hash (+10)
+      misbehaviorAdded = 0
+      ;(p2p as any).lastTxTime.set('test-peer', Date.now() - 200)
+      handleTx(fakePeer, { tx: {} })
+      expect(misbehaviorAdded).toBe(10)
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
 })

@@ -130,6 +130,8 @@ export class P2PServer {
   private lastGetblocksTime: Map<string, number> = new Map()
   /** Per-peer last getheaders request timestamp (rate limiting) */
   private lastGetheadersTime: Map<string, number> = new Map()
+  /** Per-peer last tx message timestamp (rate limiting) */
+  private lastTxTime: Map<string, number> = new Map()
 
   private localMode = false
   private anchorsPath: string | null = null
@@ -323,6 +325,7 @@ export class P2PServer {
     this.peers.delete(peer.id)
     this.lastGetblocksTime.delete(peer.id)
     this.lastGetheadersTime.delete(peer.id)
+    this.lastTxTime.delete(peer.id)
     if (peer.inbound) this.inboundCount--
     else this.outboundCount--
 
@@ -716,6 +719,15 @@ export class P2PServer {
       peer.addMisbehavior(10)
       return
     }
+
+    // Rate limit: penalize rapid tx submissions to discourage mempool flooding.
+    // ML-DSA-65 verification is expensive; cap at ~10 txs/sec per peer.
+    const nowTx = Date.now()
+    const lastTx = this.lastTxTime.get(peer.id) ?? 0
+    if (nowTx - lastTx < 100) {
+      peer.addMisbehavior(5)
+    }
+    this.lastTxTime.set(peer.id, nowTx)
 
     let tx: Transaction
     try {
