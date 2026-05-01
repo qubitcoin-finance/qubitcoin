@@ -1386,4 +1386,151 @@ describe('validateChain completeness', () => {
     }
     expect(chain.validateChain().valid).toBe(true)
   })
+
+  it('detects block whose hash does not meet target', () => {
+    const chain = new Blockchain()
+    const tip = chain.getChainTip()
+    const coinbase = createCoinbaseTransaction(walletA.address, 1, 0)
+    const IMPOSSIBLE_TARGET = '0'.repeat(64)
+    const header: BlockHeader = {
+      version: 1,
+      previousHash: tip.hash,
+      merkleRoot: computeMerkleRoot([coinbase.id]),
+      timestamp: tip.header.timestamp + 1,
+      target: IMPOSSIBLE_TARGET,
+      nonce: 0,
+    }
+    const hash = computeBlockHash(header)
+    // hash is consistent but cannot meet a target of 0
+    chain.blocks.push({ header, hash, transactions: [coinbase], height: 1 })
+    chain.blocksByHash.set(hash, chain.blocks[1])
+
+    const result = chain.validateChain()
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('does not meet target')
+    expect(result.invalidAtHeight).toBe(1)
+  })
+
+  it('detects previous hash chain break', () => {
+    const chain = new Blockchain()
+    chain.addBlock(mineOnChain(chain, walletA.address))
+    const tip1 = chain.getChainTip()
+    const coinbase2 = createCoinbaseTransaction(walletA.address, 2, 0)
+    // Use a maximally easy target so any hash passes PoW check
+    const TRIVIAL_TARGET = 'f'.repeat(64)
+    const header2: BlockHeader = {
+      version: 1,
+      previousHash: 'aa'.repeat(32), // bogus — does not point to block 1
+      merkleRoot: computeMerkleRoot([coinbase2.id]),
+      timestamp: tip1.header.timestamp + 1,
+      target: TRIVIAL_TARGET,
+      nonce: 0,
+    }
+    const hash2 = computeBlockHash(header2)
+    chain.blocks.push({ header: header2, hash: hash2, transactions: [coinbase2], height: 2 })
+    chain.blocksByHash.set(hash2, chain.blocks[2])
+
+    const result = chain.validateChain()
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('previous hash mismatch')
+    expect(result.invalidAtHeight).toBe(2)
+  })
+
+  it('detects merkle root mismatch', () => {
+    const chain = new Blockchain()
+    chain.difficulty = TEST_TARGET
+    chain.addBlock(mineOnChain(chain, walletA.address))
+
+    // Tamper a transaction ID in the stored block without updating the header's merkle root
+    chain.blocks[1].transactions[0].id = 'dead'.repeat(16)
+
+    const result = chain.validateChain()
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('merkle root mismatch')
+    expect(result.invalidAtHeight).toBe(1)
+  })
+
+  it('detects invalid transaction spending non-existent UTXO', () => {
+    const chain = new Blockchain()
+    chain.difficulty = TEST_TARGET
+
+    // Mine block 1 so the UTXO set is seeded
+    chain.addBlock(mineOnChain(chain, walletA.address))
+    const tip1 = chain.getChainTip()
+
+    // Build a transaction with an input pointing to a non-existent UTXO
+    const fakeTx = {
+      id: 'beef'.repeat(16),
+      timestamp: Date.now(),
+      inputs: [{ txId: 'dead'.repeat(16), outputIndex: 0, publicKey: walletA.publicKey, signature: walletA.publicKey }],
+      outputs: [{ address: walletA.address, amount: 1 }],
+    }
+
+    // Build a block containing this invalid transaction
+    const coinbase2 = createCoinbaseTransaction(walletA.address, 2, 0)
+    const txs = [coinbase2, fakeTx as unknown as ReturnType<typeof createCoinbaseTransaction>]
+    const merkleRoot2 = computeMerkleRoot(txs.map(t => t.id))
+    const header2: BlockHeader = {
+      version: 1,
+      previousHash: tip1.hash,
+      merkleRoot: merkleRoot2,
+      timestamp: tip1.header.timestamp + 1,
+      target: TEST_TARGET,
+      nonce: 0,
+    }
+    let hash2 = computeBlockHash(header2)
+    while (!hashMeetsTarget(hash2, header2.target)) {
+      header2.nonce++
+      hash2 = computeBlockHash(header2)
+    }
+    chain.blocks.push({ header: header2, hash: hash2, transactions: txs as Block['transactions'], height: 2 })
+    chain.blocksByHash.set(hash2, chain.blocks[2])
+
+    const result = chain.validateChain()
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('Block 2')
+    expect(result.invalidAtHeight).toBe(2)
+  })
+
+  it('detects cross-block double-claim in validateChain', () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const chain = new Blockchain(snapshot)
+    const genesisHash = chain.blocks[0].hash
+
+    const claimTx = createClaimTransaction(
+      holders[0].secretKey,
+      holders[0].publicKey,
+      snapshot.entries[0],
+      walletB,
+      snapshot.btcBlockHash,
+      genesisHash,
+    )
+
+    // Mine block 1 with the claim (goes through addBlock, passes validation)
+    const block1 = mineOnChain(chain, 'f'.repeat(64), [claimTx])
+    chain.addBlock(block1)
+
+    // Build block 2 with the exact same claim — push directly, bypassing addBlock
+    const tip1 = chain.getChainTip()
+    const coinbase2 = createCoinbaseTransaction('f'.repeat(64), 2, 0)
+    const txs2 = [coinbase2, claimTx]
+    const merkleRoot2 = computeMerkleRoot(txs2.map(t => t.id))
+    const TRIVIAL_TARGET = 'f'.repeat(64)
+    const header2: BlockHeader = {
+      version: 1,
+      previousHash: tip1.hash,
+      merkleRoot: merkleRoot2,
+      timestamp: tip1.header.timestamp + 1,
+      target: TRIVIAL_TARGET,
+      nonce: 0,
+    }
+    const hash2 = computeBlockHash(header2)
+    chain.blocks.push({ header: header2, hash: hash2, transactions: txs2, height: 2 })
+    chain.blocksByHash.set(hash2, chain.blocks[2])
+
+    const result = chain.validateChain()
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('double-claim')
+    expect(result.invalidAtHeight).toBe(2)
+  })
 })
