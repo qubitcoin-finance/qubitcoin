@@ -11,7 +11,7 @@ services:
       NODE_OPTIONS: --max-old-space-size=12288
     volumes:
       - /home/qubitcoin/qbtc-data:/data
-      - /home/qubitcoin/qbtc-snapshot.jsonl:/snapshot.jsonl
+      - /home/qubitcoin/qbtc-snapshot.jsonl:/snapshot.jsonl:ro
     command:
       - --mine
       - --datadir=/data

@@ -226,7 +226,7 @@ const _cachedForkGenesis = new Map<string, Block>()
  * Cached per snapshot (deterministic — same snapshot always produces same result).
  */
 export function createForkGenesisBlock(snapshot: BtcSnapshot): Block {
-  const nonceHint = (snapshot as unknown as Record<string, unknown>)._genesisNonceHint as number | undefined
+  const nonceHint = snapshot._genesisNonceHint
   const cacheKey = snapshot.merkleRoot
   const cached = _cachedForkGenesis.get(cacheKey)
   if (cached) return structuredClone(cached)

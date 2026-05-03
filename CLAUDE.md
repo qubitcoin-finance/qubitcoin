@@ -10,10 +10,8 @@ Post-quantum Bitcoin fork using ML-DSA-65 (Dilithium) signatures. Node.js/TypeSc
 - **Build:** `pnpm build` (tsc)
 - **Run node:** `pnpm run qbtcd -- --mine --full`
 - **Docker image:** `ghcr.io/qubitcoin-finance/qbtcd:main`
-- **Containers** (all run as `qubitcoin` user on self-hosted runner, all host-networked, all share the image above):
-  - `qbtc-node` — main node, RPC on `127.0.0.1:3010`, P2P `6001`, data `/home/qubitcoin/qbtc-data`
-  - `qbtc-q` — peer miner, RPC `127.0.0.1:3011`, P2P `6002`, peers `localhost:6001`, data `/home/qubitcoin/qbtc-q-data`
-  - `qbtc-devtx` — dev transaction generator targeting `qbtc-node`
+- **Containers** (current deployment stack on the self-hosted runner):
+  - `qbtc-miner` — host-networked compose service running the miner/node image, RPC on `127.0.0.1:3010`, data `/home/qubitcoin/qbtc-data`, snapshot `/home/qubitcoin/qbtc-snapshot.jsonl` mounted read-only at `/snapshot.jsonl`
 
 ## Deployment
 
@@ -27,7 +25,7 @@ Post-quantum Bitcoin fork using ML-DSA-65 (Dilithium) signatures. Node.js/TypeSc
 3. **release.yml** — tags and creates GitHub release
 
 Push to `main` triggers automatic deployment. No SSH required.
-The old `pnpm ship` / `scripts/deploy.sh` scripts are removed — everything goes through GHA.
+The legacy `pnpm ship` script still exists as a reminder shim; `scripts/deploy.sh` is not part of the current workflow.
 
 **Runner setup:**
 - Self-hosted runner registered via GitHub UI (Settings → Actions → Runners)
@@ -35,9 +33,9 @@ The old `pnpm ship` / `scripts/deploy.sh` scripts are removed — everything goe
 
 ### Container Details (backend)
 
-- **Ports (qbtc-node):** 3010 (RPC, bound to `127.0.0.1`), 6001 (P2P)
-- **Ports (qbtc-q):** 3011 (RPC), 6002 (P2P)
-- **Data:** `/home/qubitcoin/qbtc-data`, `/home/qubitcoin/qbtc-q-data` (persistent bind mounts)
+- **Service:** `qbtc-miner`
+- **Ports:** 3010 (RPC, bound to `127.0.0.1`)
+- **Data:** `/home/qubitcoin/qbtc-data` (persistent bind mount)
 - **Snapshot:** `/home/qubitcoin/qbtc-snapshot.jsonl` mounted read-only at `/snapshot.jsonl`
 - **Image tag:** `ghcr.io/qubitcoin-finance/qbtcd:main`
 - **Networking:** host (`--network host`)

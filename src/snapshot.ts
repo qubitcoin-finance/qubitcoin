@@ -33,6 +33,7 @@ export interface BtcSnapshot {
   btcTimestamp: number     // Bitcoin block timestamp (unix seconds)
   entries: BtcAddressBalance[]
   merkleRoot: string      // commitment hash over all entries
+  _genesisNonceHint?: number  // optional test-only nonce hint for deterministic fork genesis
 }
 
 /** Derive a Bitcoin-style address (hex of HASH160) from a compressed public key */
@@ -253,7 +254,7 @@ export function createMockSnapshot(): {
   }
 
   // Attach pre-mined nonce hint to skip genesis mining in tests
-  ;(snapshot as any)._genesisNonceHint = MOCK_FORK_GENESIS_NONCE
+  snapshot._genesisNonceHint = MOCK_FORK_GENESIS_NONCE
 
   _cachedMockSnapshot = { snapshot, holders }
   return _cachedMockSnapshot

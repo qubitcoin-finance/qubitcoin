@@ -167,6 +167,13 @@ describe('createForkGenesisBlock', () => {
     expect(genesis.transactions[0].outputs[0].amount).toBe(0) // no free coins
     expect(hashMeetsTarget(genesis.hash, INITIAL_TARGET)).toBe(true)
   })
+
+  it('uses the typed snapshot nonce hint for deterministic mining bypass', () => {
+    const { snapshot } = createMockSnapshot()
+    const genesis = createForkGenesisBlock(snapshot)
+    expect(snapshot._genesisNonceHint).toBeDefined()
+    expect(genesis.header.nonce).toBe(snapshot._genesisNonceHint)
+  })
 })
 
 describe('validateBlock', () => {
