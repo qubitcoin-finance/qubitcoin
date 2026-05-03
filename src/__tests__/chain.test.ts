@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { Blockchain, MAX_REORG_DEPTH } from '../chain.js'
-import { createCoinbaseTransaction, createTransaction, COINBASE_MATURITY, validateTransaction, utxoKey, type UTXO } from '../transaction.js'
-import { computeMerkleRoot, computeBlockHash, hashMeetsTarget, medianTimestamp, MAX_FUTURE_BLOCK_TIME_MS, type Block, type BlockHeader, DIFFICULTY_ADJUSTMENT_INTERVAL, TARGET_BLOCK_TIME_MS, STARTING_DIFFICULTY } from '../block.js'
+import { createCoinbaseTransaction, createTransaction, COINBASE_MATURITY, validateTransaction, utxoKey, type Transaction, type UTXO } from '../transaction.js'
+import { computeMerkleRoot, computeBlockHash, hashMeetsTarget, medianTimestamp, MAX_FUTURE_BLOCK_TIME_MS, MAX_BLOCK_SIZE, type Block, type BlockHeader, DIFFICULTY_ADJUSTMENT_INTERVAL, TARGET_BLOCK_TIME_MS, STARTING_DIFFICULTY } from '../block.js'
 import { createMockSnapshot } from '../snapshot.js'
 import { createClaimTransaction, createP2wshClaimTransaction, createP2shMultisigClaimTransaction } from '../claim.js'
 import { walletA, walletB } from './fixtures.js'
@@ -9,7 +9,7 @@ import { walletA, walletB } from './fixtures.js'
 // Easy target for tests: ~16 attempts to find valid hash
 const TEST_TARGET = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
 
-function mineOnChain(chain: Blockchain, minerAddress: string, extraTxs: any[] = []): Block {
+function mineOnChain(chain: Blockchain, minerAddress: string, extraTxs: Transaction[] = []): Block {
   chain.difficulty = TEST_TARGET
   const tip = chain.getChainTip()
   const height = chain.getHeight() + 1
@@ -1447,6 +1447,20 @@ describe('validateChain completeness', () => {
     const result = chain.validateChain()
     expect(result.valid).toBe(false)
     expect(result.error).toContain('merkle root mismatch')
+    expect(result.invalidAtHeight).toBe(1)
+  })
+
+  it('detects oversized block during full-chain validation', () => {
+    const chain = new Blockchain()
+    chain.difficulty = TEST_TARGET
+    chain.addBlock(mineOnChain(chain, walletA.address))
+
+    chain.blocks[1].transactions[0].inputs[0].signature = new Uint8Array(MAX_BLOCK_SIZE)
+
+    const result = chain.validateChain()
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('size')
+    expect(result.error).toContain('exceeds max')
     expect(result.invalidAtHeight).toBe(1)
   })
 
