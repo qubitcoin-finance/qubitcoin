@@ -104,6 +104,12 @@ interface OrphanBlock {
   receivedAt: number
 }
 
+interface ParsedAddressEntry {
+  host: string
+  port: number
+  lastSeen?: number
+}
+
 export class P2PServer {
   private server: net.Server
   private peers: Map<string, Peer> = new Map()
@@ -1143,6 +1149,27 @@ export class P2PServer {
     peer.send({ type: 'addr', payload: { addresses } as AddrPayload })
   }
 
+  private parseAddressEntry(entry: unknown): ParsedAddressEntry | null {
+    if (entry == null || typeof entry !== 'object') return null
+
+    const candidate = entry as {
+      host?: unknown
+      port?: unknown
+      lastSeen?: unknown
+    }
+
+    if (typeof candidate.host !== 'string' || !isValidIPAddress(candidate.host)) return null
+    if (typeof candidate.port !== 'number' || !Number.isInteger(candidate.port) || candidate.port <= 0 || candidate.port > 65535) return null
+    if (candidate.lastSeen !== undefined && (typeof candidate.lastSeen !== 'number' || !Number.isFinite(candidate.lastSeen))) return null
+
+    const parsed: ParsedAddressEntry = {
+      host: candidate.host,
+      port: candidate.port,
+    }
+    if (candidate.lastSeen !== undefined) parsed.lastSeen = candidate.lastSeen
+    return parsed
+  }
+
   private handleAddr(peer: Peer, payload: AddrPayload): void {
     if (!payload || !Array.isArray(payload.addresses)) {
       peer.addMisbehavior(10)
@@ -1165,19 +1192,23 @@ export class P2PServer {
     }
 
     const newAddresses: Array<{ host: string; port: number; lastSeen?: number }> = []
+    let malformedEntrySeen = false
     for (const entry of payload.addresses) {
-      // Skip null/non-object entries — a peer sending these is malformed but we continue processing valid ones
-      if (entry == null || typeof entry !== 'object') continue
-      // Validate host: must be a valid IPv4 or IPv6 address (rejects hostnames, paths, etc.)
-      if (typeof entry.host !== 'string' || !isValidIPAddress(entry.host)) continue
-      // Validate port: must be an integer in valid range
-      if (typeof entry.port !== 'number' || !Number.isInteger(entry.port) || entry.port <= 0 || entry.port > 65535) continue
-      // Validate lastSeen: must be a number if present
-      if (entry.lastSeen !== undefined && (typeof entry.lastSeen !== 'number' || !Number.isFinite(entry.lastSeen))) continue
-      const key = `${entry.host}:${entry.port}`
+      const parsed = this.parseAddressEntry(entry)
+      if (!parsed) {
+        // Skip null/non-object entries — a peer sending these is malformed but we continue processing valid ones
+        if (entry != null && typeof entry === 'object') malformedEntrySeen = true
+        continue
+      }
+
+      const key = `${parsed.host}:${parsed.port}`
       const wasNew = !this.knownAddresses.has(key)
-      this.addKnownAddress(entry.host, entry.port, entry.lastSeen)
-      if (wasNew) newAddresses.push(entry)
+      this.addKnownAddress(parsed.host, parsed.port, parsed.lastSeen)
+      if (wasNew) newAddresses.push(parsed)
+    }
+
+    if (malformedEntrySeen) {
+      peer.addMisbehavior(5)
     }
 
     // Forward new addresses to up to 2 random peers (excluding sender)
@@ -1200,10 +1231,9 @@ export class P2PServer {
     }
   }
 
-  private addKnownAddress(host: string, port: number, lastSeen?: number): void {
-    // Filter private IPs unless in local mode
-    if (!this.localMode && !isRoutableAddress(host)) return
-
+  private upsertKnownAddress(host: string, port: number, lastSeen?: number, enforceRoutability = true): void {
+    // Filter private IPs unless in local mode, but allow trusted persisted anchors to reload.
+    if (enforceRoutability && !this.localMode && !isRoutableAddress(host)) return
     const key = `${host}:${port}`
     const existing = this.knownAddresses.get(key)
     // Clamp lastSeen to at most 2 hours in the future to prevent permanent stale entries
@@ -1224,6 +1254,10 @@ export class P2PServer {
       }
       if (oldestKey) this.knownAddresses.delete(oldestKey)
     }
+  }
+
+  private addKnownAddress(host: string, port: number, lastSeen?: number): void {
+    this.upsertKnownAddress(host, port, lastSeen)
   }
 
   /** Start periodic peer discovery — connect to random known addresses */
@@ -1351,14 +1385,20 @@ export class P2PServer {
     if (!this.anchorsPath) return
     try {
       const data = fs.readFileSync(this.anchorsPath, 'utf-8')
-      const anchors: Array<{ host: string; port: number; lastSeen: number }> = JSON.parse(data)
+      const anchors: unknown = JSON.parse(data)
+      if (!Array.isArray(anchors)) return
+      let loadedCount = 0
       for (const a of anchors) {
-        if (a.host && a.port) {
-          this.knownAddresses.set(`${a.host}:${a.port}`, { host: a.host, port: a.port, lastSeen: a.lastSeen ?? Date.now() })
+        const parsed = this.parseAddressEntry(a)
+        if (parsed) {
+          this.upsertKnownAddress(parsed.host, parsed.port, parsed.lastSeen, false)
+          loadedCount++
+        } else {
+          log.warn({ component: 'p2p' }, 'Skipping malformed anchor entry')
         }
       }
-      if (anchors.length > 0) {
-        log.info({ component: 'p2p', count: anchors.length }, 'Loaded anchor peers')
+      if (loadedCount > 0) {
+        log.info({ component: 'p2p', count: loadedCount }, 'Loaded anchor peers')
       }
     } catch (err) {
       log.debug({ component: 'p2p', err }, 'Could not load anchors — starting fresh')

@@ -1920,6 +1920,47 @@ describe('Anchor peer persistence', () => {
       fs.rmSync(tmpDir, { recursive: true, force: true })
     }
   })
+
+  it('should skip malformed anchor entries and avoid dialing or persisting them', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-anchor-malformed-'))
+    try {
+      const anchors = [
+        { host: '1.1.1.1', port: 6001, lastSeen: 1000 },
+        { host: 'not-an-ip', port: 6002, lastSeen: 2000 },
+        { host: '2.2.2.2', port: 70000, lastSeen: 3000 },
+        { host: '3.3.3.3', port: 6003, lastSeen: 'yesterday' },
+      ]
+      fs.writeFileSync(path.join(tmpDir, 'anchors.json'), JSON.stringify(anchors))
+
+      const node = new Node('test')
+      const p2p = new P2PServer(node, 0, tmpDir)
+
+      const connectCalls: Array<[string, number]> = []
+      ;(p2p as any).connectOutbound = (host: string, port: number) => {
+        connectCalls.push([host, port])
+      }
+
+      const known = p2p.getKnownAddresses()
+      expect(known.size).toBe(1)
+      expect(known.has('1.1.1.1:6001')).toBe(true)
+      expect(known.has('not-an-ip:6002')).toBe(false)
+      expect(known.has('2.2.2.2:70000')).toBe(false)
+      expect(known.has('3.3.3.3:6003')).toBe(false)
+
+      p2p.connectToAnchors()
+      expect(connectCalls).toEqual([['1.1.1.1', 6001]])
+
+      p2p.saveAnchors()
+      const savedAnchors = JSON.parse(fs.readFileSync(path.join(tmpDir, 'anchors.json'), 'utf-8'))
+      expect(savedAnchors).toHaveLength(1)
+      expect(savedAnchors[0].host).toBe('1.1.1.1')
+      expect(savedAnchors[0].port).toBe(6001)
+
+      await p2p.stop()
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
 })
 
 describe('Dust limit', () => {

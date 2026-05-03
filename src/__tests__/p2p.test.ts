@@ -1143,6 +1143,56 @@ describe('P2P security hardening', () => {
       expect(known.has('999.999.999.999:6001')).toBe(false)
       // Valid IPs pass format check (routing check may still exclude them in localMode)
       expect(known.has('10.0.0.5:6001')).toBe(true)
+      expect(peerOnNode1.getMisbehaviorScore()).toBeGreaterThanOrEqual(5)
+    } finally {
+      await p2p1.stop()
+      await p2p2.stop()
+    }
+  })
+
+  it('should penalize malformed addr sub-entries while keeping valid ones', async () => {
+    const storage1 = new FileBlockStorage(tmpDir1)
+    const storage2 = new FileBlockStorage(tmpDir2)
+    const node1 = new Node('alice', undefined, storage1)
+    const node2 = new Node('bob', undefined, storage2)
+
+    const p2p1 = new P2PServer(node1, 0, tmpDir1)
+    const p2p2 = new P2PServer(node2, 0, tmpDir2)
+    p2p1.setLocalMode(true)
+    p2p2.setLocalMode(true)
+    await p2p1.start()
+    await p2p2.start()
+
+    try {
+      const addr = (p2p1 as any).server.address()
+      const port = typeof addr === 'object' ? addr.port : 0
+      p2p2.connectOutbound('127.0.0.1', port)
+      await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
+
+      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0] as Peer
+      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0] as Peer
+
+      peerOnNode1.lastAddrReceived = 0
+
+      peerOnNode2.send({
+        type: 'addr',
+        payload: {
+          addresses: [
+            { host: 'not-an-ip', port: 6001, lastSeen: Date.now() },
+            { host: '10.0.0.7', port: 70000, lastSeen: Date.now() },
+            { host: '10.0.0.8', port: 6008, lastSeen: 'yesterday' },
+            { host: '10.0.0.9', port: 6009, lastSeen: Date.now() },
+          ] as any,
+        },
+      })
+
+      await new Promise(r => setTimeout(r, 300))
+
+      const known = p2p1.getKnownAddresses()
+      expect(known.has('10.0.0.9:6009')).toBe(true)
+      expect(known.has('10.0.0.7:70000')).toBe(false)
+      expect(known.has('10.0.0.8:6008')).toBe(false)
+      expect(peerOnNode1.getMisbehaviorScore()).toBeGreaterThanOrEqual(5)
     } finally {
       await p2p1.stop()
       await p2p2.stop()
