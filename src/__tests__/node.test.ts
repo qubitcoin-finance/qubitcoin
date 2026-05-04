@@ -433,6 +433,27 @@ describe('Node.resetToHeight()', () => {
     expect(() => node.resetToHeight(1)).not.toThrow()
     expect(node.chain.getHeight()).toBe(1)
   })
+
+  it('clears miningStats immediately when rollback aborts async mining', async () => {
+    const node = new Node('test')
+    node.chain.difficulty = '0000000000000fffffffffffffffffffffffffffffffffffffffffffffffffff'
+
+    const miningPromise = node.startMining(walletA.address)
+
+    for (let i = 0; i < 100; i++) {
+      if (node.miningStats !== null) break
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    }
+
+    expect(node.miningStats).not.toBeNull()
+
+    node.resetToHeight(0)
+
+    expect(node.miningStats).toBeNull()
+
+    node.stopMining()
+    await miningPromise
+  })
 })
 
 // ─────────────────────────────────────────────────────────────

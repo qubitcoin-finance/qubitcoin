@@ -145,6 +145,7 @@ export class Node {
     log.warn({ component: 'node', from: this.chain.getHeight(), to: height }, 'Resetting to height')
     this.chain.resetToHeight(height)
     this.mempool.revalidate(this.chain.utxoSet, this.chain.claimedBtcAddresses, this.chain.getHeight() + 1)
+    this.miningStats = null
     this.miningAbort?.abort()
   }
 
