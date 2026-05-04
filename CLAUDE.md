@@ -6,7 +6,7 @@ Post-quantum Bitcoin fork using ML-DSA-65 (Dilithium) signatures. Node.js/TypeSc
 
 - **Repo:** `qubitcoin-finance/qubitcoin`
 - **Stack:** TypeScript (ESM), ts-node, Express v5, Vite + Tailwind (explorer)
-- **Test:** `pnpm test` (vitest, 630 tests)
+- **Test:** `pnpm test` (vitest, 634 tests)
 - **Build:** `pnpm build` (tsc)
 - **Run node:** `pnpm run qbtcd -- --mine --full`
 - **Docker image:** `ghcr.io/qubitcoin-finance/qbtcd:main`
