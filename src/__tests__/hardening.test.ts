@@ -1024,6 +1024,7 @@ describe('Node receiveBlock', () => {
 
       const result = node.receiveBlock(externalBlock)
       expect(result.success).toBe(true)
+      expect(node.miningStats).toBeNull()
 
       // Mining should restart (miningStats resets for new round)
       // Give it a moment to restart

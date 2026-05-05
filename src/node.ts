@@ -94,6 +94,7 @@ export class Node {
       this.mempool.removeTransactions(minedTxIds)
 
       // Abort in-progress mining so it restarts with the new tip
+      this.miningStats = null
       this.miningAbort?.abort()
     }
     return result
