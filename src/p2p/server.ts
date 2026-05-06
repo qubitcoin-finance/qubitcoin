@@ -166,6 +166,41 @@ export class P2PServer {
     return addr && typeof addr === 'object' ? addr.port : this.port
   }
 
+  /** Returns the total number of connected peers (including those still handshaking) */
+  getPeerCount(): number { return this.peers.size }
+
+  /** Returns all connected Peer objects */
+  getPeerObjects(): Peer[] { return Array.from(this.peers.values()) }
+
+  /** Returns the number of accepted inbound connections */
+  getInboundCount(): number { return this.inboundCount }
+
+  /** Returns true if the given block hash is in the rejected-blocks cache */
+  isBlockRejected(hash: string): boolean { return this.rejectedBlocks.has(hash) }
+
+  /** Returns the number of cached orphan blocks */
+  getOrphanCount(): number { return this.orphanBlocks.size }
+
+  /** Returns the configured seeds as an immutable snapshot */
+  getSeeds(): ReadonlyArray<{ host: string; port: number }> { return this.seeds }
+
+  /** Returns true while a fork-resolution sync is in progress */
+  isForkResolutionInProgress(): boolean { return this.forkResolutionInProgress }
+
+  /** Returns the known-address book (read-only) */
+  getKnownAddresses(): ReadonlyMap<string, { host: string; port: number; lastSeen: number }> {
+    return this.knownAddresses
+  }
+
+  /** Returns true when localMode is active (no public-address filtering) */
+  isLocalMode(): boolean { return this.localMode }
+
+  /** Returns the filesystem path used for anchor persistence, or null if in-memory only */
+  getAnchorsPath(): string | null { return this.anchorsPath }
+
+  /** Returns the underlying Node instance */
+  getNode(): Node { return this.node }
+
   start(): Promise<void> {
     return new Promise((resolve) => {
       this.server.listen(this.port, () => {
@@ -726,7 +761,7 @@ export class P2PServer {
     }
   }
 
-  private handleTx(peer: Peer, payload: TxPayload): void {
+  handleTx(peer: Peer, payload: TxPayload): void {
     if (!payload || !payload.tx) {
       peer.addMisbehavior(10)
       return
@@ -873,7 +908,7 @@ export class P2PServer {
   }
 
   /** Handle getheaders: find common ancestor from locator, respond with headers */
-  private handleGetHeaders(peer: Peer, payload: GetHeadersPayload): void {
+  handleGetHeaders(peer: Peer, payload: GetHeadersPayload): void {
     if (!payload || !Array.isArray(payload.locatorHashes)) {
       peer.addMisbehavior(10)
       return
@@ -1262,7 +1297,7 @@ export class P2PServer {
     }
   }
 
-  private addKnownAddress(host: string, port: number, lastSeen?: number): void {
+  addKnownAddress(host: string, port: number, lastSeen?: number): void {
     this.upsertKnownAddress(host, port, lastSeen)
   }
 
@@ -1308,13 +1343,8 @@ export class P2PServer {
     this.localMode = enabled
   }
 
-  /** Get the known address book (for testing) */
-  getKnownAddresses(): Map<string, { host: string; port: number; lastSeen: number }> {
-    return this.knownAddresses
-  }
-
   /** Add a block to the orphan pool (validates PoW before caching) */
-  private addOrphan(block: Block): void {
+  addOrphan(block: Block): void {
     // Validate PoW before storing — prevents filling orphan cache with junk
     if (computeBlockHash(block.header) !== block.hash) return
     if (!hashMeetsTarget(block.hash, block.header.target)) return
@@ -1343,7 +1373,7 @@ export class P2PServer {
   }
 
   /** Try to connect orphan blocks after a new block was accepted */
-  private processOrphans(parentHash: string): number {
+  processOrphans(parentHash: string): number {
     let added = 0
     let currentHash = parentHash
 

@@ -123,6 +123,11 @@ export class Peer {
     return this.misbehaviorScore
   }
 
+  /** Set the decay timestamp — used in tests to simulate elapsed time */
+  setLastMisbehaviorDecay(time: number): void {
+    this.lastMisbehaviorDecay = time
+  }
+
   /** Decay misbehavior score by 1 point per minute of good behavior */
   private decayMisbehavior(): void {
     const now = Date.now()

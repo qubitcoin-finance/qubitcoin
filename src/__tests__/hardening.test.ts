@@ -86,7 +86,7 @@ describe('Misbehavior score decay', () => {
     expect(peer.getMisbehaviorScore()).toBe(20)
 
     // Simulate time passing by directly setting lastMisbehaviorDecay
-    ;(peer as any).lastMisbehaviorDecay = Date.now() - 5 * 60_000 // 5 minutes ago
+    peer.setLastMisbehaviorDecay(Date.now() - 5 * 60_000) // 5 minutes ago
 
     // Score should have decayed by 5
     expect(peer.getMisbehaviorScore()).toBe(15)
@@ -104,7 +104,7 @@ describe('Misbehavior score decay', () => {
     )
 
     peer.addMisbehavior(3)
-    ;(peer as any).lastMisbehaviorDecay = Date.now() - 10 * 60_000 // 10 minutes ago
+    peer.setLastMisbehaviorDecay(Date.now() - 10 * 60_000) // 10 minutes ago
 
     expect(peer.getMisbehaviorScore()).toBe(0)
 
@@ -130,7 +130,7 @@ describe('Private IP filtering', () => {
 
   it('should reject RFC1918 addresses from address book', () => {
     // Call addKnownAddress via the private method
-    const addAddr = (p2p as any).addKnownAddress.bind(p2p)
+    const addAddr = p2p.addKnownAddress.bind(p2p)
 
     addAddr('10.0.0.1', 6001)
     addAddr('172.16.0.1', 6001)
@@ -142,7 +142,7 @@ describe('Private IP filtering', () => {
   })
 
   it('should accept public addresses', () => {
-    const addAddr = (p2p as any).addKnownAddress.bind(p2p)
+    const addAddr = p2p.addKnownAddress.bind(p2p)
 
     addAddr('8.8.8.8', 6001)
     addAddr('1.2.3.4', 6002)
@@ -152,7 +152,7 @@ describe('Private IP filtering', () => {
 
   it('should allow private IPs in local mode', () => {
     p2p.setLocalMode(true)
-    const addAddr = (p2p as any).addKnownAddress.bind(p2p)
+    const addAddr = p2p.addKnownAddress.bind(p2p)
 
     addAddr('192.168.1.1', 6001)
     addAddr('10.0.0.1', 6002)
@@ -161,7 +161,7 @@ describe('Private IP filtering', () => {
   })
 
   it('should reject IPv6 private addresses', () => {
-    const addAddr = (p2p as any).addKnownAddress.bind(p2p)
+    const addAddr = p2p.addKnownAddress.bind(p2p)
 
     addAddr('::1', 6001)
     addAddr('fc00::1', 6001)
@@ -322,14 +322,13 @@ describe('Fork resolution safety', () => {
     await waitFor(() => p2p1.getPeers().length > 0)
 
     // Disconnect the peer
-    const peerMap = (p2p1 as any).peers as Map<string, Peer>
-    const peer = peerMap.values().next().value as Peer
+    const peer = p2p1.getPeerObjects()[0]
     peer.disconnect('test disconnect')
 
     await waitFor(() => p2p1.getPeers().length === 0)
 
     // Flag should be cleared
-    expect((p2p1 as any).forkResolutionInProgress).toBe(false)
+    expect(p2p1.isForkResolutionInProgress()).toBe(false)
   })
 })
 
@@ -737,8 +736,8 @@ describe('P2P getheaders locator cap', () => {
       // Put the genesis hash at position 150 (beyond the cap)
       largeLocator[150] = node.chain.blocks[0].hash
 
-      const handleGetHeaders = (p2p as any).handleGetHeaders.bind(p2p)
-      handleGetHeaders(fakePeer, { locatorHashes: largeLocator })
+      const handleGetHeaders = p2p.handleGetHeaders.bind(p2p)
+      handleGetHeaders(fakePeer as unknown as Peer, { locatorHashes: largeLocator })
 
       // The genesis at index 150 should NOT be found (capped at 101)
       // so forkPoint defaults to 0 and we get headers from height 1
@@ -778,11 +777,11 @@ describe('P2P message error handling', () => {
       p2p2.connectOutbound('127.0.0.1', port)
       await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
 
-      const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0] as Peer
+      const peerOnNode1 = p2p1.getPeerObjects()[0]
       const scoreBefore = peerOnNode1.getMisbehaviorScore()
 
       // Send a tx with invalid hex (should throw in hexToBytes, caught by handleMessage)
-      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0] as Peer
+      const peerOnNode2 = p2p2.getPeerObjects()[0]
       peerOnNode2.send({
         type: 'tx',
         payload: {
@@ -828,7 +827,7 @@ describe('P2P message error handling', () => {
       await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
 
       // Send a message with unknown type
-      const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0] as Peer
+      const peerOnNode2 = p2p2.getPeerObjects()[0]
       peerOnNode2.send({ type: 'foobar' as any, payload: {} })
 
       await new Promise(r => setTimeout(r, 300))
@@ -986,10 +985,10 @@ describe('Orphan block PoW validation', () => {
         height: 99,
       }
 
-      ;(p2p as any).addOrphan(fakeOrphan)
+      ;p2p.addOrphan(fakeOrphan)
 
       // Should NOT be in orphan pool (hash doesn't match header)
-      expect((p2p as any).orphanBlocks.size).toBe(0)
+      expect(p2p.getOrphanCount()).toBe(0)
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true })
     }
@@ -1590,7 +1589,7 @@ describe('Subnet diversity', () => {
   })
 
   it('should accept addresses from multiple subnets into address book', () => {
-    const addAddr = (p2p as any).addKnownAddress.bind(p2p)
+    const addAddr = p2p.addKnownAddress.bind(p2p)
     addAddr('8.8.1.1', 6001)
     addAddr('8.8.2.2', 6002)
     addAddr('8.8.3.3', 6003)
@@ -1609,7 +1608,7 @@ describe('Subnet diversity', () => {
     peerMap.set('8.8.2.2:6002', fakePeer2)
 
     // Add candidate addresses: 2 from same subnet, 1 from different
-    const addAddr = (p2p as any).addKnownAddress.bind(p2p)
+    const addAddr = p2p.addKnownAddress.bind(p2p)
     addAddr('8.8.3.3', 6003) // same /16 as the 2 connected peers
     addAddr('9.9.1.1', 6001) // different /16
 
@@ -1642,7 +1641,7 @@ describe('Subnet diversity', () => {
 
     // Even with many peers on same subnet, localMode skips filtering
     // In localMode, the discovery loop skips the subnet filter
-    expect((p2p as any).localMode).toBe(true)
+    expect(p2p.isLocalMode()).toBe(true)
   })
 
   it('should fall back to all candidates when all subnets saturated', () => {
@@ -1654,7 +1653,7 @@ describe('Subnet diversity', () => {
     peerMap.set('8.8.2.2:6002', fakePeer2)
 
     // Only candidates from same saturated subnet
-    const addAddr = (p2p as any).addKnownAddress.bind(p2p)
+    const addAddr = p2p.addKnownAddress.bind(p2p)
     addAddr('8.8.3.3', 6003)
     addAddr('8.8.4.4', 6004)
 
@@ -1694,7 +1693,7 @@ describe('Subnet diversity', () => {
     expect(subnetCounts.get('8.8') ?? 0).toBe(0)
 
     // So candidate from 8.8.x.x should NOT be filtered
-    const addAddr = (p2p as any).addKnownAddress.bind(p2p)
+    const addAddr = p2p.addKnownAddress.bind(p2p)
     addAddr('8.8.4.4', 6004)
     const candidates = Array.from(p2p.getKnownAddresses().values())
     const filtered = candidates.filter((a) => {
@@ -1732,7 +1731,7 @@ describe('Anchor peer persistence', () => {
       const node = new Node('test')
       const p2p1 = new P2PServer(node, 0, tmpDir)
 
-      const addAddr = (p2p1 as any).addKnownAddress.bind(p2p1)
+      const addAddr = p2p1.addKnownAddress.bind(p2p1)
       p2p1.setLocalMode(true)
       addAddr('192.168.1.1', 6001)
       addAddr('192.168.1.2', 6002)
@@ -1762,7 +1761,7 @@ describe('Anchor peer persistence', () => {
       const node = new Node('test')
       const p2p = new P2PServer(node, 0, tmpDir)
 
-      const addAddr = (p2p as any).addKnownAddress.bind(p2p)
+      const addAddr = p2p.addKnownAddress.bind(p2p)
       for (let i = 1; i <= 20; i++) {
         addAddr(`8.8.${i}.1`, 6001)
       }
@@ -1785,7 +1784,7 @@ describe('Anchor peer persistence', () => {
       const node = new Node('test')
       const p2p = new P2PServer(node, 0, tmpDir)
 
-      const addAddr = (p2p as any).addKnownAddress.bind(p2p)
+      const addAddr = p2p.addKnownAddress.bind(p2p)
       addAddr('8.8.8.8', 6001)
 
       await p2p.stop()
@@ -1833,7 +1832,7 @@ describe('Anchor peer persistence', () => {
     const node = new Node('test')
     // No dataDir — anchorsPath should be null
     const p2p = new P2PServer(node, 0)
-    expect((p2p as any).anchorsPath).toBeNull()
+    expect(p2p.getAnchorsPath()).toBeNull()
 
     // saveAnchors should no-op (no error)
     p2p.saveAnchors()
@@ -1851,10 +1850,9 @@ describe('Anchor peer persistence', () => {
       const p2p = new P2PServer(node, 0, tmpDir)
 
       // Add addresses with different timestamps
-      const knownAddresses = (p2p as any).knownAddresses as Map<string, { host: string; port: number; lastSeen: number }>
-      knownAddresses.set('1.1.1.1:6001', { host: '1.1.1.1', port: 6001, lastSeen: 1000 })
-      knownAddresses.set('2.2.2.2:6001', { host: '2.2.2.2', port: 6001, lastSeen: 3000 })
-      knownAddresses.set('3.3.3.3:6001', { host: '3.3.3.3', port: 6001, lastSeen: 2000 })
+      p2p.addKnownAddress('1.1.1.1', 6001, 1000)
+      p2p.addKnownAddress('2.2.2.2', 6001, 3000)
+      p2p.addKnownAddress('3.3.3.3', 6001, 2000)
 
       p2p.saveAnchors()
 
@@ -1877,8 +1875,7 @@ describe('Anchor peer persistence', () => {
     try {
       const node = new Node('test')
       const p2p1 = new P2PServer(node, 0, tmpDir)
-      const knownAddresses = (p2p1 as any).knownAddresses as Map<string, { host: string; port: number; lastSeen: number }>
-      knownAddresses.set('8.8.8.8:6001', { host: '8.8.8.8', port: 6001, lastSeen: 12345 })
+      p2p1.addKnownAddress('8.8.8.8', 6001, 12345)
       p2p1.saveAnchors()
       await p2p1.stop()
 
@@ -2183,8 +2180,8 @@ describe('P2P input validation hardening', () => {
     const port = p2p1.getPort()
     p2p2.connectOutbound('127.0.0.1', port)
     await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
-    const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0] as Peer
-    const peerOnNode2 = Array.from((p2p2 as any).peers.values())[0] as Peer
+    const peerOnNode1 = p2p1.getPeerObjects()[0]
+    const peerOnNode2 = p2p2.getPeerObjects()[0]
     return { p2p1, p2p2, peerOnNode1, peerOnNode2 }
   }
 
@@ -2339,7 +2336,7 @@ describe('P2P input validation hardening', () => {
     const { p2p1, p2p2, peerOnNode1, peerOnNode2 } = await makePair()
     try {
       const scoreBefore = peerOnNode1.getMisbehaviorScore()
-      const genesisHash = (p2p1 as any).node.chain.blocks[0].hash
+      const genesisHash = p2p1.getNode().chain.blocks[0].hash
 
       // Heights jump from 1 to 3 (gap), violating monotonic +1 requirement
       peerOnNode2.send({
@@ -2366,7 +2363,7 @@ describe('P2P input validation hardening', () => {
     const { p2p1, p2p2, peerOnNode1, peerOnNode2 } = await makePair()
     try {
       const scoreBefore = peerOnNode1.getMisbehaviorScore()
-      const genesisHash = (p2p1 as any).node.chain.blocks[0].hash
+      const genesisHash = p2p1.getNode().chain.blocks[0].hash
 
       // Header at height 2 claims a previousHash that doesn't match height 1's hash
       peerOnNode2.send({
@@ -2393,7 +2390,7 @@ describe('P2P input validation hardening', () => {
     const { p2p1, p2p2, peerOnNode1, peerOnNode2 } = await makePair()
     try {
       const scoreBefore = peerOnNode1.getMisbehaviorScore()
-      const genesisHash = (p2p1 as any).node.chain.blocks[0].hash
+      const genesisHash = p2p1.getNode().chain.blocks[0].hash
 
       // Heights go backwards: 2 then 1
       peerOnNode2.send({
@@ -2428,19 +2425,19 @@ describe('P2P input validation hardening', () => {
         addMisbehavior(n: number) { misbehaviorAdded += n },
         send() {},
       }
-      const handleTx = (p2p as any).handleTx.bind(p2p)
+      const handleTx = p2p.handleTx.bind(p2p)
 
       // Simulate a tx that just arrived: set lastTxTime to now
       ;(p2p as any).lastTxTime.set('test-peer', Date.now())
 
       // Immediate second tx — rate limit fires (+5) then invalid hash (+10) = 15
-      handleTx(fakePeer, { tx: {} })
+      handleTx(fakePeer as unknown as Peer, { tx: {} })
       expect(misbehaviorAdded).toBe(15)
 
       // After sufficient gap (200ms): no rate limit, only invalid hash (+10)
       misbehaviorAdded = 0
       ;(p2p as any).lastTxTime.set('test-peer', Date.now() - 200)
-      handleTx(fakePeer, { tx: {} })
+      handleTx(fakePeer as unknown as Peer, { tx: {} })
       expect(misbehaviorAdded).toBe(10)
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true })
