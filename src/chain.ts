@@ -42,7 +42,7 @@ export class Blockchain {
   undoData: BlockUndo[] = []
   utxoSet: Map<string, UTXO> = new Map()
   /** Address → set of UTXO keys for O(1) balance/findUTXOs lookups */
-  private utxosByAddress: Map<string, Set<string>> = new Map()
+  utxosByAddress: Map<string, Set<string>> = new Map()
   /** Transaction ID → Block for O(1) transaction lookups */
   private transactionIndex: Map<string, Block> = new Map()
   difficulty: string = STARTING_DIFFICULTY

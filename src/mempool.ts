@@ -38,7 +38,7 @@ export class Mempool {
   private feeDensityCache: Map<string, number> = new Map()
 
   /** Get or compute and cache transaction size */
-  private getTxSize(tx: Transaction): number {
+  getTxSize(tx: Transaction): number {
     let s = this.sizeCache.get(tx.id)
     if (s === undefined) {
       s = transactionSize(tx)
@@ -284,6 +284,22 @@ export class Mempool {
   /** Current mempool size in bytes */
   sizeBytes(): number {
     return this.totalBytes
+  }
+
+  /** Total bytes tracked by mempool (test accessor) */
+  getTotalBytes(): number { return this.totalBytes }
+  setTotalBytes(n: number): void { this.totalBytes = n }
+
+  /** Raw transaction map (test accessor) */
+  getTransactions(): Map<string, Transaction> { return this.transactions }
+
+  /** Pending BTC claim addresses (test accessor) */
+  getPendingBtcClaims(): Set<string> { return this.pendingBtcClaims }
+
+  /** Bypass-validation insert for test setup only */
+  injectTransaction(tx: Transaction, utxoKeys: string[] = []): void {
+    this.transactions.set(tx.id, tx)
+    for (const key of utxoKeys) this.claimedUTXOs.add(key)
   }
 
   /**

@@ -127,7 +127,7 @@ describe('Difficulty adjustment', () => {
     }
     chain.blocks.push(block)
     if (chain.blocks.length % DIFFICULTY_ADJUSTMENT_INTERVAL === 0) {
-      chain.difficulty = (chain as any).adjustDifficulty()
+      chain.difficulty = chain.adjustDifficulty()
     }
   }
 
@@ -259,7 +259,7 @@ describe('Difficulty adjustment', () => {
     for (let i = 1; i < chain.blocks.length; i++) {
       replayChain.blocks.push(chain.blocks[i])
       if (replayChain.blocks.length % DIFFICULTY_ADJUSTMENT_INTERVAL === 0) {
-        replayChain.difficulty = (replayChain as any).adjustDifficulty()
+        replayChain.difficulty = replayChain.adjustDifficulty()
       }
     }
 
@@ -995,10 +995,10 @@ describe('addBlock edge cases', () => {
       const utxo: UTXO = { txId: 'f'.repeat(63) + i.toString(), outputIndex: 0, address: addr, amount: 100_000 }
       chain.utxoSet.set(key, utxo)
       // Also update the address index
-      if (!(chain as any).utxosByAddress.has(addr)) {
-        ;(chain as any).utxosByAddress.set(addr, new Set())
+      if (!chain.utxosByAddress.has(addr)) {
+        chain.utxosByAddress.set(addr, new Set())
       }
-      ;(chain as any).utxosByAddress.get(addr).add(key)
+      chain.utxosByAddress.get(addr)!.add(key)
     }
 
     const allUtxos = chain.findUTXOs(addr)

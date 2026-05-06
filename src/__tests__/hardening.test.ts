@@ -313,7 +313,7 @@ describe('Fork resolution safety', () => {
 
   it('should clear fork resolution flag on peer disconnect', async () => {
     // Set fork resolution flag directly
-    ;(p2p1 as any).forkResolutionInProgress = true
+    p2p1.setForkResolutionInProgress(true)
 
     // Simulate a peer connecting and disconnecting
     const port = p2p2.getPort()
@@ -368,7 +368,7 @@ describe('Seed reconnection backoff', () => {
   })
 
   it('should increase backoff delay on failed connections', () => {
-    const seedBackoff = (p2p as any).seedBackoff as Map<string, number>
+    const seedBackoff = p2p.getSeedBackoff()
 
     // Simulate failed connection by setting backoff
     seedBackoff.set('1.2.3.4:6001', 5000)
@@ -380,7 +380,7 @@ describe('Seed reconnection backoff', () => {
   })
 
   it('should cap backoff at 60s', () => {
-    const seedBackoff = (p2p as any).seedBackoff as Map<string, number>
+    const seedBackoff = p2p.getSeedBackoff()
 
     // Set backoff beyond max
     seedBackoff.set('1.2.3.4:6001', 120000)
@@ -672,14 +672,14 @@ describe('Mempool size cap', () => {
     expect(result.success).toBe(true)
 
     // Verify the totalBytes is tracked
-    expect((mempool as any).totalBytes).toBeGreaterThan(0)
+    expect(mempool.getTotalBytes()).toBeGreaterThan(0)
   })
 
   it('should reject tx when pool is full and nothing can be evicted', () => {
     const mempool = new Mempool()
 
     // Inflate totalBytes to the limit (no actual txs to evict)
-    ;(mempool as any).totalBytes = MAX_MEMPOOL_BYTES
+    mempool.setTotalBytes(MAX_MEMPOOL_BYTES)
 
     const utxoSet = makeUtxoSet(walletA, 10_000_000_000)
     const tx = createTransaction(
@@ -866,8 +866,7 @@ describe('Node.resetToHeight', () => {
       10_000
     )
     // Force-add to mempool (the UTXO exists in chain but isn't mature — we're testing revalidate, not addTransaction)
-    ;(node.mempool as any).transactions.set(tx.id, tx)
-    ;(node.mempool as any).claimedUTXOs.add(fakeUtxoKey)
+    node.mempool.injectTransaction(tx, [fakeUtxoKey])
     expect(node.mempool.size()).toBe(1)
 
     // Reset to height 0 — the UTXO that tx spends no longer exists
@@ -1603,9 +1602,9 @@ describe('Subnet diversity', () => {
     const stub = () => {}
     const fakePeer1 = { address: '8.8.1.1', inbound: false, id: '8.8.1.1:6001', disconnect: stub }
     const fakePeer2 = { address: '8.8.2.2', inbound: false, id: '8.8.2.2:6002', disconnect: stub }
-    const peerMap = (p2p as any).peers as Map<string, any>
-    peerMap.set('8.8.1.1:6001', fakePeer1)
-    peerMap.set('8.8.2.2:6002', fakePeer2)
+    const peerMap = p2p.getPeerMap()
+    peerMap.set('8.8.1.1:6001', fakePeer1 as unknown as Peer)
+    peerMap.set('8.8.2.2:6002', fakePeer2 as unknown as Peer)
 
     // Add candidate addresses: 2 from same subnet, 1 from different
     const addAddr = p2p.addKnownAddress.bind(p2p)
@@ -1648,9 +1647,9 @@ describe('Subnet diversity', () => {
     const stub = () => {}
     const fakePeer1 = { address: '8.8.1.1', inbound: false, id: '8.8.1.1:6001', disconnect: stub }
     const fakePeer2 = { address: '8.8.2.2', inbound: false, id: '8.8.2.2:6002', disconnect: stub }
-    const peerMap = (p2p as any).peers as Map<string, any>
-    peerMap.set('8.8.1.1:6001', fakePeer1)
-    peerMap.set('8.8.2.2:6002', fakePeer2)
+    const peerMap = p2p.getPeerMap()
+    peerMap.set('8.8.1.1:6001', fakePeer1 as unknown as Peer)
+    peerMap.set('8.8.2.2:6002', fakePeer2 as unknown as Peer)
 
     // Only candidates from same saturated subnet
     const addAddr = p2p.addKnownAddress.bind(p2p)
@@ -1674,10 +1673,10 @@ describe('Subnet diversity', () => {
     const fakePeer1 = { address: '8.8.1.1', inbound: true, id: '8.8.1.1:6001', disconnect: stub }
     const fakePeer2 = { address: '8.8.2.2', inbound: true, id: '8.8.2.2:6002', disconnect: stub }
     const fakePeer3 = { address: '8.8.3.3', inbound: true, id: '8.8.3.3:6003', disconnect: stub }
-    const peerMap = (p2p as any).peers as Map<string, any>
-    peerMap.set('8.8.1.1:6001', fakePeer1)
-    peerMap.set('8.8.2.2:6002', fakePeer2)
-    peerMap.set('8.8.3.3:6003', fakePeer3)
+    const peerMap = p2p.getPeerMap()
+    peerMap.set('8.8.1.1:6001', fakePeer1 as unknown as Peer)
+    peerMap.set('8.8.2.2:6002', fakePeer2 as unknown as Peer)
+    peerMap.set('8.8.3.3:6003', fakePeer3 as unknown as Peer)
 
     // Build outbound-only subnet counts
     const subnetCounts = new Map<string, number>()
@@ -1707,8 +1706,8 @@ describe('Subnet diversity', () => {
   it('should handle IPv6 addresses as their own subnet', () => {
     const stub = () => {}
     const fakePeer = { address: '2001:db8::1', inbound: false, id: '[2001:db8::1]:6001', disconnect: stub }
-    const peerMap = (p2p as any).peers as Map<string, any>
-    peerMap.set('[2001:db8::1]:6001', fakePeer)
+    const peerMap = p2p.getPeerMap()
+    peerMap.set('[2001:db8::1]:6001', fakePeer as unknown as Peer)
 
     // Each unique IPv6 address is its own "subnet" so it won't block others
     const subnetCounts = new Map<string, number>()
@@ -2428,7 +2427,7 @@ describe('P2P input validation hardening', () => {
       const handleTx = p2p.handleTx.bind(p2p)
 
       // Simulate a tx that just arrived: set lastTxTime to now
-      ;(p2p as any).lastTxTime.set('test-peer', Date.now())
+      p2p.getLastTxTime().set('test-peer', Date.now())
 
       // Immediate second tx — rate limit fires (+5) then invalid hash (+10) = 15
       handleTx(fakePeer as unknown as Peer, { tx: {} })
@@ -2436,7 +2435,7 @@ describe('P2P input validation hardening', () => {
 
       // After sufficient gap (200ms): no rate limit, only invalid hash (+10)
       misbehaviorAdded = 0
-      ;(p2p as any).lastTxTime.set('test-peer', Date.now() - 200)
+      p2p.getLastTxTime().set('test-peer', Date.now() - 200)
       handleTx(fakePeer as unknown as Peer, { tx: {} })
       expect(misbehaviorAdded).toBe(10)
     } finally {

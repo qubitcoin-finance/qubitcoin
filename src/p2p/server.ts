@@ -192,6 +192,18 @@ export class P2PServer {
     return this.knownAddresses
   }
 
+  /** Returns the mutable peer map (test accessor) */
+  getPeerMap(): Map<string, Peer> { return this.peers }
+
+  /** Returns the seed backoff map (test accessor) */
+  getSeedBackoff(): Map<string, number> { return this.seedBackoff }
+
+  /** Returns the lastTxTime map (test accessor) */
+  getLastTxTime(): Map<string, number> { return this.lastTxTime }
+
+  /** Override fork-resolution state (test accessor) */
+  setForkResolutionInProgress(v: boolean): void { this.forkResolutionInProgress = v }
+
   /** Returns true when localMode is active (no public-address filtering) */
   isLocalMode(): boolean { return this.localMode }
 

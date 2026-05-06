@@ -416,10 +416,10 @@ describe('Mempool eviction', () => {
     expect(r2.success).toBe(true)
 
     // sizeBytes() must equal the sum of all remaining tx sizes
-    const remaining = (mempool as any).transactions as Map<string, Transaction>
+    const remaining = mempool.getTransactions()
     let expectedBytes = 0
     for (const tx of remaining.values()) {
-      expectedBytes += (mempool as any).getTxSize(tx)
+      expectedBytes += mempool.getTxSize(tx)
     }
     expect(mempool.sizeBytes()).toBe(expectedBytes)
   })
@@ -461,7 +461,7 @@ describe('Mempool eviction', () => {
 
     // Simulate a pool that is at capacity by patching totalBytes directly
     // This tests the evictLowest path returning false for regular txs
-    ;(mempool as any).totalBytes = MAX_MEMPOOL_BYTES
+    mempool.setTotalBytes(MAX_MEMPOOL_BYTES)
 
     const utxoSet = makeUtxoSet(walletA)
     const tx = createTransaction(
@@ -586,8 +586,8 @@ describe('Mempool eviction', () => {
     expect(mempool.size()).toBe(1)
 
     // Verify pendingBtcClaims was rebuilt — should only have the second claim
-    expect((mempool as any).pendingBtcClaims.size).toBe(1)
-    expect((mempool as any).pendingBtcClaims.has(snapshot.entries[1].btcAddress)).toBe(true)
+    expect(mempool.getPendingBtcClaims().size).toBe(1)
+    expect(mempool.getPendingBtcClaims().has(snapshot.entries[1].btcAddress)).toBe(true)
   })
 
   it('clear() resets all tracking state', () => {
