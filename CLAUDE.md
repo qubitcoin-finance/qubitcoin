@@ -96,6 +96,7 @@ The legacy `pnpm ship` script still exists as a reminder shim; `scripts/deploy.s
 5. **Mocking** — Do not mock crypto operations (`ml-dsa`, `sha256`). Use real keys generated in `src/__tests__/fixtures.ts`. Mocking is acceptable for network I/O (P2P sockets, HTTP requests).
 6. **Run after changes** — Run `pnpm test` before committing any change to `src/`.
 7. **Website coverage** — For changes under `website/` that affect rendering, routing, responsive layout, or API error handling, run `cd website && pnpm test:visual` or `pnpm screenshots` in addition to any relevant backend tests.
+8. **Website command forms** — From the repo root, use `pnpm run website:screenshots`; from `website/`, use `pnpm screenshots` or `pnpm test:visual`. Do not assume a root-level `pnpm screenshots` script exists.
 
 ## Dependency & Supply-Chain Security
 
@@ -105,6 +106,8 @@ The legacy `pnpm ship` script still exists as a reminder shim; `scripts/deploy.s
 4. **Audit after updates** — Run `pnpm audit` after any dependency change and fix high/critical advisories before committing.
 5. **Verify new packages** — Check download counts, publish date, and maintainer history on npm before adding an unfamiliar package.
 6. **Two lockfiles** — This repo has separate pnpm projects at the root and in `website/`. Dependency changes must keep `pnpm-lock.yaml` and/or `website/pnpm-lock.yaml` in sync with the manifest that changed.
+7. **Two manifests** — Treat `website/package.json` the same as the root `package.json`: no frontend dependency additions, removals, or version bumps without explicit approval.
+8. **Frontend audits** — After changing dependencies under `website/`, run `cd website && pnpm audit` in addition to any root-level audit that applies.
 
 ## Scope & Safety Rules
 
