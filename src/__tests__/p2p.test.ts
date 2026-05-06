@@ -143,8 +143,7 @@ describe('P2P server integration', () => {
 
   it('should complete handshake between two nodes', async () => {
     // Get the actual port p2p1 is listening on
-    const addr = (p2p1 as any).server.address()
-    const port = typeof addr === 'object' ? addr.port : 0
+    const port = p2p1.getPort()
 
     p2p2.connectOutbound('127.0.0.1', port)
 
@@ -155,8 +154,7 @@ describe('P2P server integration', () => {
   })
 
   it('should reject peer with wrong protocol version', async () => {
-    const addr = (p2p1 as any).server.address()
-    const port = typeof addr === 'object' ? addr.port : 0
+    const port = p2p1.getPort()
 
     // Connect a raw TCP socket and send a version message with wrong protocol version
     const socket = net.createConnection({ host: '127.0.0.1', port })
@@ -201,8 +199,7 @@ describe('P2P server integration', () => {
     expect(node1.chain.getHeight()).toBe(3)
 
     // Connect node2 to node1
-    const addr = (p2p1 as any).server.address()
-    const port = typeof addr === 'object' ? addr.port : 0
+    const port = p2p1.getPort()
     p2p2.connectOutbound('127.0.0.1', port)
 
     // Wait for node2 to sync
@@ -214,8 +211,7 @@ describe('P2P server integration', () => {
     const wallet = walletA
 
     // Connect first
-    const addr = (p2p1 as any).server.address()
-    const port = typeof addr === 'object' ? addr.port : 0
+    const port = p2p1.getPort()
     p2p2.connectOutbound('127.0.0.1', port)
 
     await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
@@ -253,8 +249,7 @@ describe('P2P server integration', () => {
 
     try {
       // Connect
-      const addr = (sp2p1 as any).server.address()
-      const port = typeof addr === 'object' ? addr.port : 0
+      const port = sp2p1.getPort()
       sp2p2.connectOutbound('127.0.0.1', port)
 
       await waitFor(() => sp2p1.getPeers().length > 0 && sp2p2.getPeers().length > 0)
@@ -295,8 +290,7 @@ describe('P2P server integration', () => {
     const syncPromise = p2p2.waitForSync()
 
     // Now connect node2 to node1
-    const addr = (p2p1 as any).server.address()
-    const port = typeof addr === 'object' ? addr.port : 0
+    const port = p2p1.getPort()
     p2p2.connectOutbound('127.0.0.1', port)
 
     // waitForSync should resolve once IBD completes
@@ -313,8 +307,7 @@ describe('P2P server integration', () => {
     // when handleVerack fires notifySynced()
     const syncPromise = p2p2.waitForSync(10_000)
 
-    const addr = (p2p1 as any).server.address()
-    const port = typeof addr === 'object' ? addr.port : 0
+    const port = p2p1.getPort()
     const start = Date.now()
     p2p2.connectOutbound('127.0.0.1', port)
 
@@ -329,8 +322,7 @@ describe('P2P server integration', () => {
 
   it('connectToSeeds establishes outbound connection', async () => {
     // Get the port node1 is listening on
-    const addr = (p2p1 as any).server.address()
-    const port = typeof addr === 'object' ? addr.port : 0
+    const port = p2p1.getPort()
 
     // Use connectToSeeds instead of manual connectOutbound
     p2p2.connectToSeeds([`127.0.0.1:${port}`])
@@ -414,8 +406,7 @@ describe('P2P fork resolution', () => {
     expect(node1.chain.blocks[2].hash).not.toBe(node2.chain.blocks[2].hash)
 
     // Connect node1 to node2 — node1 should detect fork and reorg to node2's chain
-    const addr = (p2p2 as any).server.address()
-    const port = typeof addr === 'object' ? addr.port : 0
+    const port = p2p2.getPort()
     p2p1.connectOutbound('127.0.0.1', port)
 
     // Wait for node1 to sync to node2's height
@@ -444,8 +435,7 @@ describe('P2P fork resolution', () => {
     const originalTip = node1.chain.getChainTip().hash
 
     // Connect node1 to node2 — node1 should NOT reorg since it has the longer chain
-    const addr = (p2p2 as any).server.address()
-    const port = typeof addr === 'object' ? addr.port : 0
+    const port = p2p2.getPort()
     p2p1.connectOutbound('127.0.0.1', port)
 
     // Wait for handshake
@@ -497,8 +487,7 @@ describe('P2P improvements', () => {
     await sp2p2.start()
 
     try {
-      const addr = (sp2p1 as any).server.address()
-      const port = typeof addr === 'object' ? addr.port : 0
+      const port = sp2p1.getPort()
       sp2p2.connectOutbound('127.0.0.1', port)
 
       await waitFor(() => sp2p1.getPeers().length > 0 && sp2p2.getPeers().length > 0)
@@ -538,8 +527,7 @@ describe('P2P improvements', () => {
     await p2p1.start()
 
     try {
-      const addr = (p2p1 as any).server.address()
-      const port = typeof addr === 'object' ? addr.port : 0
+      const port = p2p1.getPort()
 
       // Open 4 inbound connections from same IP (limit is 3)
       const sockets: net.Socket[] = []
@@ -719,8 +707,7 @@ describe('P2P security hardening', () => {
     await p2p2.start()
 
     try {
-      const addr = (p2p1 as any).server.address()
-      const port = typeof addr === 'object' ? addr.port : 0
+      const port = p2p1.getPort()
       p2p2.connectOutbound('127.0.0.1', port)
       await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
 
@@ -773,8 +760,7 @@ describe('P2P security hardening', () => {
     await p2p2.start()
 
     try {
-      const addr = (p2p1 as any).server.address()
-      const port = typeof addr === 'object' ? addr.port : 0
+      const port = p2p1.getPort()
       p2p2.connectOutbound('127.0.0.1', port)
       await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
 
@@ -818,8 +804,7 @@ describe('P2P security hardening', () => {
     await p2p2.start()
 
     try {
-      const addr = (p2p1 as any).server.address()
-      const port = typeof addr === 'object' ? addr.port : 0
+      const port = p2p1.getPort()
       p2p2.connectOutbound('127.0.0.1', port)
       await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
 
@@ -869,8 +854,7 @@ describe('P2P security hardening', () => {
     await p2p2.start()
 
     try {
-      const addr = (p2p1 as any).server.address()
-      const port = typeof addr === 'object' ? addr.port : 0
+      const port = p2p1.getPort()
       p2p2.connectOutbound('127.0.0.1', port)
       await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
 
@@ -934,8 +918,7 @@ describe('P2P security hardening', () => {
     await p2p2.start()
 
     try {
-      const addr = (p2p1 as any).server.address()
-      const port = typeof addr === 'object' ? addr.port : 0
+      const port = p2p1.getPort()
 
       // Send a version message with wrong protocol version via raw socket
       const socket = net.createConnection({ host: '127.0.0.1', port })
@@ -992,8 +975,7 @@ describe('P2P security hardening', () => {
       expect(node2.chain.getHeight()).toBe(2)
 
       // Connect
-      const addr = (p2p1 as any).server.address()
-      const port = typeof addr === 'object' ? addr.port : 0
+      const port = p2p1.getPort()
       p2p2.connectOutbound('127.0.0.1', port)
       await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
 
@@ -1051,8 +1033,7 @@ describe('P2P security hardening', () => {
     await p2p2.start()
 
     try {
-      const addr = (p2p1 as any).server.address()
-      const port = typeof addr === 'object' ? addr.port : 0
+      const port = p2p1.getPort()
       p2p2.connectOutbound('127.0.0.1', port)
       await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
 
@@ -1109,8 +1090,7 @@ describe('P2P security hardening', () => {
     await p2p2.start()
 
     try {
-      const addr = (p2p1 as any).server.address()
-      const port = typeof addr === 'object' ? addr.port : 0
+      const port = p2p1.getPort()
       p2p2.connectOutbound('127.0.0.1', port)
       await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
 
@@ -1164,8 +1144,7 @@ describe('P2P security hardening', () => {
     await p2p2.start()
 
     try {
-      const addr = (p2p1 as any).server.address()
-      const port = typeof addr === 'object' ? addr.port : 0
+      const port = p2p1.getPort()
       p2p2.connectOutbound('127.0.0.1', port)
       await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
 
@@ -1217,8 +1196,7 @@ describe('P2P security hardening', () => {
       node2.mine(walletA.address, false)
       expect(node2.chain.getHeight()).toBe(1)
 
-      const addr = (p2p1 as any).server.address()
-      const port = typeof addr === 'object' ? addr.port : 0
+      const port = p2p1.getPort()
       p2p2.connectOutbound('127.0.0.1', port)
       await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
 
@@ -1263,8 +1241,7 @@ describe('P2P security hardening', () => {
       node2.mine(walletA.address, false)
       expect(node2.chain.getHeight()).toBe(2)
 
-      const addr = (p2p1 as any).server.address()
-      const port = typeof addr === 'object' ? addr.port : 0
+      const port = p2p1.getPort()
       p2p2.connectOutbound('127.0.0.1', port)
       await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
 
@@ -1303,8 +1280,7 @@ describe('P2P security hardening', () => {
     await p2p1.start()
 
     try {
-      const addr = (p2p1 as any).server.address()
-      const port = typeof addr === 'object' ? addr.port : 0
+      const port = p2p1.getPort()
 
       // Connect a raw socket without completing the handshake
       const socket = net.createConnection({ host: '127.0.0.1', port })
@@ -1347,8 +1323,7 @@ describe('P2P security hardening', () => {
     await p2p2.start()
 
     try {
-      const addr = (p2p1 as any).server.address()
-      const port = typeof addr === 'object' ? addr.port : 0
+      const port = p2p1.getPort()
       p2p2.connectOutbound('127.0.0.1', port)
       await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
 
@@ -1394,8 +1369,7 @@ describe('P2P security hardening', () => {
     await p2p2.start()
 
     try {
-      const addr = (p2p1 as any).server.address()
-      const port = typeof addr === 'object' ? addr.port : 0
+      const port = p2p1.getPort()
       p2p2.connectOutbound('127.0.0.1', port)
       await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
 
@@ -1427,8 +1401,7 @@ describe('P2P security hardening', () => {
     await p2p1.start()
 
     try {
-      const addr = (p2p1 as any).server.address()
-      const port = typeof addr === 'object' ? addr.port : 0
+      const port = p2p1.getPort()
 
       const socket = net.createConnection({ host: '127.0.0.1', port })
       await new Promise<void>(r => socket.once('connect', r))
@@ -1460,8 +1433,7 @@ describe('P2P security hardening', () => {
     await p2p1.start()
 
     try {
-      const addr = (p2p1 as any).server.address()
-      const port = typeof addr === 'object' ? addr.port : 0
+      const port = p2p1.getPort()
 
       const socket = net.createConnection({ host: '127.0.0.1', port })
       await new Promise<void>(r => socket.once('connect', r))

@@ -316,8 +316,7 @@ describe('Fork resolution safety', () => {
     ;(p2p1 as any).forkResolutionInProgress = true
 
     // Simulate a peer connecting and disconnecting
-    const addr = (p2p2 as any).server.address()
-    const port = typeof addr === 'object' ? addr.port : 0
+    const port = p2p2.getPort()
     p2p1.connectOutbound('127.0.0.1', port)
 
     await waitFor(() => p2p1.getPeers().length > 0)
@@ -775,8 +774,7 @@ describe('P2P message error handling', () => {
     await p2p2.start()
 
     try {
-      const addr = (p2p1 as any).server.address()
-      const port = typeof addr === 'object' ? addr.port : 0
+      const port = p2p1.getPort()
       p2p2.connectOutbound('127.0.0.1', port)
       await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
 
@@ -825,8 +823,7 @@ describe('P2P message error handling', () => {
     await p2p2.start()
 
     try {
-      const addr = (p2p1 as any).server.address()
-      const port = typeof addr === 'object' ? addr.port : 0
+      const port = p2p1.getPort()
       p2p2.connectOutbound('127.0.0.1', port)
       await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
 
@@ -2183,8 +2180,7 @@ describe('P2P input validation hardening', () => {
     const p2p2 = new P2PServer(node2, 0, tmpDir2)
     await p2p1.start()
     await p2p2.start()
-    const addr = (p2p1 as any).server.address()
-    const port = typeof addr === 'object' ? addr.port : 0
+    const port = p2p1.getPort()
     p2p2.connectOutbound('127.0.0.1', port)
     await waitFor(() => p2p1.getPeers().length > 0 && p2p2.getPeers().length > 0)
     const peerOnNode1 = Array.from((p2p1 as any).peers.values())[0] as Peer

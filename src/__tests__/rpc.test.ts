@@ -766,7 +766,7 @@ describe('RPC with p2pServer', () => {
       const p2p1 = new P2PServer(n1, 0, tmpDir1)
       p2p1.setLocalMode(true) // allow private IPs in address book for this test
       await p2p1.start()
-      const p2pPort = (p2p1 as any).server.address().port
+      const p2pPort = p2p1.getPort()
 
       const n2 = new Node('rpc-peers-test-2', undefined, new FileBlockStorage(tmpDir2))
       const p2p2 = new P2PServer(n2, 0, tmpDir2)

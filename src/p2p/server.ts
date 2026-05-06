@@ -160,10 +160,16 @@ export class P2PServer {
     node.onNewTransaction = (tx) => this.broadcastTx(tx)
   }
 
+  /** Returns the actual bound port (useful when listening on port 0) */
+  getPort(): number {
+    const addr = this.server.address()
+    return addr && typeof addr === 'object' ? addr.port : this.port
+  }
+
   start(): Promise<void> {
     return new Promise((resolve) => {
       this.server.listen(this.port, () => {
-        log.info({ component: 'p2p', port: this.port }, 'P2P server listening')
+        log.info({ component: 'p2p', port: this.getPort() }, 'P2P server listening')
         resolve()
       })
     })
@@ -420,7 +426,7 @@ export class P2PServer {
       height: this.node.chain.getHeight(),
       genesisHash: this.node.chain.blocks[0].hash,
       userAgent: `qubitcoin/${PROTOCOL_VERSION}`,
-      listenPort: this.port,
+      listenPort: this.getPort(),
       cumulativeWork: this.node.chain.cumulativeWork.toString(16),
     }
     peer.send({ type: 'version', payload })
