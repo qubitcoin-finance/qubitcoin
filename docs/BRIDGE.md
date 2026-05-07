@@ -545,6 +545,10 @@ POST /api/v1/bridge/lock
   → Submit a bridge lock transaction (same as POST /api/v1/tx but validates bridge data)
 ```
 
+Like `POST /api/v1/tx`, JSON parse failures should return JSON error payloads:
+- Malformed JSON: `400 { "error": "Malformed JSON request body" }`
+- Body larger than 1 MB: `413 { "error": "Request body too large" }`
+
 `status` field: `"pending"` (in mempool), `"confirming"` (mined, < 6 blocks), `"finalized"` (>= 6 blocks), `"processed"` (proof submitted to Base).
 
 ### 4.6 Storage (`src/storage.ts`)

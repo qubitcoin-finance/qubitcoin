@@ -63,6 +63,12 @@ function isValidAddress(address: string): boolean {
   return typeof address === 'string' && address.length === 64 && /^[0-9a-f]{64}$/i.test(address);
 }
 
+type RequestError = Error & {
+  status?: number;
+  statusCode?: number;
+  type?: string;
+};
+
 export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, bindAddress: string = '127.0.0.1'): Express {
   const app = express();
   app.set('trust proxy', 1);
@@ -269,6 +275,23 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
     } else {
       res.json([]);
     }
+  });
+
+  app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
+    const requestError = err as RequestError;
+    if (requestError.type === 'entity.parse.failed') {
+      log.warn({ component: 'rpc', err: requestError }, 'Rejected malformed JSON request body');
+      res.status(400).json({ error: 'Malformed JSON request body' });
+      return;
+    }
+
+    if (requestError.type === 'entity.too.large' || requestError.status === 413 || requestError.statusCode === 413) {
+      log.warn({ component: 'rpc', err: requestError }, 'Rejected oversized JSON request body');
+      res.status(413).json({ error: 'Request body too large' });
+      return;
+    }
+
+    next(err);
   });
 
   return app;

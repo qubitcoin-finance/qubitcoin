@@ -1468,11 +1468,11 @@ ${docH2('Transactions')}
   </tbody>
 </table>
 ${docH3('POST /tx')}
-${docP('Submit a signed transaction for relay and inclusion in the mempool. The request body must be a JSON transaction with hex-encoded Uint8Array fields (publicKey, signature, ecdsaPublicKey, ecdsaSignature).')}
+${docP('Submit a signed transaction for relay and inclusion in the mempool. The request body must be a JSON transaction with hex-encoded Uint8Array fields (publicKey, signature, ecdsaPublicKey, ecdsaSignature). Malformed JSON returns a JSON 400 error payload, and request bodies larger than 1 MB return a JSON 413 error payload.')}
 ${docCode(`curl -X POST http://127.0.0.1:3001/api/v1/tx \\
   -H "Content-Type: application/json" \\
   -d '{"id":"...","inputs":[...],"outputs":[...],"timestamp":...}'`)}
-<div class="grid grid-cols-2 gap-3 my-3">
+<div class="grid grid-cols-3 gap-3 my-3">
   <div class="bg-bg rounded-lg p-3 border border-green-500/20">
     <p class="text-green-400 text-xs font-medium mb-1">200 Success</p>
     <code class="text-xs font-mono text-text-muted">{ "txid": "abc123..." }</code>
@@ -1481,7 +1481,12 @@ ${docCode(`curl -X POST http://127.0.0.1:3001/api/v1/tx \\
     <p class="text-red-400 text-xs font-medium mb-1">400 Error</p>
     <code class="text-xs font-mono text-text-muted">{ "error": "Invalid transaction: ..." }</code>
   </div>
+  <div class="bg-bg rounded-lg p-3 border border-orange-500/20">
+    <p class="text-orange-400 text-xs font-medium mb-1">413 Error</p>
+    <code class="text-xs font-mono text-text-muted">{ "error": "Request body too large" }</code>
+  </div>
 </div>
+${docP('Malformed JSON is rejected before transaction validation with <span class="font-mono text-xs text-red-400">{ "error": "Malformed JSON request body" }</span>.')}
 
 ${docH2('Mempool')}
 <table class="w-full text-sm mb-4">
@@ -1542,7 +1547,8 @@ ${docH2('Error Handling')}
 ${docP('All endpoints return standard HTTP status codes:')}
 <ul class="text-text-secondary text-sm leading-relaxed mb-3 list-disc list-inside space-y-1">
   <li><span class="font-mono text-xs text-green-400">200</span> — success</li>
-  <li><span class="font-mono text-xs text-yellow-400">400</span> — bad request (invalid transaction, malformed input)</li>
+  <li><span class="font-mono text-xs text-yellow-400">400</span> — bad request (invalid transaction, malformed JSON, malformed input)</li>
+  <li><span class="font-mono text-xs text-orange-400">413</span> — request body too large (JSON body exceeds 1 MB limit)</li>
   <li><span class="font-mono text-xs text-red-400">404</span> — resource not found (block, tx, or address)</li>
   <li><span class="font-mono text-xs text-red-400">500</span> — internal server error</li>
 </ul>`;

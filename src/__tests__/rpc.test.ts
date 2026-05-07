@@ -617,6 +617,31 @@ describe('RPC edge cases', () => {
     })
     expect(res.status).toBe(400)
   })
+
+  it('POST /tx with malformed JSON returns JSON error payload', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{',
+    })
+    expect(res.status).toBe(400)
+    expect(res.headers.get('content-type')).toContain('application/json')
+    const body = await res.json()
+    expect(body.error).toBe('Malformed JSON request body')
+  })
+
+  it('POST /tx with oversized JSON body returns 413 JSON error payload', async () => {
+    const largeBody = `"${'a'.repeat(1_100_000)}"`
+    const res = await fetch(`${baseUrl}/api/v1/tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: largeBody,
+    })
+    expect(res.status).toBe(413)
+    expect(res.headers.get('content-type')).toContain('application/json')
+    const body = await res.json()
+    expect(body.error).toBe('Request body too large')
+  })
 })
 
 describe('RPC /difficulty endpoint edge cases', () => {
