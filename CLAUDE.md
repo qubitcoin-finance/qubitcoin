@@ -6,7 +6,7 @@ Post-quantum Bitcoin fork using ML-DSA-65 (Dilithium) signatures. Node.js/TypeSc
 
 - **Repo:** `qubitcoin-finance/qubitcoin`
 - **Stack:** TypeScript (ESM), ts-node, Express v5, Vite + Tailwind (explorer)
-- **Test:** `pnpm test` (vitest, 634 tests)
+- **Test:** `pnpm test` (vitest, ~635 tests — count drifts as tests are added)
 - **Build:** `pnpm build` (tsc)
 - **Run node:** `pnpm run qbtcd -- --mine --full`
 - **Docker image:** `ghcr.io/qubitcoin-finance/qbtcd:main`
@@ -82,7 +82,7 @@ The legacy `pnpm ship` script still exists as a reminder shim; `scripts/deploy.s
 3. **Validation helpers** — Use `isValidHash` and `sanitize` from `src/utils.ts` for input sanitisation in RPC handlers. Do not inline regex checks.
 4. **Crypto** — All post-quantum operations (`ml-dsa`) go through `src/crypto.ts`. Do not call `@noble/post-quantum` directly from business logic.
 5. **New modules** — Node implementation goes in `src/`. Tools/scripts go in `src/tools/`. Tests go in `src/__tests__/` with the `*.test.ts` suffix.
-6. **No circular imports** — Dependency order: `utils → log → crypto → block → transaction → snapshot → snapshot-loader → claim → chain → mempool → p2p → rpc → node → qbtcd`.
+6. **No circular imports** — Dependency order: `utils → log → crypto → block → transaction → snapshot → snapshot-loader → claim → storage → chain → mempool → miner → p2p → rpc → node → qbtcd`. Type-only imports (`import type`) that would create a cycle (e.g. `p2p/server.ts` importing `type Node`) are permitted since they are erased at runtime.
 7. **P2P layout** — Keep networking code split under `src/p2p/` (`peer.ts`, `protocol.ts`, `server.ts`). Add new peer/protocol/server concerns there instead of expanding `rpc.ts` or `node.ts`.
 8. **Website layout** — Landing-page behavior lives in `website/src/main.ts`, explorer behavior in `website/src/explorer-main.ts`, blog content in `website/src/blog/*.ts`, and browser tests in `website/e2e/*.spec.ts`.
 9. **Explorer data flow** — Preserve the explorer’s `/api/v1` base path, hash-based routing, and shared fetch helpers in `website/src/explorer-main.ts` when adding new explorer views or API calls.
