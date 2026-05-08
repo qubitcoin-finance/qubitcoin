@@ -209,12 +209,16 @@ export class Mempool {
   /** Re-validate all transactions against current UTXO set after a reorg */
   revalidate(utxoSet: Map<string, UTXO>, claimedBtcAddresses: Set<string>, currentHeight?: number): void {
     const toRemove: string[] = []
+    const seenClaimKeys: Set<string> = new Set()
+    const seenInputs: Set<string> = new Set()
 
     for (const [id, tx] of this.transactions) {
       if (isClaimTransaction(tx)) {
         const claimKey = tx.claimData!.btcAddress
-        if (claimedBtcAddresses.has(claimKey)) {
+        if (claimedBtcAddresses.has(claimKey) || seenClaimKeys.has(claimKey)) {
           toRemove.push(id)
+        } else {
+          seenClaimKeys.add(claimKey)
         }
         continue
       }
@@ -227,11 +231,19 @@ export class Mempool {
       }
 
       // Check that inputs still exist in UTXO set
+      let keepTransaction = true
       for (const input of tx.inputs) {
         const key = utxoKey(input.txId, input.outputIndex)
-        if (!utxoSet.has(key)) {
+        if (!utxoSet.has(key) || seenInputs.has(key)) {
           toRemove.push(id)
+          keepTransaction = false
           break
+        }
+      }
+
+      if (keepTransaction) {
+        for (const input of tx.inputs) {
+          seenInputs.add(utxoKey(input.txId, input.outputIndex))
         }
       }
     }

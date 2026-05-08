@@ -937,4 +937,86 @@ describe('Mempool revalidate edge cases', () => {
     expect(result.success).toBe(false)
     expect(result.error).toContain('already claimed')
   })
+
+  it('revalidate removes duplicate pending claims and rebuilds claim tracking', async () => {
+    const mempool = new Mempool()
+    const { snapshot, holders } = createMockSnapshot()
+
+    const claimTx1 = createClaimTransaction(
+      holders[0].secretKey,
+      holders[0].publicKey,
+      snapshot.entries[0],
+      walletB,
+      snapshot.btcBlockHash
+    )
+
+    await new Promise((r) => setTimeout(r, 1))
+
+    const claimTx2 = createClaimTransaction(
+      holders[0].secretKey,
+      holders[0].publicKey,
+      snapshot.entries[0],
+      walletC,
+      snapshot.btcBlockHash
+    )
+
+    mempool.injectTransaction(claimTx1)
+    mempool.injectTransaction(claimTx2)
+    expect(mempool.size()).toBe(2)
+
+    mempool.revalidate(new Map(), new Set())
+
+    expect(mempool.size()).toBe(1)
+    expect(mempool.getTransaction(claimTx1.id)).toBeDefined()
+    expect(mempool.getTransaction(claimTx2.id)).toBeUndefined()
+    expect(mempool.getPendingBtcClaims().size).toBe(1)
+
+    const claimTx3 = createClaimTransaction(
+      holders[1].secretKey,
+      holders[1].publicKey,
+      snapshot.entries[1],
+      walletC,
+      snapshot.btcBlockHash
+    )
+    const result = mempool.addTransaction(claimTx3, new Map())
+    expect(result.success).toBe(true)
+  })
+
+  it('revalidate removes conflicting regular double-spends and keeps tracking consistent', () => {
+    const mempool = new Mempool()
+    const utxoSet = makeUtxoSet(walletA)
+
+    const tx1 = createTransaction(
+      walletA,
+      [{ txId: 'a'.repeat(64), outputIndex: 0, address: walletA.address, amount: DEFAULT_AMOUNT }],
+      [{ address: 'b'.repeat(64), amount: 5_000_000_000 }],
+      DEFAULT_FEE
+    )
+    const tx2 = createTransaction(
+      walletA,
+      [{ txId: 'a'.repeat(64), outputIndex: 0, address: walletA.address, amount: DEFAULT_AMOUNT }],
+      [{ address: 'c'.repeat(64), amount: 4_000_000_000 }],
+      DEFAULT_FEE
+    )
+
+    mempool.injectTransaction(tx1, [utxoKey('a'.repeat(64), 0)])
+    mempool.injectTransaction(tx2, [utxoKey('a'.repeat(64), 0)])
+    expect(mempool.size()).toBe(2)
+
+    mempool.revalidate(utxoSet, new Set())
+
+    expect(mempool.size()).toBe(1)
+    expect(mempool.getTransaction(tx1.id)).toBeDefined()
+    expect(mempool.getTransaction(tx2.id)).toBeUndefined()
+
+    const tx3 = createTransaction(
+      walletA,
+      [{ txId: 'a'.repeat(64), outputIndex: 0, address: walletA.address, amount: DEFAULT_AMOUNT }],
+      [{ address: 'd'.repeat(64), amount: 3_000_000_000 }],
+      DEFAULT_FEE
+    )
+    const result = mempool.addTransaction(tx3, utxoSet)
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('already claimed')
+  })
 })
