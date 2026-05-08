@@ -719,37 +719,75 @@ describe('RPC /difficulty endpoint edge cases', () => {
 })
 
 describe('RPC rate limiting', () => {
-  let node: Node
-  let server: Server
-  let baseUrl: string
-
-  beforeAll(() => {
-    node = new Node('rpc-rate-test')
-    const app = startRpcServer(node, 0)
-    server = app.listen(0)
-    const addr = server.address() as AddressInfo
-    baseUrl = `http://127.0.0.1:${addr.port}`
-  })
-
-  afterAll(() => {
-    server.close()
-  })
-
   it('POST /tx is rate-limited at 100 requests/min per IP', async () => {
-    // Send 101 POST requests concurrently from the same IP.
-    // After 100 accepted requests, the 101st must be rejected with 429.
-    const responses = await Promise.all(
-      Array.from({ length: 101 }, () =>
-        fetch(`${baseUrl}/api/v1/tx`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
-        })
+    const node = new Node('rpc-rate-post-test')
+    const app = startRpcServer(node, 0)
+    const server = app.listen(0)
+    const addr = server.address() as AddressInfo
+    const baseUrl = `http://127.0.0.1:${addr.port}`
+
+    try {
+      // Send 101 POST requests concurrently from the same IP.
+      // After 100 accepted requests, the 101st must be rejected with 429.
+      const responses = await Promise.all(
+        Array.from({ length: 101 }, () =>
+          fetch(`${baseUrl}/api/v1/tx`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+          })
+        )
       )
-    )
-    const statuses = responses.map(r => r.status)
-    // Most responses will be 400 (invalid tx body), at least one must be 429
-    expect(statuses.filter(s => s === 429).length).toBeGreaterThanOrEqual(1)
+      const statuses = responses.map(r => r.status)
+      // Most responses will be 400 (invalid tx body), at least one must be 429
+      expect(statuses.filter(s => s === 429).length).toBeGreaterThanOrEqual(1)
+    } finally {
+      server.close()
+    }
+  })
+
+  it('GET /status is rate-limited independently at 600 requests/min per IP', async () => {
+    const node = new Node('rpc-rate-get-test')
+    const app = startRpcServer(node, 0)
+    const server = app.listen(0)
+    const addr = server.address() as AddressInfo
+    const baseUrl = `http://127.0.0.1:${addr.port}`
+
+    try {
+      const responses = await Promise.all(
+        Array.from({ length: 601 }, () => fetch(`${baseUrl}/api/v1/status`))
+      )
+      const statuses = responses.map(r => r.status)
+      expect(statuses.filter(s => s === 429).length).toBeGreaterThanOrEqual(1)
+      expect(statuses.filter(s => s === 200).length).toBeGreaterThanOrEqual(600)
+    } finally {
+      server.close()
+    }
+  })
+
+  it('GET traffic does not consume the stricter POST rate-limit bucket', async () => {
+    const node = new Node('rpc-rate-isolation-test')
+    const app = startRpcServer(node, 0)
+    const server = app.listen(0)
+    const addr = server.address() as AddressInfo
+    const baseUrl = `http://127.0.0.1:${addr.port}`
+
+    try {
+      const getResponses = await Promise.all(
+        Array.from({ length: 600 }, () => fetch(`${baseUrl}/api/v1/status`))
+      )
+      expect(getResponses.every(r => r.status === 200)).toBe(true)
+
+      const postRes = await fetch(`${baseUrl}/api/v1/tx`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+
+      expect(postRes.status).toBe(400)
+    } finally {
+      server.close()
+    }
   })
 })
 

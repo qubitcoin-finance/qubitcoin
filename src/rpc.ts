@@ -32,15 +32,16 @@ function createRateLimiter() {
     }
   }, 5 * 60_000).unref();
 
-  return (limit: number) => (req: Request, res: Response, next: NextFunction) => {
+  return (bucket: string, limit: number) => (req: Request, res: Response, next: NextFunction) => {
     const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown';
+    const key = `${bucket}:${ip}`;
     const now = Date.now();
     const cutoff = now - RATE_WINDOW_MS;
 
-    let data = hits.get(ip);
+    let data = hits.get(key);
     if (!data) {
       data = { timestamps: [] };
-      hits.set(ip, data);
+      hits.set(key, data);
     }
 
     // Remove old timestamps
@@ -79,8 +80,10 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
   // Rate limiting
   const rateLimiter = createRateLimiter();
   app.use((req: Request, res: Response, next: NextFunction) => {
-    const limit = req.method === 'POST' ? POST_RATE_LIMIT : GET_RATE_LIMIT;
-    rateLimiter(limit)(req, res, next);
+    const isPost = req.method === 'POST';
+    const bucket = isPost ? 'POST' : 'GET';
+    const limit = isPost ? POST_RATE_LIMIT : GET_RATE_LIMIT;
+    rateLimiter(bucket, limit)(req, res, next);
   });
 
   // Endpoint to get the status of the node
