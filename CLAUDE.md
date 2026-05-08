@@ -74,6 +74,8 @@ The legacy `pnpm ship` script still exists as a reminder shim; `scripts/deploy.s
 8. **Toolchain targets** — Keep backend code compatible with Node.js v20+, TypeScript 6, `ts-node` ESM, and Express v5. Keep website changes compatible with Vite 7, TailwindCSS v4, and Playwright 1.58.
 9. **Imports** — Use relative imports; there are no path aliases or barrel-file conventions configured for either `src/` or `website/src/`.
 10. **Frontend style** — The website is plain TypeScript plus DOM APIs, not React/Vue. Extend the existing vanilla entrypoints instead of introducing a frontend framework.
+11. **Runtime type-check gap** — Root scripts run through `ts-node` with `"transpileOnly": true`. After TypeScript changes, especially import wiring, CLI entrypoints, or shared types, run `pnpm build`; do not assume `pnpm run qbtcd` or other scripts will catch type errors.
+12. **CLI/demo exceptions** — Interactive tools under `src/tools/` and demo/simulation files such as `src/*-demo.ts` and `src/*simulation.ts` may use `console.log`/`console.error` for terminal UX. Do not copy those patterns into long-running node, RPC, mempool, chain, or P2P code.
 
 ## Architecture & Patterns
 
@@ -86,6 +88,7 @@ The legacy `pnpm ship` script still exists as a reminder shim; `scripts/deploy.s
 7. **P2P layout** — Keep networking code split under `src/p2p/` (`peer.ts`, `protocol.ts`, `server.ts`). Add new peer/protocol/server concerns there instead of expanding `rpc.ts` or `node.ts`.
 8. **Website layout** — Landing-page behavior lives in `website/src/main.ts`, explorer behavior in `website/src/explorer-main.ts`, blog content in `website/src/blog/*.ts`, and browser tests in `website/e2e/*.spec.ts`.
 9. **Explorer data flow** — Preserve the explorer’s `/api/v1` base path, hash-based routing, and shared fetch helpers in `website/src/explorer-main.ts` when adding new explorer views or API calls.
+10. **Serialization boundary** — When persisting blocks/transactions or exposing binary-heavy structures over JSON, reuse `sanitize`/`sanitizeForStorage` plus `deserializeTransaction`/`deserializeBlock` from `src/storage.ts`. Do not hand-roll `Uint8Array` to hex conversion or parsing logic in new modules.
 
 ## Testing Rules
 
@@ -97,6 +100,7 @@ The legacy `pnpm ship` script still exists as a reminder shim; `scripts/deploy.s
 6. **Run after changes** — Run `pnpm test` before committing any change to `src/`.
 7. **Website coverage** — For changes under `website/` that affect rendering, routing, responsive layout, or API error handling, run `cd website && pnpm test:visual` or `pnpm screenshots` in addition to any relevant backend tests.
 8. **Website command forms** — From the repo root, use `pnpm run website:screenshots`; from `website/`, use `pnpm screenshots` or `pnpm test:visual`. Do not assume a root-level `pnpm screenshots` script exists.
+9. **Build verification** — For changes to TypeScript source, ESM import paths, or package scripts that affect runtime entrypoints, run `pnpm build` in addition to tests because the default `ts-node` scripts skip typechecking.
 
 ## Dependency & Supply-Chain Security
 
