@@ -48,7 +48,7 @@ function createRateLimiter() {
     data.timestamps = data.timestamps.filter(t => t > cutoff);
 
     if (data.timestamps.length >= limit) {
-      res.status(429).json({ error: 'Too many requests' });
+      sendError(res, 429, 'Too many requests');
       return;
     }
 
@@ -69,6 +69,10 @@ type RequestError = Error & {
   statusCode?: number;
   type?: string;
 };
+
+function sendError(res: Response, status: number, error: string): void {
+  res.status(status).json({ error });
+}
 
 export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, bindAddress: string = '127.0.0.1'): Express {
   const app = express();
@@ -97,30 +101,30 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
   app.get('/api/v1/block/:hash', (req, res) => {
     const hash = req.params.hash.toLowerCase();
     if (!isValidHash(hash)) {
-      res.status(400).json({ error: 'Invalid block hash format: must be 64-character hex string' });
+      sendError(res, 400, 'Invalid block hash format: must be 64-character hex string');
       return;
     }
     const block = node.chain.blocks.find(b => b.hash === hash);
     if (block) {
       res.json(sanitize(block));
     } else {
-      res.status(404).json({ error: 'Block not found' });
+      sendError(res, 404, 'Block not found');
     }
   });
 
   // Endpoint to get a block by height
   app.get('/api/v1/block-by-height/:height', (req, res) => {
     if (!/^\d+$/.test(req.params.height)) {
-      res.status(400).json({ error: 'Invalid height: must be a non-negative integer' });
+      sendError(res, 400, 'Invalid height: must be a non-negative integer');
       return;
     }
     const height = parseInt(req.params.height, 10);
     if (height > 2_147_483_647) {
-      res.status(400).json({ error: 'Invalid height: value too large' });
+      sendError(res, 400, 'Invalid height: value too large');
       return;
     }
     if (height >= node.chain.blocks.length) {
-      res.status(404).json({ error: 'Block not found' });
+      sendError(res, 404, 'Block not found');
       return;
     }
     res.json(sanitize(node.chain.blocks[height]));
@@ -129,7 +133,7 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
   // Endpoint to get the latest blocks
   app.get('/api/v1/blocks', (req, res) => {
     if (req.query.count !== undefined && !/^\d+$/.test(req.query.count as string)) {
-      res.status(400).json({ error: 'Invalid count parameter' });
+      sendError(res, 400, 'Invalid count parameter');
       return;
     }
     const parsed = req.query.count ? parseInt(req.query.count as string, 10) : 10;
@@ -142,7 +146,7 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
   app.get('/api/v1/tx/:txid', (req, res) => {
     const txid = req.params.txid.toLowerCase();
     if (!isValidHash(txid)) {
-      res.status(400).json({ error: 'Invalid transaction ID format: must be 64-character hex string' });
+      sendError(res, 400, 'Invalid transaction ID format: must be 64-character hex string');
       return;
     }
     const tx = node.mempool.getTransaction(txid);
@@ -155,13 +159,13 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
     if (block) {
       const foundTx = block.transactions.find(t => t.id === txid);
       if (!foundTx) {
-        res.status(404).json({ error: 'Transaction not found' });
+        sendError(res, 404, 'Transaction not found');
         return;
       }
       res.json(sanitize(foundTx));
       return;
     }
-    res.status(404).json({ error: 'Transaction not found' });
+    sendError(res, 404, 'Transaction not found');
   });
 
   // Submit a transaction
@@ -172,19 +176,19 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
       if (result.success) {
         res.json({ txid: tx.id });
       } else {
-        res.status(400).json({ error: result.error });
+        sendError(res, 400, result.error ?? 'Transaction rejected');
       }
     } catch (err) {
       log.warn({ component: 'rpc', err }, 'Failed to deserialize submitted transaction');
       const message = err instanceof Error ? err.message : 'Invalid transaction';
-      res.status(400).json({ error: message });
+      sendError(res, 400, message);
     }
   });
 
   // Endpoint to get mempool transactions (lightweight: no signatures/publicKeys, includes sender)
   app.get('/api/v1/mempool/txs', (req, res) => {
     if (req.query.limit !== undefined && !/^\d+$/.test(req.query.limit as string)) {
-      res.status(400).json({ error: 'Invalid limit parameter' });
+      sendError(res, 400, 'Invalid limit parameter');
       return;
     }
     const parsedLimit = req.query.limit ? parseInt(req.query.limit as string, 10) : 1000;
@@ -219,7 +223,7 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
   // Endpoint to get the balance of an address
   app.get('/api/v1/address/:address/balance', (req, res) => {
     if (!isValidAddress(req.params.address)) {
-      res.status(400).json({ error: 'Invalid address format: must be 64-character hex string' });
+      sendError(res, 400, 'Invalid address format: must be 64-character hex string');
       return;
     }
     const address = req.params.address.toLowerCase();
@@ -230,7 +234,7 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
   // Endpoint to get the UTXOs of an address
   app.get('/api/v1/address/:address/utxos', (req, res) => {
     if (!isValidAddress(req.params.address)) {
-      res.status(400).json({ error: 'Invalid address format: must be 64-character hex string' });
+      sendError(res, 400, 'Invalid address format: must be 64-character hex string');
       return;
     }
     const address = req.params.address.toLowerCase();
@@ -280,21 +284,31 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
     }
   });
 
+  app.use('/api/v1', (req: Request, res: Response) => {
+    sendError(res, 404, 'RPC endpoint not found');
+  });
+
   app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
     const requestError = err as RequestError;
     if (requestError.type === 'entity.parse.failed') {
       log.warn({ component: 'rpc', err: requestError }, 'Rejected malformed JSON request body');
-      res.status(400).json({ error: 'Malformed JSON request body' });
+      sendError(res, 400, 'Malformed JSON request body');
       return;
     }
 
     if (requestError.type === 'entity.too.large' || requestError.status === 413 || requestError.statusCode === 413) {
       log.warn({ component: 'rpc', err: requestError }, 'Rejected oversized JSON request body');
-      res.status(413).json({ error: 'Request body too large' });
+      sendError(res, 413, 'Request body too large');
       return;
     }
 
-    next(err);
+    if (res.headersSent) {
+      next(err);
+      return;
+    }
+
+    log.error({ component: 'rpc', err: requestError, path: req.path, method: req.method }, 'Unhandled RPC error');
+    sendError(res, 500, 'Internal server error');
   });
 
   return app;

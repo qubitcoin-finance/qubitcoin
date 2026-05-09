@@ -642,6 +642,24 @@ describe('RPC edge cases', () => {
     const body = await res.json()
     expect(body.error).toBe('Request body too large')
   })
+
+  it('GET unknown /api/v1 route returns JSON 404 payload', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/does-not-exist`)
+    expect(res.status).toBe(404)
+    expect(res.headers.get('content-type')).toContain('application/json')
+    const body = await res.json()
+    expect(body.error).toBe('RPC endpoint not found')
+  })
+
+  it('POST to GET-only RPC route returns JSON 404 payload', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/status`, {
+      method: 'POST',
+    })
+    expect(res.status).toBe(404)
+    expect(res.headers.get('content-type')).toContain('application/json')
+    const body = await res.json()
+    expect(body.error).toBe('RPC endpoint not found')
+  })
 })
 
 describe('RPC /difficulty endpoint edge cases', () => {
