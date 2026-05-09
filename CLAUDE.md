@@ -89,6 +89,7 @@ The legacy `pnpm ship` script still exists as a reminder shim; `scripts/deploy.s
 8. **Website layout** — Landing-page behavior lives in `website/src/main.ts`, explorer behavior in `website/src/explorer-main.ts`, blog content in `website/src/blog/*.ts`, and browser tests in `website/e2e/*.spec.ts`.
 9. **Explorer data flow** — Preserve the explorer’s `/api/v1` base path, hash-based routing, and shared fetch helpers in `website/src/explorer-main.ts` when adding new explorer views or API calls.
 10. **Serialization boundary** — When persisting blocks/transactions or exposing binary-heavy structures over JSON, reuse `sanitize`/`sanitizeForStorage` plus `deserializeTransaction`/`deserializeBlock` from `src/storage.ts`. Do not hand-roll `Uint8Array` to hex conversion or parsing logic in new modules.
+11. **Website state management** — Keep website interactivity in vanilla TypeScript with module-local state, DOM updates, polling, and URL-hash routing. Do not introduce a frontend router, global state library, or framework-style store for landing-page or explorer changes.
 
 ## Testing Rules
 
@@ -101,6 +102,7 @@ The legacy `pnpm ship` script still exists as a reminder shim; `scripts/deploy.s
 7. **Website coverage** — For changes under `website/` that affect rendering, routing, responsive layout, or API error handling, run `cd website && pnpm test:visual` or `pnpm screenshots` in addition to any relevant backend tests.
 8. **Website command forms** — From the repo root, use `pnpm run website:screenshots`; from `website/`, use `pnpm screenshots` or `pnpm test:visual`. Do not assume a root-level `pnpm screenshots` script exists.
 9. **Build verification** — For changes to TypeScript source, ESM import paths, or package scripts that affect runtime entrypoints, run `pnpm build` in addition to tests because the default `ts-node` scripts skip typechecking.
+10. **Website build verification** — Root `pnpm build` only typechecks the backend `src/` tree. After changes under `website/src/`, `website/index.html`, or Vite/Tailwind wiring, run `cd website && pnpm build` as well.
 
 ## Dependency & Supply-Chain Security
 
