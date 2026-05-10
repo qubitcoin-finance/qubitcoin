@@ -2,6 +2,7 @@
   "name": "qubitcoin",
   "version": "1.0.0",
   "description": "Post-Quantum Cryptography proof of concept using NIST FIPS 203/204/205",
+  "packageManager": "pnpm@9.15.9",
   "type": "module",
   "scripts": {
     "prepare": "husky",

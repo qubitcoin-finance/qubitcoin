@@ -7,6 +7,7 @@ on:
 env:
   REGISTRY: ghcr.io
   MINER_IMAGE: qubitcoin-finance/qbtcd
+  PNPM_VERSION: 9.15.9
 
 jobs:
   build-and-push:
@@ -79,7 +80,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v2
         with:
-          version: latest
+          version: ${{ env.PNPM_VERSION }}
 
       - name: Build website
         run: cd website && pnpm install --frozen-lockfile && pnpm build
