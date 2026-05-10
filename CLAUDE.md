@@ -127,3 +127,8 @@ The legacy `pnpm ship` script still exists as a reminder shim; `scripts/deploy.s
    - Commit any file containing private keys, seeds, or `.env` secrets.
 4. **No force-push** — Never `git push --force` to `main`.
 5. **Hook bypass** — Never use `--no-verify`. If a hook fails, fix the underlying issue.
+6. **Stale npm scripts** — `generate-snapshot`, `snapshot:activate`, and `q` in `package.json` reference files that do not exist (`scripts/generate-snapshot.sh`, `scripts/activate-snapshot.sh`, `scripts/q.ts`). Do not run these scripts; verify the underlying file exists before attempting to use or recreate them.
+
+## Design Documents
+
+- `docs/BRIDGE.md` — Architecture for a ZK bridge (SP1 + Groth16) to wrap QBTC as an ERC-20 on Base L2. Status: design-only; no implementation exists.
