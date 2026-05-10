@@ -288,6 +288,10 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
     sendError(res, 404, 'RPC endpoint not found');
   });
 
+  app.use((req: Request, res: Response) => {
+    sendError(res, 404, 'Route not found');
+  });
+
   app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
     const requestError = err as RequestError;
     if (requestError.type === 'entity.parse.failed') {

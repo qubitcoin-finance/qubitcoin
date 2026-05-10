@@ -713,6 +713,14 @@ describe('RPC edge cases', () => {
     expect(body.error).toBe('RPC endpoint not found')
   })
 
+  it('GET unknown non-API route returns JSON 404 payload', async () => {
+    const res = await fetch(`${baseUrl}/does-not-exist`)
+    expect(res.status).toBe(404)
+    expect(res.headers.get('content-type')).toContain('application/json')
+    const body = await res.json()
+    expect(body.error).toBe('Route not found')
+  })
+
   it('POST to GET-only RPC route returns JSON 404 payload', async () => {
     const res = await fetch(`${baseUrl}/api/v1/status`, {
       method: 'POST',
