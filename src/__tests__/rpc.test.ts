@@ -7,7 +7,7 @@ import { startRpcServer } from '../rpc.js'
 import { walletA, walletB } from './fixtures.js'
 import { createMockSnapshot } from '../snapshot.js'
 import { createClaimTransaction } from '../claim.js'
-import { createTransaction } from '../transaction.js'
+import { createTransaction, utxoKey } from '../transaction.js'
 import { sanitizeForStorage, FileBlockStorage } from '../storage.js'
 import { P2PServer } from '../p2p/server.js'
 import type { AddressInfo } from 'node:net'
@@ -349,6 +349,41 @@ describe('RPC transaction endpoints', () => {
     expect(body.length).toBeGreaterThan(0)
   })
 
+  it('GET /mempool/txs regular tx derives sender and strips signature fields', async () => {
+    const utxo = {
+      txId: 'd'.repeat(64),
+      outputIndex: 0,
+      address: walletA.address,
+      amount: 75_000_000,
+    }
+    node.chain.utxoSet.set(utxoKey(utxo.txId, utxo.outputIndex), utxo)
+    const tx = createTransaction(
+      walletA,
+      [utxo],
+      [{ address: walletB.address, amount: 50_000_000 }],
+      10_000
+    )
+    const addResult = node.receiveTransaction(tx)
+    expect(addResult.success).toBe(true)
+
+    const res = await fetch(`${baseUrl}/api/v1/mempool/txs`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    const entry = body.find((candidate: { id: string }) => candidate.id === tx.id)
+
+    expect(entry).toBeDefined()
+    expect(entry.id).toBe(tx.id)
+    expect(entry.timestamp).toBe(tx.timestamp)
+    expect(entry.sender).toBe(walletA.address)
+    expect(entry.claimData).toBeUndefined()
+    expect(entry.inputs).toEqual(
+      tx.inputs.map(input => ({ txId: input.txId, outputIndex: input.outputIndex }))
+    )
+    expect(entry.outputs).toEqual(tx.outputs)
+    expect(entry.inputs[0]).not.toHaveProperty('publicKey')
+    expect(entry.inputs[0]).not.toHaveProperty('signature')
+  })
+
   it('GET /mempool/txs claim tx has null sender and defined claimData', async () => {
     const { snapshot, holders } = createMockSnapshot()
     const genesisHash = node.chain.blocks[0].hash
@@ -369,6 +404,33 @@ describe('RPC transaction endpoints', () => {
     expect(claimEntry).toBeDefined()
     expect(claimEntry.sender).toBeNull()
     expect(typeof claimEntry.claimData).toBe('object')
+  })
+
+  it('GET /mempool/txs claim tx keeps outpoints but strips binary input fields', async () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const genesisHash = node.chain.blocks[0].hash
+    const claimTx = createClaimTransaction(
+      holders[3].secretKey,
+      holders[3].publicKey,
+      snapshot.entries[3],
+      walletB,
+      snapshot.btcBlockHash,
+      genesisHash
+    )
+    const addResult = node.receiveTransaction(claimTx)
+    expect(addResult.success).toBe(true)
+
+    const res = await fetch(`${baseUrl}/api/v1/mempool/txs`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    const claimEntry = body.find((tx: { id: string }) => tx.id === claimTx.id)
+
+    expect(claimEntry).toBeDefined()
+    expect(claimEntry.inputs).toEqual(
+      claimTx.inputs.map(input => ({ txId: input.txId, outputIndex: input.outputIndex }))
+    )
+    expect(claimEntry.inputs[0]).not.toHaveProperty('publicKey')
+    expect(claimEntry.inputs[0]).not.toHaveProperty('signature')
   })
 
   it('POST /tx with valid claim transaction returns 200 with txid', async () => {
