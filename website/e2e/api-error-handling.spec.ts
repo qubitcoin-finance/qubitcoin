@@ -145,6 +145,14 @@ test.describe('Block view — API error handling', () => {
 });
 
 test.describe('Transaction view — API error handling', () => {
+  test('renders tx without confirmation metadata as mempool status', async ({ page }) => {
+    await mockApiSuccess(page);
+    await page.goto(`/#/tx/${SAMPLE_TX_ID}`, { waitUntil: 'networkidle' });
+
+    await expect(page.locator('#explorer-content')).toContainText('Status');
+    await expect(page.locator('#explorer-content')).toContainText('Mempool');
+  });
+
   test('shows connection error when network is down', async ({ page }) => {
     await mockApiNetworkError(page);
     await page.goto(`/#/tx/${SAMPLE_TX_ID}`, { waitUntil: 'domcontentloaded' });

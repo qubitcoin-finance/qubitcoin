@@ -47,6 +47,8 @@ interface Transaction {
   inputs: TxInput[];
   outputs: TxOutput[];
   timestamp: number;
+  blockHash?: string;
+  blockHeight?: number;
   claimData?: ClaimData;
 }
 
@@ -258,6 +260,10 @@ function isCoinbase(tx: Transaction | MempoolTx): boolean {
 
 function isClaim(tx: Transaction | MempoolTx): boolean {
   return tx.claimData !== undefined;
+}
+
+function isConfirmedTx(tx: Transaction): boolean {
+  return typeof tx.blockHash === 'string' && typeof tx.blockHeight === 'number';
 }
 
 function txTypeBadge(tx: Transaction | MempoolTx): string {
@@ -680,6 +686,14 @@ async function renderTx(txid: string): Promise<void> {
       <div>
         <p class="text-text-muted mb-1">Fee</p>
         <p class="font-mono">${formatQBTC(fee)} QBTC</p>
+      </div>` : ''}
+      <div>
+        <p class="text-text-muted mb-1">Status</p>
+        <p>${isConfirmedTx(tx) ? badge('Confirmed', 'cyan') : badge('Mempool', 'blue')}</p>
+      </div>${isConfirmedTx(tx) ? `
+      <div>
+        <p class="text-text-muted mb-1">Included In</p>
+        <p>${hashLink(tx.blockHash!, 'block', `#${tx.blockHeight}`)}</p>
       </div>` : ''}
     </div>
   </div>`;
@@ -1467,6 +1481,16 @@ ${docH2('Transactions')}
     ${ep('POST', '/tx', 'Broadcast a signed transaction')}
   </tbody>
 </table>
+${docH3('GET /tx/:txid')}
+${docP('Returns a transaction from the mempool or chain. Confirmed transactions include server-derived <span class="font-mono text-xs text-qubit-400">blockHash</span> and <span class="font-mono text-xs text-qubit-400">blockHeight</span>; mempool transactions omit those fields even if a submitted transaction payload included them.')}
+${docJson(`{
+  "id": "abc123...",
+  "inputs": [...],
+  "outputs": [...],
+  "timestamp": 1707000000000,
+  "blockHash": "0000abc...",
+  "blockHeight": 1234
+}`)}
 ${docH3('POST /tx')}
 ${docP('Submit a signed transaction for relay and inclusion in the mempool. The request body must be a JSON transaction with hex-encoded Uint8Array fields (publicKey, signature, ecdsaPublicKey, ecdsaSignature). Malformed JSON returns a JSON 400 error payload, and request bodies larger than 1 MB return a JSON 413 error payload.')}
 ${docCode(`curl -X POST http://127.0.0.1:3001/api/v1/tx \\

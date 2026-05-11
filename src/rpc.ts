@@ -162,7 +162,11 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
         sendError(res, 404, 'Transaction not found');
         return;
       }
-      res.json(sanitize(foundTx));
+      res.json(sanitize({
+        ...foundTx,
+        blockHash: block.hash,
+        blockHeight: block.height,
+      }));
       return;
     }
     sendError(res, 404, 'Transaction not found');

@@ -35,6 +35,7 @@ export { sanitize as sanitizeForStorage } from './utils.js'
 /** Known Uint8Array fields in transactions that need deserialization */
 export const TX_INPUT_BINARY_FIELDS = ['publicKey', 'signature'] as const
 export const CLAIM_DATA_BINARY_FIELDS = ['ecdsaPublicKey', 'ecdsaSignature', 'schnorrPublicKey', 'schnorrSignature', 'witnessScript', 'witnessSignatures'] as const
+const SERVER_TX_METADATA_FIELDS = ['blockHash', 'blockHeight'] as const
 
 /**
  * Maximum hex string lengths for binary fields.
@@ -62,7 +63,11 @@ function safeHexToBytes(field: string, hex: string): Uint8Array {
 
 /** Restore hex strings back to Uint8Array for known binary fields */
 export function deserializeTransaction(raw: Record<string, unknown>): Transaction {
-  const tx = raw as unknown as Transaction
+  const txRecord: Record<string, unknown> = { ...raw }
+  for (const field of SERVER_TX_METADATA_FIELDS) {
+    delete txRecord[field]
+  }
+  const tx = txRecord as unknown as Transaction
 
   // Restore inputs
   if (Array.isArray(raw.inputs)) {

@@ -289,6 +289,22 @@ describe('deserializeTransaction', () => {
     expect(tx.inputs[0].publicKey).toBeInstanceOf(Uint8Array)
   })
 
+  it('strips server-owned confirmation metadata from untrusted transactions', () => {
+    const raw = {
+      id: 'abc',
+      inputs: [{ txId: 'x', outputIndex: 0, publicKey: 'ff', signature: '00' }],
+      outputs: [],
+      timestamp: 1,
+      blockHash: 'f'.repeat(64),
+      blockHeight: 123,
+    }
+    const tx = deserializeTransaction(raw)
+    const txRecord = tx as unknown as Record<string, unknown>
+
+    expect(txRecord.blockHash).toBeUndefined()
+    expect(txRecord.blockHeight).toBeUndefined()
+  })
+
   it('leaves non-string binary fields unchanged', () => {
     const existingBytes = new Uint8Array([0x01])
     const raw = {

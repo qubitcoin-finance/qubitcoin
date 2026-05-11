@@ -139,10 +139,14 @@ describe('RPC endpoints', () => {
 
   it('GET /tx/:txid returns coinbase tx from chain', async () => {
     const coinbaseTxId = node.chain.blocks[1].transactions[0].id
+    const txBlock = node.chain.findTransactionBlock(coinbaseTxId)
     const res = await fetch(`${baseUrl}/api/v1/tx/${coinbaseTxId}`)
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.id).toBe(coinbaseTxId)
+    expect(txBlock).toBeTruthy()
+    expect(body.blockHash).toBe(txBlock!.hash)
+    expect(body.blockHeight).toBe(txBlock!.height)
   })
 
   it('POST /tx rejects malformed body', async () => {
@@ -339,6 +343,43 @@ describe('RPC transaction endpoints', () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.id).toBe(claimTx.id)
+    expect(body.blockHash).toBeUndefined()
+    expect(body.blockHeight).toBeUndefined()
+  })
+
+  it('POST /tx strips client-supplied confirmation metadata from mempool tx responses', async () => {
+    const utxo = {
+      txId: 'e'.repeat(64),
+      outputIndex: 0,
+      address: walletA.address,
+      amount: 75_000_000,
+    }
+    node.chain.utxoSet.set(utxoKey(utxo.txId, utxo.outputIndex), utxo)
+    const tx = createTransaction(
+      walletA,
+      [utxo],
+      [{ address: walletB.address, amount: 50_000_000 }],
+      10_000
+    )
+    const payload = {
+      ...(sanitizeForStorage(tx) as Record<string, unknown>),
+      blockHash: 'f'.repeat(64),
+      blockHeight: 123,
+    }
+
+    const postRes = await fetch(`${baseUrl}/api/v1/tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    expect(postRes.status).toBe(200)
+
+    const getRes = await fetch(`${baseUrl}/api/v1/tx/${tx.id}`)
+    expect(getRes.status).toBe(200)
+    const body = await getRes.json()
+    expect(body.id).toBe(tx.id)
+    expect(body.blockHash).toBeUndefined()
+    expect(body.blockHeight).toBeUndefined()
   })
 
   it('GET /mempool/txs returns transaction summaries', async () => {
