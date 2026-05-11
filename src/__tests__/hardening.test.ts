@@ -1191,6 +1191,118 @@ describe('validateBlock edge cases', () => {
   it('blockWork returns 0n for zero target', () => {
     expect(blockWork('0'.repeat(64))).toBe(0n)
   })
+
+  it('rejects claim tx with real UTXO inputs instead of CLAIM_TXID sentinel', () => {
+    const { snapshot } = createMockSnapshot()
+    const chain = new Blockchain(snapshot)
+    chain.difficulty = TEST_TARGET
+
+    const tip = chain.getChainTip()
+    const height = chain.getHeight() + 1
+    const coinbase = createCoinbaseTransaction(walletA.address, height, 0)
+
+    // Craft a claim tx that uses a real txId as input instead of the CLAIM_TXID sentinel.
+    // Without the sentinel check, applyBlock would skip consuming the input UTXO,
+    // allowing the attacker to spend it again later.
+    const hybridClaim = {
+      id: doubleSha256Hex(new TextEncoder().encode('hybrid-claim')),
+      inputs: [{
+        txId: 'a'.repeat(64), // real UTXO txId, NOT CLAIM_TXID
+        outputIndex: 0,
+        publicKey: new Uint8Array(0),
+        signature: new Uint8Array(0),
+      }],
+      outputs: [{ address: walletA.address, amount: snapshot.entries[0].amount }],
+      timestamp: Date.now(),
+      claimData: {
+        btcAddress: snapshot.entries[0].btcAddress,
+        ecdsaPublicKey: new Uint8Array(33),
+        ecdsaSignature: new Uint8Array(64),
+        qbtcAddress: walletA.address,
+      },
+    }
+
+    const txs = [coinbase, hybridClaim]
+    const merkleRoot = computeMerkleRoot(txs.map(t => t.id))
+
+    const header: BlockHeader = {
+      version: 1,
+      previousHash: tip.hash,
+      merkleRoot,
+      timestamp: tip.header.timestamp + 1,
+      target: TEST_TARGET,
+      nonce: 0,
+    }
+
+    let hash = computeBlockHash(header)
+    while (!hashMeetsTarget(hash, header.target)) {
+      header.nonce++
+      hash = computeBlockHash(header)
+    }
+
+    const result = validateBlock(
+      { header, hash, transactions: txs, height },
+      tip,
+      chain.utxoSet,
+      chain.blocks
+    )
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('CLAIM_TXID sentinel')
+  })
+
+  it('rejects claim tx with multiple inputs even if first is CLAIM_TXID', () => {
+    const { snapshot } = createMockSnapshot()
+    const chain = new Blockchain(snapshot)
+    chain.difficulty = TEST_TARGET
+
+    const tip = chain.getChainTip()
+    const height = chain.getHeight() + 1
+    const coinbase = createCoinbaseTransaction(walletA.address, height, 0)
+
+    // Multiple inputs: first is sentinel, second is a real UTXO
+    const multiInputClaim = {
+      id: doubleSha256Hex(new TextEncoder().encode('multi-input-claim')),
+      inputs: [
+        { txId: CLAIM_TXID, outputIndex: 0, publicKey: new Uint8Array(0), signature: new Uint8Array(0) },
+        { txId: 'b'.repeat(64), outputIndex: 0, publicKey: new Uint8Array(0), signature: new Uint8Array(0) },
+      ],
+      outputs: [{ address: walletA.address, amount: snapshot.entries[0].amount }],
+      timestamp: Date.now(),
+      claimData: {
+        btcAddress: snapshot.entries[0].btcAddress,
+        ecdsaPublicKey: new Uint8Array(33),
+        ecdsaSignature: new Uint8Array(64),
+        qbtcAddress: walletA.address,
+      },
+    }
+
+    const txs = [coinbase, multiInputClaim]
+    const merkleRoot = computeMerkleRoot(txs.map(t => t.id))
+
+    const header: BlockHeader = {
+      version: 1,
+      previousHash: tip.hash,
+      merkleRoot,
+      timestamp: tip.header.timestamp + 1,
+      target: TEST_TARGET,
+      nonce: 0,
+    }
+
+    let hash = computeBlockHash(header)
+    while (!hashMeetsTarget(hash, header.target)) {
+      header.nonce++
+      hash = computeBlockHash(header)
+    }
+
+    const result = validateBlock(
+      { header, hash, transactions: txs, height },
+      tip,
+      chain.utxoSet,
+      chain.blocks
+    )
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('CLAIM_TXID sentinel')
+  })
 })
 
 describe('Duplicate txid rejection', () => {

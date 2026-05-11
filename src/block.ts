@@ -24,6 +24,7 @@ import {
   validateTransaction,
   utxoKey,
   DUST_THRESHOLD,
+  CLAIM_TXID,
 } from './transaction.js'
 import { type BtcSnapshot } from './snapshot.js'
 
@@ -406,6 +407,11 @@ export function validateBlock(
     if (isClaimTransaction(tx)) {
       if (!tx.claimData) {
         return { valid: false, error: `Transaction ${i}: claim tx missing claimData` }
+      }
+      // Claim txs must use the CLAIM_TXID sentinel as their sole input — prevents
+      // hybrid txs where real UTXOs are silently skipped during block application.
+      if (tx.inputs.length !== 1 || tx.inputs[0].txId !== CLAIM_TXID) {
+        return { valid: false, error: `Transaction ${i}: claim tx must have exactly 1 input with CLAIM_TXID sentinel` }
       }
       if (tx.outputs.length !== 1) {
         return { valid: false, error: `Transaction ${i}: claim tx must have exactly 1 output` }
