@@ -149,6 +149,17 @@ describe('RPC endpoints', () => {
     expect(body.blockHeight).toBe(txBlock!.height)
   })
 
+  it('GET /tx/:txid confirmed tx includes confirmations count', async () => {
+    const block = node.chain.blocks[1]
+    const coinbaseTxId = block.transactions[0].id
+    const res = await fetch(`${baseUrl}/api/v1/tx/${coinbaseTxId}`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    const expectedConfirmations = node.chain.blocks.length - block.height
+    expect(body.confirmations).toBe(expectedConfirmations)
+    expect(body.confirmations).toBeGreaterThan(0)
+  })
+
   it('POST /tx rejects malformed body', async () => {
     const res = await fetch(`${baseUrl}/api/v1/tx`, {
       method: 'POST',
@@ -345,6 +356,25 @@ describe('RPC transaction endpoints', () => {
     expect(body.id).toBe(claimTx.id)
     expect(body.blockHash).toBeUndefined()
     expect(body.blockHeight).toBeUndefined()
+  })
+
+  it('GET /tx/:txid mempool tx has no confirmations field', async () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const genesisHash = node.chain.blocks[0].hash
+    // Use holders[4]/entries[4] — holders[0-3] are used by other tests in this describe block
+    const claimTx = createClaimTransaction(
+      holders[4].secretKey,
+      holders[4].publicKey,
+      snapshot.entries[4],
+      walletB,
+      snapshot.btcBlockHash,
+      genesisHash
+    )
+    node.receiveTransaction(claimTx)
+    const res = await fetch(`${baseUrl}/api/v1/tx/${claimTx.id}`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.confirmations).toBeUndefined()
   })
 
   it('POST /tx strips client-supplied confirmation metadata from mempool tx responses', async () => {

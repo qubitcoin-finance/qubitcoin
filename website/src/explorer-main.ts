@@ -49,6 +49,7 @@ interface Transaction {
   timestamp: number;
   blockHash?: string;
   blockHeight?: number;
+  confirmations?: number;
   claimData?: ClaimData;
 }
 
@@ -694,6 +695,10 @@ async function renderTx(txid: string): Promise<void> {
       <div>
         <p class="text-text-muted mb-1">Included In</p>
         <p>${hashLink(tx.blockHash!, 'block', `#${tx.blockHeight}`)}</p>
+      </div>
+      <div>
+        <p class="text-text-muted mb-1">Confirmations</p>
+        <p class="font-mono">${tx.confirmations ?? 0}</p>
       </div>` : ''}
     </div>
   </div>`;
@@ -1482,14 +1487,15 @@ ${docH2('Transactions')}
   </tbody>
 </table>
 ${docH3('GET /tx/:txid')}
-${docP('Returns a transaction from the mempool or chain. Confirmed transactions include server-derived <span class="font-mono text-xs text-qubit-400">blockHash</span> and <span class="font-mono text-xs text-qubit-400">blockHeight</span>; mempool transactions omit those fields even if a submitted transaction payload included them.')}
+${docP('Returns a transaction from the mempool or chain. Confirmed transactions include server-derived <span class="font-mono text-xs text-qubit-400">blockHash</span>, <span class="font-mono text-xs text-qubit-400">blockHeight</span>, and <span class="font-mono text-xs text-qubit-400">confirmations</span>; mempool transactions omit those fields even if a submitted transaction payload included them.')}
 ${docJson(`{
   "id": "abc123...",
   "inputs": [...],
   "outputs": [...],
   "timestamp": 1707000000000,
   "blockHash": "0000abc...",
-  "blockHeight": 1234
+  "blockHeight": 1234,
+  "confirmations": 42
 }`)}
 ${docH3('POST /tx')}
 ${docP('Submit a signed transaction for relay and inclusion in the mempool. The request body must be a JSON transaction with hex-encoded Uint8Array fields (publicKey, signature, ecdsaPublicKey, ecdsaSignature). Malformed JSON returns a JSON 400 error payload, and request bodies larger than 1 MB return a JSON 413 error payload.')}

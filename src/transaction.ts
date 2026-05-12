@@ -108,7 +108,8 @@ export function serializeForSigning(
   inputs: Array<{ txId: string; outputIndex: number }>,
   outputs: TransactionOutput[],
   timestamp: number,
-  claimData?: ClaimData
+  claimData?: ClaimData,
+  blockHeight?: number
 ): Uint8Array {
   const encoder = new TextEncoder()
   const parts: Uint8Array[] = []
@@ -136,6 +137,11 @@ export function serializeForSigning(
     parts.push(encoder.encode(claimData.qbtcAddress))
   }
 
+  // Include block height in coinbase ID to ensure uniqueness across blocks
+  if (blockHeight !== undefined) {
+    parts.push(uint32LE(blockHeight))
+  }
+
   return concatBytes(...parts)
 }
 
@@ -143,9 +149,10 @@ export function serializeForSigning(
 export function computeTxId(
   inputs: Array<{ txId: string; outputIndex: number }>,
   outputs: TransactionOutput[],
-  timestamp: number
+  timestamp: number,
+  blockHeight?: number
 ): string {
-  return doubleSha256Hex(serializeForSigning(inputs, outputs, timestamp))
+  return doubleSha256Hex(serializeForSigning(inputs, outputs, timestamp, undefined, blockHeight))
 }
 
 /** Check if a transaction is a coinbase */
@@ -187,7 +194,8 @@ export function createCoinbaseTransaction(
   const id = computeTxId(
     [{ txId: COINBASE_TXID, outputIndex: 0xffffffff }],
     outputs,
-    timestamp
+    timestamp,
+    blockHeight
   )
 
   return { id, inputs, outputs, timestamp }

@@ -166,6 +166,7 @@ export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, 
         ...foundTx,
         blockHash: block.hash,
         blockHeight: block.height,
+        confirmations: node.chain.blocks.length - block.height,
       }));
       return;
     }
