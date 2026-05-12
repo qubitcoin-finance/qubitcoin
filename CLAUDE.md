@@ -129,6 +129,8 @@ The legacy `pnpm ship` script still exists as a reminder shim; `scripts/deploy.s
 5. **Hook bypass** — Never use `--no-verify`. If a hook fails, fix the underlying issue.
 6. **Stale npm scripts** — `generate-snapshot`, `snapshot:activate`, and `q` in `package.json` reference files that do not exist (`scripts/generate-snapshot.sh`, `scripts/activate-snapshot.sh`, `scripts/q.ts`). Do not run these scripts; verify the underlying file exists before attempting to use or recreate them.
 
-## Design Documents
+## Docs Reference
 
-- `docs/BRIDGE.md` — Architecture for a ZK bridge (SP1 + Groth16) to wrap QBTC as an ERC-20 on Base L2. Status: design-only; no implementation exists.
+| File | Topic | Load when |
+|------|-------|-----------|
+| `docs/BRIDGE.md` | ZK bridge (SP1 + Groth16) to wrap QBTC as ERC-20 on Base L2 — design-only, no implementation | Working on cross-chain bridge, wQBTC minting, or SP1/Groth16 proof integration |
