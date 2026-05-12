@@ -6,7 +6,7 @@ import net from 'node:net'
 import { Node } from '../node.js'
 import { P2PServer } from '../p2p/server.js'
 import { Peer } from '../p2p/peer.js'
-import { FileBlockStorage } from '../storage.js'
+import { FileBlockStorage, sanitizeForStorage } from '../storage.js'
 import { walletA, walletB } from './fixtures.js'
 
 import {
@@ -270,6 +270,63 @@ describe('P2P server integration', () => {
       // Wait for it to appear in node2's mempool
       await waitFor(() => sNode2.mempool.size() > 0, 10_000)
       expect(sNode2.mempool.getTransaction(claimTx.id)).toBeDefined()
+    } finally {
+      await sp2p1.stop()
+      await sp2p2.stop()
+    }
+  })
+
+  it('should strip client-supplied confirmations from relayed transactions', async () => {
+    const { createMockSnapshot } = await import('../snapshot.js')
+    const { createClaimTransaction } = await import('../claim.js')
+    const { snapshot, holders } = createMockSnapshot()
+
+    await p2p1.stop()
+    await p2p2.stop()
+
+    const storage1b = new FileBlockStorage(tmpDir1)
+    const storage2b = new FileBlockStorage(tmpDir2)
+    const sNode1 = new Node('alice', snapshot, storage1b)
+    const sNode2 = new Node('bob', snapshot, storage2b)
+    sNode1.chain.difficulty = TEST_TARGET
+    sNode2.chain.difficulty = TEST_TARGET
+
+    const sp2p1 = new P2PServer(sNode1, 0, tmpDir1)
+    const sp2p2 = new P2PServer(sNode2, 0, tmpDir2)
+    await sp2p1.start()
+    await sp2p2.start()
+
+    try {
+      const port = sp2p1.getPort()
+      sp2p2.connectOutbound('127.0.0.1', port)
+
+      await waitFor(() => sp2p1.getPeers().length > 0 && sp2p2.getPeers().length > 0)
+
+      const genesisHash = sNode2.chain.blocks[0].hash
+      const claimTx = createClaimTransaction(
+        holders[0].secretKey,
+        holders[0].publicKey,
+        snapshot.entries[0],
+        walletA,
+        snapshot.btcBlockHash,
+        genesisHash
+      )
+      const peerOnNode2 = sp2p2.getPeerObjects()[0]
+      peerOnNode2.send({
+        type: 'tx',
+        payload: {
+          tx: {
+            ...(sanitizeForStorage(claimTx) as Record<string, unknown>),
+            confirmations: 123_456,
+          },
+        },
+      })
+
+      await waitFor(() => sNode1.mempool.getTransaction(claimTx.id) !== undefined, 10_000)
+
+      const relayed = sNode1.mempool.getTransaction(claimTx.id) as unknown as Record<string, unknown>
+      expect(relayed).toBeDefined()
+      expect(relayed.confirmations).toBeUndefined()
     } finally {
       await sp2p1.stop()
       await sp2p2.stop()

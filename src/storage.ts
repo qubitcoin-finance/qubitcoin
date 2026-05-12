@@ -35,7 +35,7 @@ export { sanitize as sanitizeForStorage } from './utils.js'
 /** Known Uint8Array fields in transactions that need deserialization */
 export const TX_INPUT_BINARY_FIELDS = ['publicKey', 'signature'] as const
 export const CLAIM_DATA_BINARY_FIELDS = ['ecdsaPublicKey', 'ecdsaSignature', 'schnorrPublicKey', 'schnorrSignature', 'witnessScript', 'witnessSignatures'] as const
-const SERVER_TX_METADATA_FIELDS = ['blockHash', 'blockHeight'] as const
+const SERVER_TX_METADATA_FIELDS = ['blockHash', 'blockHeight', 'confirmations'] as const
 
 /**
  * Maximum hex string lengths for binary fields.

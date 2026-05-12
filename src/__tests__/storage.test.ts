@@ -297,12 +297,14 @@ describe('deserializeTransaction', () => {
       timestamp: 1,
       blockHash: 'f'.repeat(64),
       blockHeight: 123,
+      confirmations: 456,
     }
     const tx = deserializeTransaction(raw)
     const txRecord = tx as unknown as Record<string, unknown>
 
     expect(txRecord.blockHash).toBeUndefined()
     expect(txRecord.blockHeight).toBeUndefined()
+    expect(txRecord.confirmations).toBeUndefined()
   })
 
   it('leaves non-string binary fields unchanged', () => {

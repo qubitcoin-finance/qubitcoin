@@ -410,9 +410,71 @@ describe('RPC transaction endpoints', () => {
     expect(body.id).toBe(tx.id)
     expect(body.blockHash).toBeUndefined()
     expect(body.blockHeight).toBeUndefined()
+    expect(body.confirmations).toBeUndefined()
+  })
+
+  it('GET /tx/:txid confirmed regular tx overwrites client-supplied confirmation metadata', async () => {
+    const utxo = {
+      txId: 'c'.repeat(64),
+      outputIndex: 0,
+      address: walletA.address,
+      amount: 75_000_000,
+    }
+    node.chain.utxoSet.set(utxoKey(utxo.txId, utxo.outputIndex), utxo)
+    const tx = createTransaction(
+      walletA,
+      [utxo],
+      [{ address: walletB.address, amount: 50_000_000 }],
+      10_000
+    )
+    const payload = {
+      ...(sanitizeForStorage(tx) as Record<string, unknown>),
+      blockHash: 'f'.repeat(64),
+      blockHeight: 999_999,
+      confirmations: 123_456,
+    }
+
+    const postRes = await fetch(`${baseUrl}/api/v1/tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    expect(postRes.status).toBe(200)
+
+    const minedBlock = node.mine(walletA.address, false)
+    expect(minedBlock).toBeTruthy()
+    node.mine(walletA.address, false)
+
+    const txBlock = node.chain.findTransactionBlock(tx.id)
+    expect(txBlock).toBeTruthy()
+
+    const getRes = await fetch(`${baseUrl}/api/v1/tx/${tx.id}`)
+    expect(getRes.status).toBe(200)
+    const body = await getRes.json()
+    expect(body.id).toBe(tx.id)
+    expect(body.blockHash).toBe(txBlock!.hash)
+    expect(body.blockHeight).toBe(txBlock!.height)
+    expect(body.confirmations).toBe(node.chain.blocks.length - txBlock!.height)
+    expect(body.confirmations).toBe(2)
   })
 
   it('GET /mempool/txs returns transaction summaries', async () => {
+    const utxo = {
+      txId: 'b'.repeat(64),
+      outputIndex: 0,
+      address: walletA.address,
+      amount: 75_000_000,
+    }
+    node.chain.utxoSet.set(utxoKey(utxo.txId, utxo.outputIndex), utxo)
+    const tx = createTransaction(
+      walletA,
+      [utxo],
+      [{ address: walletB.address, amount: 50_000_000 }],
+      10_000
+    )
+    const addResult = node.receiveTransaction(tx)
+    expect(addResult.success).toBe(true)
+
     const res = await fetch(`${baseUrl}/api/v1/mempool/txs`)
     expect(res.status).toBe(200)
     const body = await res.json()
