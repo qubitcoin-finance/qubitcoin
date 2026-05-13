@@ -31,6 +31,23 @@ async function mockApiSuccess(page: Page): Promise<void> {
   });
 }
 
+async function mockApiTx(page: Page, tx: Record<string, unknown>): Promise<void> {
+  await page.route('**/api/v1/**', (route) => {
+    const url = new URL(route.request().url());
+    const path = url.pathname;
+    if (path === '/api/v1/status') return route.fulfill({ json: fixtures.status });
+    if (path === '/api/v1/blocks') return route.fulfill({ json: fixtures.blocks });
+    if (path.startsWith('/api/v1/block/')) return route.fulfill({ json: fixtures.block });
+    if (path.startsWith('/api/v1/tx/')) return route.fulfill({ json: tx });
+    if (path === '/api/v1/mempool/stats') return route.fulfill({ json: fixtures.mempoolStats });
+    if (path.startsWith('/api/v1/mempool/txs')) return route.fulfill({ json: fixtures.mempoolTxs });
+    if (path === '/api/v1/claims/stats') return route.fulfill({ json: fixtures.claimStats });
+    if (path.match(/\/api\/v1\/address\/[^/]+\/balance/)) return route.fulfill({ json: fixtures.addressBalance });
+    if (path.match(/\/api\/v1\/address\/[^/]+\/utxos/)) return route.fulfill({ json: fixtures.addressUtxos });
+    return route.fulfill({ status: 404, json: { error: 'not found' } });
+  });
+}
+
 /** Mock API to abort all requests (network error) */
 async function mockApiNetworkError(page: Page): Promise<void> {
   await page.route('**/api/v1/**', (route) => route.abort('connectionrefused'));
@@ -145,12 +162,40 @@ test.describe('Block view — API error handling', () => {
 });
 
 test.describe('Transaction view — API error handling', () => {
-  test('renders tx without confirmation metadata as mempool status', async ({ page }) => {
+  test('renders tx without confirmation metadata as unconfirmed status', async ({ page }) => {
     await mockApiSuccess(page);
     await page.goto(`/#/tx/${SAMPLE_TX_ID}`, { waitUntil: 'networkidle' });
 
     await expect(page.locator('#explorer-content')).toContainText('Status');
-    await expect(page.locator('#explorer-content')).toContainText('Mempool');
+    await expect(page.locator('#explorer-content')).toContainText('Unconfirmed');
+    await expect(page.locator('#explorer-content')).toContainText('Waiting in mempool');
+  });
+
+  test('renders low-confirmation tx as confirming', async ({ page }) => {
+    await mockApiTx(page, {
+      ...fixtures.tx,
+      blockHash: fixtures.block.hash,
+      blockHeight: fixtures.block.height,
+      confirmations: 2,
+    });
+    await page.goto(`/#/tx/${SAMPLE_TX_ID}`, { waitUntil: 'networkidle' });
+
+    await expect(page.locator('#explorer-content')).toContainText('Confirming');
+    await expect(page.locator('#explorer-content')).toContainText('2 confirmations');
+    await expect(page.locator('#explorer-content')).toContainText('Included In');
+  });
+
+  test('renders deep-confirmation tx as confirmed', async ({ page }) => {
+    await mockApiTx(page, {
+      ...fixtures.tx,
+      blockHash: fixtures.block.hash,
+      blockHeight: fixtures.block.height,
+      confirmations: 6,
+    });
+    await page.goto(`/#/tx/${SAMPLE_TX_ID}`, { waitUntil: 'networkidle' });
+
+    await expect(page.locator('#explorer-content')).toContainText('Confirmed');
+    await expect(page.locator('#explorer-content')).toContainText('6 confirmations');
   });
 
   test('shows connection error when network is down', async ({ page }) => {

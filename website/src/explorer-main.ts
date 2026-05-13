@@ -267,6 +267,31 @@ function isConfirmedTx(tx: Transaction): boolean {
   return typeof tx.blockHash === 'string' && typeof tx.blockHeight === 'number';
 }
 
+function txStatus(tx: Transaction): { label: string; color: 'cyan' | 'qubit' | 'blue'; detail: string } {
+  if (!isConfirmedTx(tx)) {
+    return {
+      label: 'Unconfirmed',
+      color: 'blue',
+      detail: 'Waiting in mempool',
+    };
+  }
+
+  const confirmations = Math.max(tx.confirmations ?? 0, 0);
+  if (confirmations >= 6) {
+    return {
+      label: 'Confirmed',
+      color: 'cyan',
+      detail: `${confirmations} confirmations`,
+    };
+  }
+
+  return {
+    label: 'Confirming',
+    color: 'qubit',
+    detail: `${confirmations} confirmation${confirmations === 1 ? '' : 's'}`,
+  };
+}
+
 function txTypeBadge(tx: Transaction | MempoolTx): string {
   if (isCoinbase(tx)) return badge('Coinbase', 'cyan');
   if (isClaim(tx)) return badge('Claim', 'qubit');
@@ -649,6 +674,7 @@ async function renderTx(txid: string): Promise<void> {
   const sender = await senderAddress(tx);
   const amount = transferAmount(tx, sender);
   const totalOut = tx.outputs.reduce((s, o) => s + o.amount, 0);
+  const status = txStatus(tx);
 
   // Look up input amounts for regular transfers (fee + display)
   let fee: number | null = null;
@@ -690,7 +716,10 @@ async function renderTx(txid: string): Promise<void> {
       </div>` : ''}
       <div>
         <p class="text-text-muted mb-1">Status</p>
-        <p>${isConfirmedTx(tx) ? badge('Confirmed', 'cyan') : badge('Mempool', 'blue')}</p>
+        <div class="flex flex-col gap-1">
+          <p>${badge(status.label, status.color)}</p>
+          <p class="text-text-muted text-xs">${status.detail}</p>
+        </div>
       </div>${isConfirmedTx(tx) ? `
       <div>
         <p class="text-text-muted mb-1">Included In</p>
