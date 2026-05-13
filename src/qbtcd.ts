@@ -13,6 +13,7 @@
  *   --full            Auto-download snapshot if missing, then start as full node
  *   --local           Run without default seed (isolated local chain)
  *   --rpc-bind <addr> RPC bind address (default 127.0.0.1)
+ *   --rpc-trust-proxy <value> Trusted proxy hops/networks for forwarded client IPs
  *   --simulate        Enable periodic mining and transaction simulation (dev only)
  */
 import { Node } from './node.js'
@@ -28,6 +29,7 @@ import { FileBlockStorage } from './storage.js'
 import { P2PServer } from './p2p/server.js'
 import type { BtcSnapshot } from './snapshot.js'
 import { log } from './log.js'
+import { parseRpcTrustProxy } from './rpc-trust-proxy.js'
 
 // Parse CLI args
 function parseArgs() {
@@ -54,6 +56,7 @@ Options:
   --local                 Run without default seed (isolated local chain)
   --message <text>        Coinbase message included in every mined block
   --rpc-bind <addr>       RPC bind address (default 127.0.0.1)
+  --rpc-trust-proxy <v>   Trusted proxy hops/networks (default: loopback,linklocal,uniquelocal; use 1/2 for hop counts, true for all proxies)
   --simulate              Dev mode: pinned easy difficulty, fake txs
   -h, --help              Show this help`)
       process.exit(0)
@@ -87,6 +90,7 @@ Options:
     simulate: flags.has('simulate'),
     message: opts['message'] ?? null,
     rpcBind: opts['rpc-bind'] ?? '127.0.0.1',
+    rpcTrustProxy: parseRpcTrustProxy(opts['rpc-trust-proxy']),
   }
 }
 
@@ -161,6 +165,7 @@ async function main() {
     full: config.full,
     local: config.local,
     simulate: config.simulate,
+    rpcTrustProxy: config.rpcTrustProxy,
   })
 
   // Default to public seed when mining or running as full node, unless --local
@@ -226,7 +231,7 @@ async function main() {
   }
 
   // Start RPC
-  const rpcApp = startRpcServer(node, config.port, p2p, config.rpcBind)
+  const rpcApp = startRpcServer(node, config.port, p2p, config.rpcBind, config.rpcTrustProxy)
   rpcApp.listen(config.port, config.rpcBind, () => {
     log.info({ component: 'rpc', port: config.port, bind: config.rpcBind, url: `http://${config.rpcBind}:${config.port}` }, 'RPC server listening')
   })

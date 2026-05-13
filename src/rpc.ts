@@ -10,6 +10,7 @@ import { DIFFICULTY_ADJUSTMENT_INTERVAL, STARTING_DIFFICULTY } from './block.js'
 import { log } from './log.js';
 import { isValidHash, sanitize } from './utils.js';
 import type { Request, Response, NextFunction, Express } from 'express';
+import { DEFAULT_TRUSTED_PROXIES, type RpcTrustProxy } from './rpc-trust-proxy.js';
 
 /** Maximum JSON body size (1 MB) */
 const MAX_BODY_SIZE = '1mb';
@@ -74,9 +75,15 @@ function sendError(res: Response, status: number, error: string): void {
   res.status(status).json({ error });
 }
 
-export function startRpcServer(node: Node, port: number, p2pServer?: P2PServer, bindAddress: string = '127.0.0.1'): Express {
+export function startRpcServer(
+  node: Node,
+  port: number,
+  p2pServer?: P2PServer,
+  bindAddress: string = '127.0.0.1',
+  trustProxy: RpcTrustProxy = [...DEFAULT_TRUSTED_PROXIES],
+): Express {
   const app = express();
-  app.set('trust proxy', 1);
+  app.set('trust proxy', trustProxy);
   app.disable('x-powered-by');
   app.use(cors({ origin: bindAddress === '127.0.0.1' ? true : false }));
   app.use(express.json({ limit: MAX_BODY_SIZE }));
