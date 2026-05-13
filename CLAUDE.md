@@ -134,3 +134,4 @@ The legacy `pnpm ship` script still exists as a reminder shim; `scripts/deploy.s
 | File | Topic | Load when |
 |------|-------|-----------|
 | `docs/BRIDGE.md` | ZK bridge (SP1 + Groth16) to wrap QBTC as ERC-20 on Base L2 — design-only, no implementation | Working on cross-chain bridge, wQBTC minting, or SP1/Groth16 proof integration |
+| `docs/RPC.md` | RPC server proxy-trust and rate-limit client-IP handling notes | Working on RPC deployment, reverse-proxy setup, or `--rpc-trust-proxy` behavior |
