@@ -53,6 +53,10 @@ const BINARY_FIELD_MAX_HEX_LEN: Record<string, number> = {
   witnessSignatures:  3840,  // up to 30 × 64-byte ECDSA sigs
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 function safeHexToBytes(field: string, hex: string): Uint8Array {
   const maxLen = BINARY_FIELD_MAX_HEX_LEN[field]
   if (maxLen !== undefined && hex.length > maxLen) {
@@ -74,7 +78,10 @@ export function deserializeTransaction(raw: Record<string, unknown>): Transactio
     if (raw.inputs.length > MAX_TX_INPUTS) {
       throw new Error(`Transaction input count ${raw.inputs.length} exceeds limit ${MAX_TX_INPUTS}`)
     }
-    tx.inputs = raw.inputs.map((inp: Record<string, unknown>) => {
+    tx.inputs = raw.inputs.map((inp: unknown, index: number) => {
+      if (!isRecord(inp)) {
+        throw new Error(`Transaction input at index ${index} must be an object`)
+      }
       const input = inp as unknown as TransactionInput
       for (const field of TX_INPUT_BINARY_FIELDS) {
         if (typeof inp[field] === 'string') {
@@ -86,7 +93,10 @@ export function deserializeTransaction(raw: Record<string, unknown>): Transactio
   }
 
   // Restore claimData
-  if (raw.claimData && typeof raw.claimData === 'object') {
+  if (raw.claimData !== undefined) {
+    if (!isRecord(raw.claimData)) {
+      throw new Error('Transaction claimData must be an object')
+    }
     const cd = raw.claimData as Record<string, unknown>
     for (const field of CLAIM_DATA_BINARY_FIELDS) {
       if (typeof cd[field] === 'string') {

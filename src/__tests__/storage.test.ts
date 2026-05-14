@@ -374,6 +374,27 @@ describe('deserializeTransaction', () => {
     }
     expect(() => deserializeTransaction(raw as any)).toThrow(/input count.*exceeds limit/)
   })
+
+  it('throws when an input entry is not an object', () => {
+    const raw = {
+      id: 'abc',
+      inputs: [null],
+      outputs: [],
+      timestamp: 1,
+    }
+    expect(() => deserializeTransaction(raw as any)).toThrow('Transaction input at index 0 must be an object')
+  })
+
+  it('throws when claimData is present but not an object', () => {
+    const raw = {
+      id: 'abc',
+      inputs: [],
+      outputs: [],
+      timestamp: 1,
+      claimData: 'not-an-object',
+    }
+    expect(() => deserializeTransaction(raw as any)).toThrow('Transaction claimData must be an object')
+  })
 })
 
 describe('deserializeBlock', () => {
