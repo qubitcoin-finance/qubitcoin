@@ -46,7 +46,7 @@ export function assembleCandidateBlock(
   let totalFees = 0
   for (const tx of pendingTxs) {
     const txSize = transactionSize(tx)
-    if (txSize > remainingSize) break
+    if (txSize > remainingSize) continue
     includedTxs.push(tx)
     totalFees += calculateFee(tx, chain.utxoSet)
     remainingSize -= txSize

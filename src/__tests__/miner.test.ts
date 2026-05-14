@@ -328,6 +328,68 @@ describe('assembleCandidateBlock respects block size limit', () => {
     expect(candidate.transactions.length).toBeGreaterThan(1) // at least coinbase + 1
     expect(candidate.transactions.length).toBeLessThan(numTxs + 1) // not all of them
   })
+
+  it('skips oversized transactions and still includes later transactions that fit', () => {
+    const chain = new Blockchain()
+    chain.difficulty = TEST_TARGET
+    const mempool = new Mempool()
+
+    const block1 = mineOnChain(chain, walletA.address)
+    chain.addBlock(block1)
+
+    const oversizedClaim: Transaction = {
+      id: doubleSha256Hex(new TextEncoder().encode('oversized-claim')),
+      inputs: [
+        {
+          txId: CLAIM_TXID,
+          outputIndex: 0,
+          publicKey: new Uint8Array(0),
+          signature: new Uint8Array(0),
+        },
+      ],
+      outputs: [{ address: walletB.address, amount: 100 }],
+      timestamp: Date.now(),
+      claimData: {
+        btcAddress: doubleSha256Hex(new TextEncoder().encode('oversized-btc-address')).slice(0, 40),
+        ecdsaPublicKey: new Uint8Array(33),
+        ecdsaSignature: new Uint8Array(MAX_BLOCK_SIZE),
+        qbtcAddress: walletB.address,
+      },
+    }
+
+    const smallClaim: Transaction = {
+      id: doubleSha256Hex(new TextEncoder().encode('small-claim')),
+      inputs: [
+        {
+          txId: CLAIM_TXID,
+          outputIndex: 0,
+          publicKey: new Uint8Array(0),
+          signature: new Uint8Array(0),
+        },
+      ],
+      outputs: [{ address: walletB.address, amount: 100 }],
+      timestamp: Date.now() + 1,
+      claimData: {
+        btcAddress: doubleSha256Hex(new TextEncoder().encode('small-btc-address')).slice(0, 40),
+        ecdsaPublicKey: new Uint8Array(33),
+        ecdsaSignature: new Uint8Array(64),
+        qbtcAddress: walletB.address,
+      },
+    }
+
+    expect(transactionSize(oversizedClaim)).toBeGreaterThan(MAX_BLOCK_SIZE)
+    expect(transactionSize(smallClaim)).toBeLessThan(MAX_BLOCK_SIZE)
+
+    mempool.addTransaction(oversizedClaim, chain.utxoSet)
+    mempool.addTransaction(smallClaim, chain.utxoSet)
+
+    const candidate = assembleCandidateBlock(chain, mempool, walletA.address)
+    const includedIds = candidate.transactions.map((tx) => tx.id)
+
+    expect(includedIds).toContain(smallClaim.id)
+    expect(includedIds).not.toContain(oversizedClaim.id)
+    expect(blockSize(candidate)).toBeLessThanOrEqual(MAX_BLOCK_SIZE)
+  })
 })
 
 // ─────────────────────────────────────────────────────────────
