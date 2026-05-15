@@ -109,7 +109,25 @@ export function deserializeTransaction(raw: Record<string, unknown>): Transactio
   return tx
 }
 
+function validateBlockShape(raw: Record<string, unknown>): void {
+  if (!isRecord(raw.header)) {
+    throw new Error('Block missing valid header object')
+  }
+  const hdr = raw.header as Record<string, unknown>
+  if (typeof hdr.version !== 'number') throw new Error('Block header.version must be a number')
+  if (typeof hdr.previousHash !== 'string') throw new Error('Block header.previousHash must be a string')
+  if (typeof hdr.merkleRoot !== 'string') throw new Error('Block header.merkleRoot must be a string')
+  if (typeof hdr.timestamp !== 'number') throw new Error('Block header.timestamp must be a number')
+  if (typeof hdr.target !== 'string') throw new Error('Block header.target must be a string')
+  if (typeof hdr.nonce !== 'number') throw new Error('Block header.nonce must be a number')
+  if (typeof raw.hash !== 'string') throw new Error('Block missing valid hash string')
+  if (!Number.isInteger(raw.height) || (raw.height as number) < 0) {
+    throw new Error(`Block height must be a non-negative integer, got ${String(raw.height)}`)
+  }
+}
+
 export function deserializeBlock(raw: Record<string, unknown>): Block {
+  validateBlockShape(raw)
   const block = raw as unknown as Block
   if (Array.isArray(raw.transactions)) {
     if (raw.transactions.length > MAX_BLOCK_TRANSACTIONS) {

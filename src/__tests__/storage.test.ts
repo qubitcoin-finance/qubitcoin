@@ -509,6 +509,120 @@ describe('deserializeBlock', () => {
       'Block transaction at index 0 is invalid: Transaction input at index 0 must be an object'
     )
   })
+
+  it('throws when header is missing', () => {
+    const raw = { hash: 'a'.repeat(64), height: 0, transactions: [] }
+    expect(() => deserializeBlock(raw as any)).toThrow('Block missing valid header object')
+  })
+
+  it('throws when header is null', () => {
+    const raw = { hash: 'a'.repeat(64), height: 0, header: null, transactions: [] }
+    expect(() => deserializeBlock(raw as any)).toThrow('Block missing valid header object')
+  })
+
+  it('throws when header is a non-object type', () => {
+    const raw = { hash: 'a'.repeat(64), height: 0, header: 'not-an-object', transactions: [] }
+    expect(() => deserializeBlock(raw as any)).toThrow('Block missing valid header object')
+  })
+
+  it('throws when header.version is not a number', () => {
+    const raw = {
+      hash: 'a'.repeat(64), height: 0,
+      header: { version: '1', previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: 0 },
+      transactions: [],
+    }
+    expect(() => deserializeBlock(raw as any)).toThrow('Block header.version must be a number')
+  })
+
+  it('throws when header.previousHash is not a string', () => {
+    const raw = {
+      hash: 'a'.repeat(64), height: 0,
+      header: { version: 1, previousHash: null, merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: 0 },
+      transactions: [],
+    }
+    expect(() => deserializeBlock(raw as any)).toThrow('Block header.previousHash must be a string')
+  })
+
+  it('throws when header.merkleRoot is not a string', () => {
+    const raw = {
+      hash: 'a'.repeat(64), height: 0,
+      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 99, timestamp: 1, target: 'tt', nonce: 0 },
+      transactions: [],
+    }
+    expect(() => deserializeBlock(raw as any)).toThrow('Block header.merkleRoot must be a string')
+  })
+
+  it('throws when header.timestamp is not a number', () => {
+    const raw = {
+      hash: 'a'.repeat(64), height: 0,
+      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: '1', target: 'tt', nonce: 0 },
+      transactions: [],
+    }
+    expect(() => deserializeBlock(raw as any)).toThrow('Block header.timestamp must be a number')
+  })
+
+  it('throws when header.target is not a string', () => {
+    const raw = {
+      hash: 'a'.repeat(64), height: 0,
+      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 42, nonce: 0 },
+      transactions: [],
+    }
+    expect(() => deserializeBlock(raw as any)).toThrow('Block header.target must be a string')
+  })
+
+  it('throws when header.nonce is not a number', () => {
+    const raw = {
+      hash: 'a'.repeat(64), height: 0,
+      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: null },
+      transactions: [],
+    }
+    expect(() => deserializeBlock(raw as any)).toThrow('Block header.nonce must be a number')
+  })
+
+  it('throws when hash is missing', () => {
+    const raw = {
+      height: 0,
+      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: 0 },
+      transactions: [],
+    }
+    expect(() => deserializeBlock(raw as any)).toThrow('Block missing valid hash string')
+  })
+
+  it('throws when hash is not a string', () => {
+    const raw = {
+      hash: 123, height: 0,
+      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: 0 },
+      transactions: [],
+    }
+    expect(() => deserializeBlock(raw as any)).toThrow('Block missing valid hash string')
+  })
+
+  it('throws when height is missing', () => {
+    const raw = {
+      hash: 'a'.repeat(64),
+      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: 0 },
+      transactions: [],
+    }
+    expect(() => deserializeBlock(raw as any)).toThrow('Block height must be a non-negative integer')
+  })
+
+  it('throws when height is a float', () => {
+    const raw = {
+      hash: 'a'.repeat(64), height: 1.5,
+      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: 0 },
+      transactions: [],
+    }
+    expect(() => deserializeBlock(raw as any)).toThrow('Block height must be a non-negative integer')
+  })
+
+  it('throws when height is negative', () => {
+    const raw = {
+      hash: 'a'.repeat(64), height: -1,
+      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: 0 },
+      transactions: [],
+    }
+    expect(() => deserializeBlock(raw as any)).toThrow('Block height must be a non-negative integer')
+  })
 })
 
 describe('sanitizeForStorage', () => {
