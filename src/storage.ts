@@ -115,9 +115,17 @@ export function deserializeBlock(raw: Record<string, unknown>): Block {
     if (raw.transactions.length > MAX_BLOCK_TRANSACTIONS) {
       throw new Error(`Block transaction count ${raw.transactions.length} exceeds limit ${MAX_BLOCK_TRANSACTIONS}`)
     }
-    block.transactions = raw.transactions.map((t: Record<string, unknown>) =>
-      deserializeTransaction(t)
-    )
+    block.transactions = raw.transactions.map((tx, index) => {
+      if (!isRecord(tx)) {
+        throw new Error(`Block transaction at index ${index} must be an object`)
+      }
+      try {
+        return deserializeTransaction(tx)
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err)
+        throw new Error(`Block transaction at index ${index} is invalid: ${detail}`)
+      }
+    })
   }
   return block
 }
@@ -153,7 +161,8 @@ export class FileBlockStorage implements BlockStorage {
       try {
         blocks.push(deserializeBlock(JSON.parse(line)))
       } catch (err) {
-        log.error({ component: 'storage', line: i, err }, 'Skipping corrupted block entry in blocks.jsonl')
+        const detail = err instanceof Error ? err.message : String(err)
+        log.error({ component: 'storage', line: i + 1, err, detail }, 'Skipping corrupted block entry in blocks.jsonl')
       }
     }
     return blocks

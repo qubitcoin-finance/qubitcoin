@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { FileBlockStorage, sanitizeForStorage, deserializeTransaction, deserializeBlock } from '../storage.js'
 import { Blockchain } from '../chain.js'
+import { log } from '../log.js'
 import {
   createCoinbaseTransaction,
   utxoKey,
@@ -232,6 +233,39 @@ describe('FileBlockStorage', () => {
     fs.writeFileSync(metadataPath, 'NOT VALID JSON {{{')
     expect(storage.loadMetadata()).toBeNull()
   })
+
+  it('should log line number and transaction detail for malformed persisted blocks', () => {
+    const storage = new FileBlockStorage(tmpDir)
+    const errorSpy = vi.spyOn(log, 'error').mockImplementation(() => log)
+    const blocksPath = path.join(tmpDir, 'blocks.jsonl')
+    const malformedBlock = {
+      hash: 'broken',
+      height: 1,
+      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: 0 },
+      transactions: [
+        {
+          id: 'tx1',
+          inputs: [null],
+          outputs: [],
+          timestamp: 1,
+        },
+      ],
+    }
+
+    fs.writeFileSync(blocksPath, JSON.stringify(malformedBlock) + '\n')
+
+    expect(storage.loadBlocks()).toEqual([])
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        component: 'storage',
+        line: 1,
+        detail: 'Block transaction at index 0 is invalid: Transaction input at index 0 must be an object',
+      }),
+      'Skipping corrupted block entry in blocks.jsonl'
+    )
+
+    errorSpy.mockRestore()
+  })
 })
 
 describe('deserializeTransaction', () => {
@@ -445,6 +479,35 @@ describe('deserializeBlock', () => {
       transactions: new Array(MAX_BLOCK_TRANSACTIONS + 1).fill({ id: 'x', inputs: [], outputs: [], timestamp: 0 }),
     }
     expect(() => deserializeBlock(raw as any)).toThrow(/exceeds limit/)
+  })
+
+  it('throws when a transaction entry is not an object', () => {
+    const raw = {
+      hash: 'bh',
+      height: 1,
+      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: 0 },
+      transactions: [null],
+    }
+    expect(() => deserializeBlock(raw as any)).toThrow('Block transaction at index 0 must be an object')
+  })
+
+  it('wraps nested transaction failures with the block transaction index', () => {
+    const raw = {
+      hash: 'bh',
+      height: 1,
+      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: 0 },
+      transactions: [
+        {
+          id: 'tx1',
+          inputs: [null],
+          outputs: [],
+          timestamp: 1,
+        },
+      ],
+    }
+    expect(() => deserializeBlock(raw as any)).toThrow(
+      'Block transaction at index 0 is invalid: Transaction input at index 0 must be an object'
+    )
   })
 })
 
