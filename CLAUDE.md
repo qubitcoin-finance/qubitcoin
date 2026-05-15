@@ -9,6 +9,7 @@ Post-quantum Bitcoin fork using ML-DSA-65 (Dilithium) signatures. Node.js/TypeSc
 - **Test:** `pnpm test` (vitest, ~635 tests — count drifts as tests are added)
 - **Build:** `pnpm build` (tsc)
 - **Run node:** `pnpm run qbtcd -- --mine --full`
+- **Package manager:** Use `pnpm` (target `pnpm 11`); `package.json` is still pinned to `pnpm@9.15.9`, so plan an upgrade.
 - **Docker image:** `ghcr.io/qubitcoin-finance/qbtcd:main`
 - **Containers** (current deployment stack on the self-hosted runner):
   - `qbtc-miner` — host-networked compose service running the miner/node image, RPC on `127.0.0.1:3010`, data `/home/qubitcoin/qbtc-data`, snapshot `/home/qubitcoin/qbtc-snapshot.jsonl` mounted read-only at `/snapshot.jsonl`
