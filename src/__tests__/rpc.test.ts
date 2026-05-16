@@ -1,4 +1,4 @@
-import { describe, it, expect, afterAll, beforeAll } from 'vitest'
+import { describe, it, expect, afterAll, afterEach, beforeAll, beforeEach } from 'vitest'
 import fs from 'node:fs'
 import http from 'node:http'
 import os from 'node:os'
@@ -316,7 +316,7 @@ describe('RPC transaction endpoints', () => {
   let server: Server
   let baseUrl: string
 
-  beforeAll(() => {
+  beforeEach(() => {
     const { snapshot, holders } = createMockSnapshot()
     node = new Node('rpc-tx-test', snapshot)
     node.chain.difficulty = TEST_TARGET
@@ -332,7 +332,7 @@ describe('RPC transaction endpoints', () => {
     baseUrl = `http://127.0.0.1:${addr.port}`
   })
 
-  afterAll(() => {
+  afterEach(() => {
     server.close()
   })
 
