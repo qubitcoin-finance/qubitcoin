@@ -26,7 +26,7 @@ Post-quantum Bitcoin fork using ML-DSA-65 (Dilithium) signatures. Node.js/TypeSc
 3. **release.yml** — tags and creates GitHub release
 
 Push to `main` triggers automatic deployment. No SSH required.
-The legacy `pnpm ship` script still exists as a reminder shim; `scripts/deploy.sh` is not part of the current workflow.
+The legacy `pnpm ship` script still exists as a reminder shim; its message still points at `.github/workflows/docker.yml`, but the active workflow is `.github/workflows/deploy.yml`, and `scripts/deploy.sh` is not part of the current workflow.
 
 **Runner setup:**
 - Self-hosted runner registered via GitHub UI (Settings → Actions → Runners)
