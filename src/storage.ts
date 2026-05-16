@@ -8,7 +8,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { hexToBytes } from './crypto.js'
-import { sanitize } from './utils.js'
+import { isValidHash, sanitize } from './utils.js'
 import { log } from './log.js'
 import { MAX_BLOCK_TRANSACTIONS } from './block.js'
 import type { Block } from './block.js'
@@ -116,11 +116,23 @@ function validateBlockShape(raw: Record<string, unknown>): void {
   const hdr = raw.header as Record<string, unknown>
   if (typeof hdr.version !== 'number') throw new Error('Block header.version must be a number')
   if (typeof hdr.previousHash !== 'string') throw new Error('Block header.previousHash must be a string')
+  if (!isValidHash(hdr.previousHash)) {
+    throw new Error('Block header.previousHash must be a 64-character lowercase hex string')
+  }
   if (typeof hdr.merkleRoot !== 'string') throw new Error('Block header.merkleRoot must be a string')
+  if (!isValidHash(hdr.merkleRoot)) {
+    throw new Error('Block header.merkleRoot must be a 64-character lowercase hex string')
+  }
   if (typeof hdr.timestamp !== 'number') throw new Error('Block header.timestamp must be a number')
   if (typeof hdr.target !== 'string') throw new Error('Block header.target must be a string')
+  if (!isValidHash(hdr.target)) {
+    throw new Error('Block header.target must be a 64-character lowercase hex string')
+  }
   if (typeof hdr.nonce !== 'number') throw new Error('Block header.nonce must be a number')
   if (typeof raw.hash !== 'string') throw new Error('Block missing valid hash string')
+  if (!isValidHash(raw.hash)) {
+    throw new Error('Block hash must be a 64-character lowercase hex string')
+  }
   if (!Number.isInteger(raw.height) || (raw.height as number) < 0) {
     throw new Error(`Block height must be a non-negative integer, got ${String(raw.height)}`)
   }

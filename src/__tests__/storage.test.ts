@@ -21,6 +21,12 @@ import {
 
 import { walletA } from './fixtures.js'
 const TEST_TARGET = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+const VALID_BLOCK_HEADER_FIELDS = {
+  previousHash: '0'.repeat(64),
+  merkleRoot: '1'.repeat(64),
+  target: 'f'.repeat(64),
+}
+const VALID_BLOCK_HASH = '2'.repeat(64)
 
 function mineOnChain(chain: Blockchain, minerAddress: string): Block {
   chain.difficulty = TEST_TARGET
@@ -239,9 +245,16 @@ describe('FileBlockStorage', () => {
     const errorSpy = vi.spyOn(log, 'error').mockImplementation(() => log)
     const blocksPath = path.join(tmpDir, 'blocks.jsonl')
     const malformedBlock = {
-      hash: 'broken',
+      hash: VALID_BLOCK_HASH,
       height: 1,
-      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: 0 },
+      header: {
+        version: 1,
+        previousHash: VALID_BLOCK_HEADER_FIELDS.previousHash,
+        merkleRoot: VALID_BLOCK_HEADER_FIELDS.merkleRoot,
+        timestamp: 1,
+        target: VALID_BLOCK_HEADER_FIELDS.target,
+        nonce: 0,
+      },
       transactions: [
         {
           id: 'tx1',
@@ -260,6 +273,39 @@ describe('FileBlockStorage', () => {
         component: 'storage',
         line: 1,
         detail: 'Block transaction at index 0 is invalid: Transaction input at index 0 must be an object',
+      }),
+      'Skipping corrupted block entry in blocks.jsonl'
+    )
+
+    errorSpy.mockRestore()
+  })
+
+  it('should skip persisted blocks with non-canonical hash strings', () => {
+    const storage = new FileBlockStorage(tmpDir)
+    const errorSpy = vi.spyOn(log, 'error').mockImplementation(() => log)
+    const blocksPath = path.join(tmpDir, 'blocks.jsonl')
+    const malformedBlock = {
+      hash: 'A'.repeat(64),
+      height: 1,
+      header: {
+        version: 1,
+        previousHash: VALID_BLOCK_HEADER_FIELDS.previousHash,
+        merkleRoot: VALID_BLOCK_HEADER_FIELDS.merkleRoot,
+        timestamp: 1,
+        target: VALID_BLOCK_HEADER_FIELDS.target,
+        nonce: 0,
+      },
+      transactions: [],
+    }
+
+    fs.writeFileSync(blocksPath, JSON.stringify(malformedBlock) + '\n')
+
+    expect(storage.loadBlocks()).toEqual([])
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        component: 'storage',
+        line: 1,
+        detail: 'Block hash must be a 64-character lowercase hex string',
       }),
       'Skipping corrupted block entry in blocks.jsonl'
     )
@@ -432,11 +478,15 @@ describe('deserializeTransaction', () => {
 })
 
 describe('deserializeBlock', () => {
+  const validHeaderFields = {
+    ...VALID_BLOCK_HEADER_FIELDS,
+  }
+
   it('deserializes all transactions in a block', () => {
     const raw = {
-      hash: 'blockhash',
+      hash: VALID_BLOCK_HASH,
       height: 1,
-      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: 0 },
+      header: { version: 1, previousHash: validHeaderFields.previousHash, merkleRoot: validHeaderFields.merkleRoot, timestamp: 1, target: validHeaderFields.target, nonce: 0 },
       transactions: [
         {
           id: 'tx1',
@@ -462,9 +512,9 @@ describe('deserializeBlock', () => {
 
   it('handles block with no transactions', () => {
     const raw = {
-      hash: 'bh',
+      hash: VALID_BLOCK_HASH,
       height: 0,
-      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: 0 },
+      header: { version: 1, previousHash: validHeaderFields.previousHash, merkleRoot: validHeaderFields.merkleRoot, timestamp: 1, target: validHeaderFields.target, nonce: 0 },
       transactions: [],
     }
     const block = deserializeBlock(raw as any)
@@ -473,9 +523,9 @@ describe('deserializeBlock', () => {
 
   it('throws when transaction count exceeds MAX_BLOCK_TRANSACTIONS', () => {
     const raw = {
-      hash: 'bh',
+      hash: VALID_BLOCK_HASH,
       height: 1,
-      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: 0 },
+      header: { version: 1, previousHash: validHeaderFields.previousHash, merkleRoot: validHeaderFields.merkleRoot, timestamp: 1, target: validHeaderFields.target, nonce: 0 },
       transactions: new Array(MAX_BLOCK_TRANSACTIONS + 1).fill({ id: 'x', inputs: [], outputs: [], timestamp: 0 }),
     }
     expect(() => deserializeBlock(raw as any)).toThrow(/exceeds limit/)
@@ -483,9 +533,9 @@ describe('deserializeBlock', () => {
 
   it('throws when a transaction entry is not an object', () => {
     const raw = {
-      hash: 'bh',
+      hash: VALID_BLOCK_HASH,
       height: 1,
-      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: 0 },
+      header: { version: 1, previousHash: validHeaderFields.previousHash, merkleRoot: validHeaderFields.merkleRoot, timestamp: 1, target: validHeaderFields.target, nonce: 0 },
       transactions: [null],
     }
     expect(() => deserializeBlock(raw as any)).toThrow('Block transaction at index 0 must be an object')
@@ -493,9 +543,9 @@ describe('deserializeBlock', () => {
 
   it('wraps nested transaction failures with the block transaction index', () => {
     const raw = {
-      hash: 'bh',
+      hash: VALID_BLOCK_HASH,
       height: 1,
-      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: 0 },
+      header: { version: 1, previousHash: validHeaderFields.previousHash, merkleRoot: validHeaderFields.merkleRoot, timestamp: 1, target: validHeaderFields.target, nonce: 0 },
       transactions: [
         {
           id: 'tx1',
@@ -528,7 +578,7 @@ describe('deserializeBlock', () => {
   it('throws when header.version is not a number', () => {
     const raw = {
       hash: 'a'.repeat(64), height: 0,
-      header: { version: '1', previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: 0 },
+      header: { version: '1', previousHash: validHeaderFields.previousHash, merkleRoot: validHeaderFields.merkleRoot, timestamp: 1, target: validHeaderFields.target, nonce: 0 },
       transactions: [],
     }
     expect(() => deserializeBlock(raw as any)).toThrow('Block header.version must be a number')
@@ -537,25 +587,43 @@ describe('deserializeBlock', () => {
   it('throws when header.previousHash is not a string', () => {
     const raw = {
       hash: 'a'.repeat(64), height: 0,
-      header: { version: 1, previousHash: null, merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: 0 },
+      header: { version: 1, previousHash: null, merkleRoot: validHeaderFields.merkleRoot, timestamp: 1, target: validHeaderFields.target, nonce: 0 },
       transactions: [],
     }
     expect(() => deserializeBlock(raw as any)).toThrow('Block header.previousHash must be a string')
   })
 
+  it('throws when header.previousHash is not canonical lowercase hex', () => {
+    const raw = {
+      hash: 'a'.repeat(64), height: 0,
+      header: { version: 1, previousHash: 'A'.repeat(64), merkleRoot: validHeaderFields.merkleRoot, timestamp: 1, target: validHeaderFields.target, nonce: 0 },
+      transactions: [],
+    }
+    expect(() => deserializeBlock(raw as any)).toThrow('Block header.previousHash must be a 64-character lowercase hex string')
+  })
+
   it('throws when header.merkleRoot is not a string', () => {
     const raw = {
       hash: 'a'.repeat(64), height: 0,
-      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 99, timestamp: 1, target: 'tt', nonce: 0 },
+      header: { version: 1, previousHash: validHeaderFields.previousHash, merkleRoot: 99, timestamp: 1, target: validHeaderFields.target, nonce: 0 },
       transactions: [],
     }
     expect(() => deserializeBlock(raw as any)).toThrow('Block header.merkleRoot must be a string')
   })
 
+  it('throws when header.merkleRoot is not canonical lowercase hex', () => {
+    const raw = {
+      hash: 'a'.repeat(64), height: 0,
+      header: { version: 1, previousHash: validHeaderFields.previousHash, merkleRoot: 'g'.repeat(64), timestamp: 1, target: validHeaderFields.target, nonce: 0 },
+      transactions: [],
+    }
+    expect(() => deserializeBlock(raw as any)).toThrow('Block header.merkleRoot must be a 64-character lowercase hex string')
+  })
+
   it('throws when header.timestamp is not a number', () => {
     const raw = {
       hash: 'a'.repeat(64), height: 0,
-      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: '1', target: 'tt', nonce: 0 },
+      header: { version: 1, previousHash: validHeaderFields.previousHash, merkleRoot: validHeaderFields.merkleRoot, timestamp: '1', target: validHeaderFields.target, nonce: 0 },
       transactions: [],
     }
     expect(() => deserializeBlock(raw as any)).toThrow('Block header.timestamp must be a number')
@@ -564,16 +632,25 @@ describe('deserializeBlock', () => {
   it('throws when header.target is not a string', () => {
     const raw = {
       hash: 'a'.repeat(64), height: 0,
-      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 42, nonce: 0 },
+      header: { version: 1, previousHash: validHeaderFields.previousHash, merkleRoot: validHeaderFields.merkleRoot, timestamp: 1, target: 42, nonce: 0 },
       transactions: [],
     }
     expect(() => deserializeBlock(raw as any)).toThrow('Block header.target must be a string')
   })
 
+  it('throws when header.target is not canonical lowercase hex', () => {
+    const raw = {
+      hash: 'a'.repeat(64), height: 0,
+      header: { version: 1, previousHash: validHeaderFields.previousHash, merkleRoot: validHeaderFields.merkleRoot, timestamp: 1, target: 'f'.repeat(63), nonce: 0 },
+      transactions: [],
+    }
+    expect(() => deserializeBlock(raw as any)).toThrow('Block header.target must be a 64-character lowercase hex string')
+  })
+
   it('throws when header.nonce is not a number', () => {
     const raw = {
       hash: 'a'.repeat(64), height: 0,
-      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: null },
+      header: { version: 1, previousHash: validHeaderFields.previousHash, merkleRoot: validHeaderFields.merkleRoot, timestamp: 1, target: validHeaderFields.target, nonce: null },
       transactions: [],
     }
     expect(() => deserializeBlock(raw as any)).toThrow('Block header.nonce must be a number')
@@ -582,7 +659,7 @@ describe('deserializeBlock', () => {
   it('throws when hash is missing', () => {
     const raw = {
       height: 0,
-      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: 0 },
+      header: { version: 1, previousHash: validHeaderFields.previousHash, merkleRoot: validHeaderFields.merkleRoot, timestamp: 1, target: validHeaderFields.target, nonce: 0 },
       transactions: [],
     }
     expect(() => deserializeBlock(raw as any)).toThrow('Block missing valid hash string')
@@ -591,16 +668,43 @@ describe('deserializeBlock', () => {
   it('throws when hash is not a string', () => {
     const raw = {
       hash: 123, height: 0,
-      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: 0 },
+      header: { version: 1, previousHash: validHeaderFields.previousHash, merkleRoot: validHeaderFields.merkleRoot, timestamp: 1, target: validHeaderFields.target, nonce: 0 },
       transactions: [],
     }
     expect(() => deserializeBlock(raw as any)).toThrow('Block missing valid hash string')
   })
 
+  it('throws when hash is uppercase hex', () => {
+    const raw = {
+      hash: 'A'.repeat(64), height: 0,
+      header: { version: 1, previousHash: validHeaderFields.previousHash, merkleRoot: validHeaderFields.merkleRoot, timestamp: 1, target: validHeaderFields.target, nonce: 0 },
+      transactions: [],
+    }
+    expect(() => deserializeBlock(raw as any)).toThrow('Block hash must be a 64-character lowercase hex string')
+  })
+
+  it('throws when hash is too short', () => {
+    const raw = {
+      hash: 'a'.repeat(63), height: 0,
+      header: { version: 1, previousHash: validHeaderFields.previousHash, merkleRoot: validHeaderFields.merkleRoot, timestamp: 1, target: validHeaderFields.target, nonce: 0 },
+      transactions: [],
+    }
+    expect(() => deserializeBlock(raw as any)).toThrow('Block hash must be a 64-character lowercase hex string')
+  })
+
+  it('throws when hash is non-hex', () => {
+    const raw = {
+      hash: 'g'.repeat(64), height: 0,
+      header: { version: 1, previousHash: validHeaderFields.previousHash, merkleRoot: validHeaderFields.merkleRoot, timestamp: 1, target: validHeaderFields.target, nonce: 0 },
+      transactions: [],
+    }
+    expect(() => deserializeBlock(raw as any)).toThrow('Block hash must be a 64-character lowercase hex string')
+  })
+
   it('throws when height is missing', () => {
     const raw = {
       hash: 'a'.repeat(64),
-      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: 0 },
+      header: { version: 1, previousHash: validHeaderFields.previousHash, merkleRoot: validHeaderFields.merkleRoot, timestamp: 1, target: validHeaderFields.target, nonce: 0 },
       transactions: [],
     }
     expect(() => deserializeBlock(raw as any)).toThrow('Block height must be a non-negative integer')
@@ -609,7 +713,7 @@ describe('deserializeBlock', () => {
   it('throws when height is a float', () => {
     const raw = {
       hash: 'a'.repeat(64), height: 1.5,
-      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: 0 },
+      header: { version: 1, previousHash: validHeaderFields.previousHash, merkleRoot: validHeaderFields.merkleRoot, timestamp: 1, target: validHeaderFields.target, nonce: 0 },
       transactions: [],
     }
     expect(() => deserializeBlock(raw as any)).toThrow('Block height must be a non-negative integer')
@@ -618,7 +722,7 @@ describe('deserializeBlock', () => {
   it('throws when height is negative', () => {
     const raw = {
       hash: 'a'.repeat(64), height: -1,
-      header: { version: 1, previousHash: '0'.repeat(64), merkleRoot: 'mr', timestamp: 1, target: 'tt', nonce: 0 },
+      header: { version: 1, previousHash: validHeaderFields.previousHash, merkleRoot: validHeaderFields.merkleRoot, timestamp: 1, target: validHeaderFields.target, nonce: 0 },
       transactions: [],
     }
     expect(() => deserializeBlock(raw as any)).toThrow('Block height must be a non-negative integer')
