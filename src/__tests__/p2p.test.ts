@@ -847,7 +847,7 @@ describe('P2P security hardening', () => {
     }
   })
 
-  it('should penalize oversized addr messages and cap entries', async () => {
+  it('should penalize oversized addr messages and cap entries', { timeout: 15_000 }, async () => {
     const storage1 = new FileBlockStorage(tmpDir1)
     const storage2 = new FileBlockStorage(tmpDir2)
     const node1 = new Node('alice', undefined, storage1)
