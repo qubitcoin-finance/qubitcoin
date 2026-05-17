@@ -209,14 +209,21 @@ export class Mempool {
   /** Re-validate all transactions against current UTXO set after a reorg */
   revalidate(utxoSet: Map<string, UTXO>, claimedBtcAddresses: Set<string>, currentHeight?: number): void {
     const toRemove: string[] = []
+    const removedIds: Set<string> = new Set()
     const seenClaimKeys: Set<string> = new Set()
-    const seenInputs: Set<string> = new Set()
+    const validRegulars: Array<{ id: string; tx: Transaction; density: number }> = []
+
+    const markForRemoval = (id: string): void => {
+      if (removedIds.has(id)) return
+      removedIds.add(id)
+      toRemove.push(id)
+    }
 
     for (const [id, tx] of this.transactions) {
       if (isClaimTransaction(tx)) {
         const claimKey = tx.claimData!.btcAddress
         if (claimedBtcAddresses.has(claimKey) || seenClaimKeys.has(claimKey)) {
-          toRemove.push(id)
+          markForRemoval(id)
         } else {
           seenClaimKeys.add(claimKey)
         }
@@ -226,25 +233,41 @@ export class Mempool {
       // Re-validate regular transactions against updated UTXO set
       const result = validateTransaction(tx, utxoSet, currentHeight)
       if (!result.valid) {
-        toRemove.push(id)
+        markForRemoval(id)
         continue
       }
 
-      // Check that inputs still exist in UTXO set
-      let keepTransaction = true
       for (const input of tx.inputs) {
         const key = utxoKey(input.txId, input.outputIndex)
-        if (!utxoSet.has(key) || seenInputs.has(key)) {
-          toRemove.push(id)
-          keepTransaction = false
+        if (!utxoSet.has(key)) {
+          markForRemoval(id)
+          break
+        }
+      }
+      if (!removedIds.has(id)) {
+        validRegulars.push({ id, tx, density: this.getFeeDensity(tx, utxoSet) })
+      }
+    }
+
+    const seenInputs: Set<string> = new Set()
+    validRegulars.sort((a, b) => b.density - a.density)
+    for (const candidate of validRegulars) {
+      let conflicts = false
+      for (const input of candidate.tx.inputs) {
+        const key = utxoKey(input.txId, input.outputIndex)
+        if (seenInputs.has(key)) {
+          conflicts = true
           break
         }
       }
 
-      if (keepTransaction) {
-        for (const input of tx.inputs) {
-          seenInputs.add(utxoKey(input.txId, input.outputIndex))
-        }
+      if (conflicts) {
+        markForRemoval(candidate.id)
+        continue
+      }
+
+      for (const input of candidate.tx.inputs) {
+        seenInputs.add(utxoKey(input.txId, input.outputIndex))
       }
     }
 

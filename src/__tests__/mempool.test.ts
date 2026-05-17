@@ -982,32 +982,32 @@ describe('Mempool revalidate edge cases', () => {
     expect(result.success).toBe(true)
   })
 
-  it('revalidate removes conflicting regular double-spends and keeps tracking consistent', () => {
+  it('revalidate keeps the highest-fee conflicting regular tx and rebuilds tracking', () => {
     const mempool = new Mempool()
     const utxoSet = makeUtxoSet(walletA)
 
-    const tx1 = createTransaction(
+    const lowerFeeTx = createTransaction(
       walletA,
       [{ txId: 'a'.repeat(64), outputIndex: 0, address: walletA.address, amount: DEFAULT_AMOUNT }],
       [{ address: 'b'.repeat(64), amount: 5_000_000_000 }],
       DEFAULT_FEE
     )
-    const tx2 = createTransaction(
+    const higherFeeTx = createTransaction(
       walletA,
       [{ txId: 'a'.repeat(64), outputIndex: 0, address: walletA.address, amount: DEFAULT_AMOUNT }],
       [{ address: 'c'.repeat(64), amount: 4_000_000_000 }],
-      DEFAULT_FEE
+      DEFAULT_FEE * 2
     )
 
-    mempool.injectTransaction(tx1, [utxoKey('a'.repeat(64), 0)])
-    mempool.injectTransaction(tx2, [utxoKey('a'.repeat(64), 0)])
+    mempool.injectTransaction(lowerFeeTx, [utxoKey('a'.repeat(64), 0)])
+    mempool.injectTransaction(higherFeeTx, [utxoKey('a'.repeat(64), 0)])
     expect(mempool.size()).toBe(2)
 
     mempool.revalidate(utxoSet, new Set())
 
     expect(mempool.size()).toBe(1)
-    expect(mempool.getTransaction(tx1.id)).toBeDefined()
-    expect(mempool.getTransaction(tx2.id)).toBeUndefined()
+    expect(mempool.getTransaction(lowerFeeTx.id)).toBeUndefined()
+    expect(mempool.getTransaction(higherFeeTx.id)).toBeDefined()
 
     const tx3 = createTransaction(
       walletA,
