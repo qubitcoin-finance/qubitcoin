@@ -205,7 +205,7 @@ export function startRpcServer(
     }
     const parsedLimit = req.query.limit ? parseInt(req.query.limit as string, 10) : 1000;
     const limit = Math.min(parsedLimit, 1000);
-    const txs = node.mempool.getTransactionsForBlock().slice(0, limit);
+    const txs = node.mempool.getTransactionsForBlock(node.chain.utxoSet).slice(0, limit);
     const summaries = txs.map(tx => {
       const isCoinbase = tx.inputs.length === 1 && tx.inputs[0].txId === COINBASE_TXID;
       const isClaim = isClaimTransaction(tx);

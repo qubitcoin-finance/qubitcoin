@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { Node } from '../node.js'
 import { startRpcServer } from '../rpc.js'
-import { walletA, walletB } from './fixtures.js'
+import { walletA, walletB, walletC } from './fixtures.js'
 import { createMockSnapshot } from '../snapshot.js'
 import { createClaimTransaction } from '../claim.js'
 import { createTransaction, utxoKey } from '../transaction.js'
@@ -565,6 +565,60 @@ describe('RPC transaction endpoints', () => {
     )
     expect(claimEntry.inputs[0]).not.toHaveProperty('publicKey')
     expect(claimEntry.inputs[0]).not.toHaveProperty('signature')
+  })
+
+  it('GET /mempool/txs returns claim-first then regular txs by fee density', async () => {
+    const lowFeeUtxo = {
+      txId: '1'.repeat(64),
+      outputIndex: 0,
+      address: walletA.address,
+      amount: 75_000_000,
+    }
+    const highFeeUtxo = {
+      txId: '2'.repeat(64),
+      outputIndex: 0,
+      address: walletB.address,
+      amount: 75_000_000,
+    }
+    node.chain.utxoSet.set(utxoKey(lowFeeUtxo.txId, lowFeeUtxo.outputIndex), lowFeeUtxo)
+    node.chain.utxoSet.set(utxoKey(highFeeUtxo.txId, highFeeUtxo.outputIndex), highFeeUtxo)
+
+    const lowFeeTx = createTransaction(
+      walletA,
+      [lowFeeUtxo],
+      [{ address: walletC.address, amount: 50_000_000 }],
+      10_000
+    )
+    const highFeeTx = createTransaction(
+      walletB,
+      [highFeeUtxo],
+      [{ address: walletC.address, amount: 50_000_000 }],
+      100_000
+    )
+    expect(node.receiveTransaction(lowFeeTx).success).toBe(true)
+    expect(node.receiveTransaction(highFeeTx).success).toBe(true)
+
+    const { snapshot, holders } = createMockSnapshot()
+    const genesisHash = node.chain.blocks[0].hash
+    const claimTx = createClaimTransaction(
+      holders[0].secretKey,
+      holders[0].publicKey,
+      snapshot.entries[0],
+      walletC,
+      snapshot.btcBlockHash,
+      genesisHash
+    )
+    expect(node.receiveTransaction(claimTx).success).toBe(true)
+
+    const res = await fetch(`${baseUrl}/api/v1/mempool/txs`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+
+    expect(body.map((entry: { id: string }) => entry.id)).toEqual([
+      claimTx.id,
+      highFeeTx.id,
+      lowFeeTx.id,
+    ])
   })
 
   it('POST /tx with valid claim transaction returns 200 with txid', async () => {
