@@ -48,6 +48,13 @@ describe('Blockchain', () => {
     expect(chain.utxoSet.size).toBe(0) // genesis coinbase is burn
   })
 
+  it('indexes the genesis transaction for lookup', () => {
+    const chain = new Blockchain()
+    const genesisTxId = chain.blocks[0].transactions[0].id
+
+    expect(chain.findTransactionBlock(genesisTxId)).toBe(chain.blocks[0])
+  })
+
   it('accepts valid mined block', () => {
     const chain = new Blockchain()
     const wallet = walletA
@@ -101,6 +108,16 @@ describe('Blockchain', () => {
     // Restore
     chain.blocks[1].hash = computeBlockHash(chain.blocks[1].header)
     expect(chain.validateChain().valid).toBe(true)
+  })
+
+  it('preserves genesis transaction lookup after resetToHeight(0)', () => {
+    const chain = new Blockchain()
+    const genesisTxId = chain.blocks[0].transactions[0].id
+
+    chain.addBlock(mineOnChain(chain, walletA.address))
+    chain.resetToHeight(0)
+
+    expect(chain.findTransactionBlock(genesisTxId)).toBe(chain.blocks[0])
   })
 })
 

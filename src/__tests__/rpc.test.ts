@@ -165,6 +165,18 @@ describeLoopbackTcp('RPC endpoints', () => {
     expect(body.blockHeight).toBe(txBlock!.height)
   })
 
+  it('GET /tx/:txid returns genesis tx from chain', async () => {
+    const genesisTxId = node.chain.blocks[0].transactions[0].id
+
+    const res = await fetch(`${baseUrl}/api/v1/tx/${genesisTxId}`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.id).toBe(genesisTxId)
+    expect(body.blockHash).toBe(node.chain.blocks[0].hash)
+    expect(body.blockHeight).toBe(0)
+    expect(body.confirmations).toBe(node.chain.blocks.length)
+  })
+
   it('GET /tx/:txid confirmed tx includes confirmations count', async () => {
     const block = node.chain.blocks[1]
     const coinbaseTxId = block.transactions[0].id

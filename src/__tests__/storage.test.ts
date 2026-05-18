@@ -208,6 +208,17 @@ describe('FileBlockStorage', () => {
     expect(chain2.blocks[chain2.blocks.length - 1].hash).toBe(block2.hash)
   })
 
+  it('should restore the genesis transaction index via Blockchain constructor', () => {
+    const storage1 = new FileBlockStorage(tmpDir)
+    const chain1 = new Blockchain(undefined, storage1)
+    const genesisTxId = chain1.blocks[0].transactions[0].id
+
+    const storage2 = new FileBlockStorage(tmpDir)
+    const chain2 = new Blockchain(undefined, storage2)
+
+    expect(chain2.findTransactionBlock(genesisTxId)).toBe(chain2.blocks[0])
+  })
+
   it('should skip corrupted lines in blocks.jsonl and load valid ones', () => {
     const storage = new FileBlockStorage(tmpDir)
     const chain = new Blockchain()

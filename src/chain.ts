@@ -74,6 +74,7 @@ export class Blockchain {
         // Replay persisted blocks (genesis is first)
         this.blocks.push(persisted[0]) // genesis
         this.blocksByHash.set(persisted[0].hash, persisted[0])
+        this.indexBlockTransactions(persisted[0])
         this.cumulativeWork = blockWork(persisted[0].header.target)
         for (let i = 1; i < persisted.length; i++) {
           this.undoData.push(this.applyBlock(persisted[i]))
@@ -98,6 +99,7 @@ export class Blockchain {
       const genesis = createForkGenesisBlock(snapshot)
       this.blocks.push(genesis)
       this.blocksByHash.set(genesis.hash, genesis)
+      this.indexBlockTransactions(genesis)
       if (storage) {
         storage.appendBlock(genesis)
         storage.saveMetadata({ height: 0, difficulty: this.difficulty, genesisHash: genesis.hash })
@@ -106,6 +108,7 @@ export class Blockchain {
       const genesis = createGenesisBlock()
       this.blocks.push(genesis)
       this.blocksByHash.set(genesis.hash, genesis)
+      this.indexBlockTransactions(genesis)
       if (storage) {
         storage.appendBlock(genesis)
         storage.saveMetadata({ height: 0, difficulty: this.difficulty, genesisHash: genesis.hash })
@@ -123,9 +126,11 @@ export class Blockchain {
     // Validate PoW: verify hash matches header and meets target
     if (computeBlockHash(genesis.header) !== genesis.hash) return false
     if (!hashMeetsTarget(genesis.hash, genesis.header.target)) return false
+    this.transactionIndex.clear()
     this.blocksByHash.delete(this.blocks[0].hash)
     this.blocks[0] = genesis
     this.blocksByHash.set(genesis.hash, genesis)
+    this.indexBlockTransactions(genesis)
     if (this.storage) {
       this.storage.rewriteBlocks(this.blocks)
       this.storage.saveMetadata({ height: 0, difficulty: this.difficulty, genesisHash: genesis.hash })
@@ -510,6 +515,7 @@ export class Blockchain {
       this.claimedCount = 0
       this.claimedAmount = 0
       this.difficulty = STARTING_DIFFICULTY
+      this.indexBlockTransactions(this.blocks[0])
       this.cumulativeWork = blockWork(this.blocks[0].header.target)
 
       for (let i = 1; i <= targetHeight; i++) {
@@ -586,6 +592,13 @@ export class Blockchain {
     }
   }
 
+  /** Index all transactions in a block for O(1) transaction lookup */
+  private indexBlockTransactions(block: Block): void {
+    for (const tx of block.transactions) {
+      this.transactionIndex.set(tx.id, block)
+    }
+  }
+
   /** Apply UTXO set changes for a validated block and return undo data (private) */
   private applyBlock(block: Block): BlockUndo {
     const undo: BlockUndo = {
@@ -597,9 +610,8 @@ export class Blockchain {
       blockWork: blockWork(block.header.target),
     }
 
-    // Index all transactions in this block for O(1) lookup
+    this.indexBlockTransactions(block)
     for (const tx of block.transactions) {
-      this.transactionIndex.set(tx.id, block)
       undo.transactionIds.push(tx.id)
     }
 
