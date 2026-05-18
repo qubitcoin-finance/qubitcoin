@@ -11,17 +11,32 @@ import { createClaimTransaction } from '../claim.js'
 import { createTransaction, utxoKey } from '../transaction.js'
 import { sanitizeForStorage, FileBlockStorage } from '../storage.js'
 import { P2PServer } from '../p2p/server.js'
+import { probeLoopbackTcpListen } from './network-test-utils.js'
 import type { AddressInfo } from 'node:net'
 import type { Server } from 'node:http'
 
 const TEST_TARGET = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+const LOOPBACK_TCP_SUPPORTED = await probeLoopbackTcpListen()
+const describeLoopbackTcp = LOOPBACK_TCP_SUPPORTED ? describe : describe.skip
+const itLoopbackTcp = LOOPBACK_TCP_SUPPORTED ? it : it.skip
 
-describe('RPC endpoints', () => {
+async function listenOnLoopback(server: Server): Promise<AddressInfo> {
+  if (!server.listening) {
+    await new Promise<void>((resolve) => server.once('listening', resolve))
+  }
+  const addr = server.address() as AddressInfo | null
+  if (!addr || typeof addr === 'string') {
+    throw new Error('Expected HTTP server to bind to a TCP port')
+  }
+  return addr
+}
+
+describeLoopbackTcp('RPC endpoints', () => {
   let node: Node
   let server: Server
   let baseUrl: string
 
-  beforeAll(() => {
+  beforeAll(async () => {
     node = new Node('rpc-test')
     node.chain.difficulty = TEST_TARGET
 
@@ -31,8 +46,8 @@ describe('RPC endpoints', () => {
     }
 
     const app = startRpcServer(node, 0)
-    server = app.listen(0)
-    const addr = server.address() as AddressInfo
+    server = app.listen(0, '127.0.0.1')
+    const addr = await listenOnLoopback(server)
     baseUrl = `http://127.0.0.1:${addr.port}`
   })
 
@@ -311,12 +326,12 @@ describe('RPC endpoints', () => {
   })
 })
 
-describe('RPC transaction endpoints', () => {
+describeLoopbackTcp('RPC transaction endpoints', () => {
   let node: Node
   let server: Server
   let baseUrl: string
 
-  beforeEach(() => {
+  beforeEach(async () => {
     const { snapshot, holders } = createMockSnapshot()
     node = new Node('rpc-tx-test', snapshot)
     node.chain.difficulty = TEST_TARGET
@@ -327,8 +342,8 @@ describe('RPC transaction endpoints', () => {
     }
 
     const app = startRpcServer(node, 0)
-    server = app.listen(0)
-    const addr = server.address() as AddressInfo
+    server = app.listen(0, '127.0.0.1')
+    const addr = await listenOnLoopback(server)
     baseUrl = `http://127.0.0.1:${addr.port}`
   })
 
@@ -646,12 +661,12 @@ describe('RPC transaction endpoints', () => {
   })
 })
 
-describe('RPC edge cases', () => {
+describeLoopbackTcp('RPC edge cases', () => {
   let node: Node
   let server: Server
   let baseUrl: string
 
-  beforeAll(() => {
+  beforeAll(async () => {
     node = new Node('rpc-edge-test')
     node.chain.difficulty = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
 
@@ -661,8 +676,8 @@ describe('RPC edge cases', () => {
     }
 
     const app = startRpcServer(node, 0)
-    server = app.listen(0)
-    const addr = server.address() as AddressInfo
+    server = app.listen(0, '127.0.0.1')
+    const addr = await listenOnLoopback(server)
     baseUrl = `http://127.0.0.1:${addr.port}`
   })
 
@@ -697,8 +712,8 @@ describe('RPC edge cases', () => {
       extraNode.mine(walletA.address, false)
     }
     const extraApp = startRpcServer(extraNode, 0)
-    const extraServer = extraApp.listen(0)
-    const extraAddr = extraServer.address() as AddressInfo
+    const extraServer = extraApp.listen(0, '127.0.0.1')
+    const extraAddr = await listenOnLoopback(extraServer)
     const extraUrl = `http://127.0.0.1:${extraAddr.port}`
 
     const res = await fetch(`${extraUrl}/api/v1/blocks?count=200`)
@@ -786,8 +801,8 @@ describe('RPC edge cases', () => {
     limitNode.receiveTransaction(claimTx)
 
     const limitApp = startRpcServer(limitNode, 0)
-    const limitServer = limitApp.listen(0)
-    const limitAddr = limitServer.address() as AddressInfo
+    const limitServer = limitApp.listen(0, '127.0.0.1')
+    const limitAddr = await listenOnLoopback(limitServer)
     const limitUrl = `http://127.0.0.1:${limitAddr.port}`
 
     const res = await fetch(`${limitUrl}/api/v1/mempool/txs?limit=0`)
@@ -920,12 +935,12 @@ describe('RPC edge cases', () => {
   })
 })
 
-describe('RPC /difficulty endpoint edge cases', () => {
+describeLoopbackTcp('RPC /difficulty endpoint edge cases', () => {
   it('genesis-only chain returns exactly one entry', async () => {
     const node = new Node('rpc-diff-genesis')
     const app = startRpcServer(node, 0)
-    const srv = app.listen(0)
-    const addr = srv.address() as AddressInfo
+    const srv = app.listen(0, '127.0.0.1')
+    const addr = await listenOnLoopback(srv)
     const url = `http://127.0.0.1:${addr.port}`
     try {
       const res = await fetch(`${url}/api/v1/difficulty`)
@@ -949,8 +964,8 @@ describe('RPC /difficulty endpoint edge cases', () => {
     expect(node.chain.getHeight()).toBe(DIFFICULTY_ADJUSTMENT_INTERVAL)
 
     const app = startRpcServer(node, 0)
-    const srv = app.listen(0)
-    const addr = srv.address() as AddressInfo
+    const srv = app.listen(0, '127.0.0.1')
+    const addr = await listenOnLoopback(srv)
     const url = `http://127.0.0.1:${addr.port}`
     try {
       const res = await fetch(`${url}/api/v1/difficulty`)
@@ -976,8 +991,8 @@ describe('RPC /difficulty endpoint edge cases', () => {
     expect(tipHeight).toBe(DIFFICULTY_ADJUSTMENT_INTERVAL + 1)
 
     const app = startRpcServer(node, 0)
-    const srv = app.listen(0)
-    const addr = srv.address() as AddressInfo
+    const srv = app.listen(0, '127.0.0.1')
+    const addr = await listenOnLoopback(srv)
     const url = `http://127.0.0.1:${addr.port}`
     try {
       const res = await fetch(`${url}/api/v1/difficulty`)
@@ -994,7 +1009,7 @@ describe('RPC /difficulty endpoint edge cases', () => {
   })
 })
 
-describe('RPC rate limiting', () => {
+describeLoopbackTcp('RPC rate limiting', () => {
   function startForwardingProxy(
     targetPort: number,
     forwardedFor: string | null,
@@ -1039,8 +1054,8 @@ describe('RPC rate limiting', () => {
   it('POST /tx is rate-limited at 100 requests/min per IP', async () => {
     const node = new Node('rpc-rate-post-test')
     const app = startRpcServer(node, 0)
-    const server = app.listen(0)
-    const addr = server.address() as AddressInfo
+    const server = app.listen(0, '127.0.0.1')
+    const addr = await listenOnLoopback(server)
     const baseUrl = `http://127.0.0.1:${addr.port}`
 
     try {
@@ -1066,8 +1081,8 @@ describe('RPC rate limiting', () => {
   it('public-bind RPC ignores spoofed X-Forwarded-For when rate limiting', async () => {
     const node = new Node('rpc-rate-public-bind-test')
     const app = startRpcServer(node, 0, undefined, '0.0.0.0', false)
-    const server = app.listen(0)
-    const addr = server.address() as AddressInfo
+    const server = app.listen(0, '127.0.0.1')
+    const addr = await listenOnLoopback(server)
     const baseUrl = `http://127.0.0.1:${addr.port}`
 
     try {
@@ -1247,8 +1262,8 @@ describe('RPC rate limiting', () => {
   it('GET /status is rate-limited independently at 600 requests/min per IP', async () => {
     const node = new Node('rpc-rate-get-test')
     const app = startRpcServer(node, 0)
-    const server = app.listen(0)
-    const addr = server.address() as AddressInfo
+    const server = app.listen(0, '127.0.0.1')
+    const addr = await listenOnLoopback(server)
     const baseUrl = `http://127.0.0.1:${addr.port}`
 
     try {
@@ -1266,8 +1281,8 @@ describe('RPC rate limiting', () => {
   it('GET traffic does not consume the stricter POST rate-limit bucket', async () => {
     const node = new Node('rpc-rate-isolation-test')
     const app = startRpcServer(node, 0)
-    const server = app.listen(0)
-    const addr = server.address() as AddressInfo
+    const server = app.listen(0, '127.0.0.1')
+    const addr = await listenOnLoopback(server)
     const baseUrl = `http://127.0.0.1:${addr.port}`
 
     try {
@@ -1289,18 +1304,17 @@ describe('RPC rate limiting', () => {
   })
 })
 
-describe('RPC with p2pServer', () => {
+describeLoopbackTcp('RPC with p2pServer', () => {
   it('GET /status includes peers count from p2pServer', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-rpc-status-'))
     try {
       const storage = new FileBlockStorage(tmpDir)
       const n = new Node('rpc-status-p2p-test', undefined, storage)
       const p2p = new P2PServer(n, 0, tmpDir)
-      await p2p.start()
 
       const app = startRpcServer(n, 0, p2p)
-      const srv = app.listen(0)
-      const addr = srv.address() as AddressInfo
+      const srv = app.listen(0, '127.0.0.1')
+      const addr = await listenOnLoopback(srv)
       const url = `http://127.0.0.1:${addr.port}`
 
       try {
@@ -1319,7 +1333,7 @@ describe('RPC with p2pServer', () => {
     }
   })
 
-  it('GET /peers filters out localhost peers when p2pServer is provided', async () => {
+  itLoopbackTcp('GET /peers filters out localhost peers when p2pServer is provided', async () => {
     const tmpDir1 = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-rpc-peers1-'))
     const tmpDir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-rpc-peers2-'))
     try {
@@ -1347,8 +1361,8 @@ describe('RPC with p2pServer', () => {
       })
 
       const app = startRpcServer(n1, 0, p2p1)
-      const srv = app.listen(0)
-      const addr = srv.address() as AddressInfo
+      const srv = app.listen(0, '127.0.0.1')
+      const addr = await listenOnLoopback(srv)
       const url = `http://127.0.0.1:${addr.port}`
 
       try {

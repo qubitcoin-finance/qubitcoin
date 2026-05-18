@@ -214,11 +214,28 @@ export class P2PServer {
   getNode(): Node { return this.node }
 
   start(): Promise<void> {
-    return new Promise((resolve) => {
-      this.server.listen(this.port, () => {
+    return new Promise((resolve, reject) => {
+      const onError = (err: Error) => {
+        this.server.off('listening', onListening)
+        reject(err)
+      }
+      const onListening = () => {
+        this.server.off('error', onError)
         log.info({ component: 'p2p', port: this.getPort() }, 'P2P server listening')
         resolve()
-      })
+      }
+
+      this.server.once('error', onError)
+      this.server.once('listening', onListening)
+
+      // Ephemeral test listeners only need loopback reachability and may run in
+      // sandboxes that forbid binding random ports on 0.0.0.0.
+      if (this.port === 0) {
+        this.server.listen(this.port, '127.0.0.1')
+        return
+      }
+
+      this.server.listen(this.port)
     })
   }
 

@@ -41,6 +41,12 @@ import { createClaimTransaction } from '../claim.js'
 import { createMockSnapshot } from '../snapshot.js'
 import { walletA, walletB } from './fixtures.js'
 import net from 'node:net'
+import { probeLoopbackTcpListen } from './network-test-utils.js'
+import type { Server } from 'node:http'
+import type { AddressInfo } from 'node:net'
+
+const LOOPBACK_TCP_SUPPORTED = await probeLoopbackTcpListen()
+const describeLoopbackTcp = LOOPBACK_TCP_SUPPORTED ? describe : describe.skip
 
 /** Wait for a condition to become true */
 function waitFor(
@@ -57,6 +63,17 @@ function waitFor(
     }
     check()
   })
+}
+
+async function listenOnLoopback(server: Server): Promise<number> {
+  if (!server.listening) {
+    await new Promise<void>((resolve) => server.once('listening', resolve))
+  }
+  const addr = server.address() as AddressInfo | null
+  if (!addr || typeof addr === 'string') {
+    throw new Error('Expected HTTP server to bind to a TCP port')
+  }
+  return addr.port
 }
 
 function makeUtxoSet(wallet: { address: string }, amount = 100): Map<string, UTXO> {
@@ -277,7 +294,7 @@ describe('Cumulative work', () => {
   })
 })
 
-describe('Fork resolution safety', () => {
+describeLoopbackTcp('Fork resolution safety', () => {
   let tmpDir1: string
   let tmpDir2: string
   let node1: Node
@@ -359,7 +376,6 @@ describe('Seed reconnection backoff', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-backoff-'))
     node = new Node('test')
     p2p = new P2PServer(node, 0, tmpDir)
-    await p2p.start()
   })
 
   afterEach(async () => {
@@ -389,7 +405,7 @@ describe('Seed reconnection backoff', () => {
   })
 })
 
-describe('RPC blocks count cap', () => {
+describeLoopbackTcp('RPC blocks count cap', () => {
   it('should cap blocks endpoint count to 100', async () => {
     const { startRpcServer } = await import('../rpc.js')
     const node = new Node('rpc-test')
@@ -403,12 +419,12 @@ describe('RPC blocks count cap', () => {
 
     // Start RPC on random port
     const app = startRpcServer(node, 0)
-    const server = app.listen(0)
-    const addr = server.address() as { port: number }
+    const server = app.listen(0, '127.0.0.1')
+    const port = await listenOnLoopback(server)
 
     try {
       // Request with count=999999 (should be capped to 100)
-      const res = await fetch(`http://127.0.0.1:${addr.port}/api/v1/blocks?count=999999`)
+      const res = await fetch(`http://127.0.0.1:${port}/api/v1/blocks?count=999999`)
       const blocks = await res.json()
       expect(Array.isArray(blocks)).toBe(true)
       // We only have 6 blocks (genesis + 5), but count is capped to 100
@@ -416,7 +432,7 @@ describe('RPC blocks count cap', () => {
       expect(blocks.length).toBe(6) // all 6 blocks since < 100
 
       // Request with explicit count=2
-      const res2 = await fetch(`http://127.0.0.1:${addr.port}/api/v1/blocks?count=2`)
+      const res2 = await fetch(`http://127.0.0.1:${port}/api/v1/blocks?count=2`)
       const blocks2 = await res2.json()
       expect(blocks2.length).toBe(2)
     } finally {
@@ -425,16 +441,16 @@ describe('RPC blocks count cap', () => {
   })
 })
 
-describe('RPC hardening', () => {
+describeLoopbackTcp('RPC hardening', () => {
   it('should return 400 for NaN count parameter', async () => {
     const { startRpcServer } = await import('../rpc.js')
     const node = new Node('rpc-nan')
     const app = startRpcServer(node, 0)
-    const server = app.listen(0)
-    const addr = server.address() as { port: number }
+    const server = app.listen(0, '127.0.0.1')
+    const port = await listenOnLoopback(server)
 
     try {
-      const res = await fetch(`http://127.0.0.1:${addr.port}/api/v1/blocks?count=abc`)
+      const res = await fetch(`http://127.0.0.1:${port}/api/v1/blocks?count=abc`)
       expect(res.status).toBe(400)
       const body = await res.json()
       expect(body.error).toContain('Invalid count')
@@ -447,11 +463,11 @@ describe('RPC hardening', () => {
     const { startRpcServer } = await import('../rpc.js')
     const node = new Node('rpc-neg')
     const app = startRpcServer(node, 0)
-    const server = app.listen(0)
-    const addr = server.address() as { port: number }
+    const server = app.listen(0, '127.0.0.1')
+    const port = await listenOnLoopback(server)
 
     try {
-      const res = await fetch(`http://127.0.0.1:${addr.port}/api/v1/blocks?count=-5`)
+      const res = await fetch(`http://127.0.0.1:${port}/api/v1/blocks?count=-5`)
       expect(res.status).toBe(400)
     } finally {
       server.close()
@@ -462,11 +478,11 @@ describe('RPC hardening', () => {
     const { startRpcServer } = await import('../rpc.js')
     const node = new Node('rpc-mlimit')
     const app = startRpcServer(node, 0)
-    const server = app.listen(0)
-    const addr = server.address() as { port: number }
+    const server = app.listen(0, '127.0.0.1')
+    const port = await listenOnLoopback(server)
 
     try {
-      const res = await fetch(`http://127.0.0.1:${addr.port}/api/v1/mempool/txs?limit=xyz`)
+      const res = await fetch(`http://127.0.0.1:${port}/api/v1/mempool/txs?limit=xyz`)
       expect(res.status).toBe(400) // invalid input must be rejected, not silently ignored
       const body = await res.json()
       expect(body.error).toContain('Invalid limit parameter')
@@ -479,11 +495,11 @@ describe('RPC hardening', () => {
     const { startRpcServer } = await import('../rpc.js')
     const node = new Node('rpc-xpb')
     const app = startRpcServer(node, 0)
-    const server = app.listen(0)
-    const addr = server.address() as { port: number }
+    const server = app.listen(0, '127.0.0.1')
+    const port = await listenOnLoopback(server)
 
     try {
-      const res = await fetch(`http://127.0.0.1:${addr.port}/api/v1/status`)
+      const res = await fetch(`http://127.0.0.1:${port}/api/v1/status`)
       expect(res.headers.get('x-powered-by')).toBeNull()
     } finally {
       server.close()
@@ -501,11 +517,11 @@ describe('RPC hardening', () => {
     // Simulate the CORS behavior for non-localhost bind
     app.use(cors({ origin: false }))
     app.get('/test', (req: any, res: any) => res.json({ ok: true }))
-    const server = app.listen(0)
-    const addr = server.address() as { port: number }
+    const server = app.listen(0, '127.0.0.1')
+    const port = await listenOnLoopback(server)
 
     try {
-      const res = await fetch(`http://127.0.0.1:${addr.port}/test`)
+      const res = await fetch(`http://127.0.0.1:${port}/test`)
       // When origin is false, no Access-Control-Allow-Origin header should be present
       const corsHeader = res.headers.get('access-control-allow-origin')
       expect(corsHeader).toBeNull()
@@ -718,36 +734,31 @@ describe('P2P getheaders locator cap', () => {
     }
 
     const p2p = new P2PServer(node, 0, tmpDir)
-    await p2p.start()
 
-    try {
-      // Simulate a getheaders with 200 locator hashes (should be capped to 101)
-      const fakePeer = {
-        handshakeComplete: true,
-        addMisbehavior: () => {},
-        send: (msg: any) => {
-          // The response should have headers
-          expect(msg.type).toBe('headers')
-          expect(Array.isArray(msg.payload.headers)).toBe(true)
-        },
-      }
-
-      const largeLocator = Array.from({ length: 200 }, (_, i) => `${i.toString(16).padStart(64, '0')}`)
-      // Put the genesis hash at position 150 (beyond the cap)
-      largeLocator[150] = node.chain.blocks[0].hash
-
-      const handleGetHeaders = p2p.handleGetHeaders.bind(p2p)
-      handleGetHeaders(fakePeer as unknown as Peer, { locatorHashes: largeLocator })
-
-      // The genesis at index 150 should NOT be found (capped at 101)
-      // so forkPoint defaults to 0 and we get headers from height 1
-    } finally {
-      await p2p.stop()
+    // Simulate a getheaders with 200 locator hashes (should be capped to 101)
+    const fakePeer = {
+      handshakeComplete: true,
+      addMisbehavior: () => {},
+      send: (msg: any) => {
+        // The response should have headers
+        expect(msg.type).toBe('headers')
+        expect(Array.isArray(msg.payload.headers)).toBe(true)
+      },
     }
+
+    const largeLocator = Array.from({ length: 200 }, (_, i) => `${i.toString(16).padStart(64, '0')}`)
+    // Put the genesis hash at position 150 (beyond the cap)
+    largeLocator[150] = node.chain.blocks[0].hash
+
+    const handleGetHeaders = p2p.handleGetHeaders.bind(p2p)
+    handleGetHeaders(fakePeer as unknown as Peer, { locatorHashes: largeLocator })
+
+    // The genesis at index 150 should NOT be found (capped at 101)
+    // so forkPoint defaults to 0 and we get headers from height 1
   })
 })
 
-describe('P2P message error handling', () => {
+describeLoopbackTcp('P2P message error handling', () => {
   let tmpDir1: string
   let tmpDir2: string
 
@@ -2265,7 +2276,7 @@ describe('Cumulative work threshold (1.5x)', () => {
   })
 })
 
-describe('P2P input validation hardening', () => {
+describeLoopbackTcp('P2P input validation hardening', () => {
   let tmpDir1: string
   let tmpDir2: string
 

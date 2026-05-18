@@ -8,6 +8,7 @@ import { P2PServer } from '../p2p/server.js'
 import { Peer } from '../p2p/peer.js'
 import { FileBlockStorage, sanitizeForStorage } from '../storage.js'
 import { walletA, walletB } from './fixtures.js'
+import { probeLoopbackTcpListen } from './network-test-utils.js'
 
 import {
   encodeMessage,
@@ -16,6 +17,9 @@ import {
   MAX_MESSAGE_SIZE,
   PROTOCOL_VERSION,
 } from '../p2p/protocol.js'
+
+const LOOPBACK_TCP_SUPPORTED = await probeLoopbackTcpListen()
+const describeLoopbackTcp = LOOPBACK_TCP_SUPPORTED ? describe : describe.skip
 
 /** Wait for a condition to become true, polling every `interval` ms */
 function waitFor(
@@ -103,7 +107,7 @@ describe('protocol encoding', () => {
   })
 })
 
-describe('P2P server integration', () => {
+describeLoopbackTcp('P2P server integration', () => {
   let tmpDir1: string
   let tmpDir2: string
   let node1: Node
@@ -398,7 +402,7 @@ describe('P2P server integration', () => {
   })
 })
 
-describe('P2P fork resolution', () => {
+describeLoopbackTcp('P2P fork resolution', () => {
   let tmpDir1: string
   let tmpDir2: string
   let node1: Node
@@ -507,7 +511,7 @@ describe('P2P fork resolution', () => {
   })
 })
 
-describe('P2P improvements', () => {
+describeLoopbackTcp('P2P improvements', () => {
   let tmpDir1: string
   let tmpDir2: string
 
@@ -710,7 +714,7 @@ describe('P2P improvements', () => {
   })
 })
 
-describe('P2P waitForSync', () => {
+describeLoopbackTcp('P2P waitForSync', () => {
   let tmpDir: string
   let node: Node
   let p2p: P2PServer
@@ -734,7 +738,7 @@ describe('P2P waitForSync', () => {
   })
 })
 
-describe('P2P security hardening', () => {
+describeLoopbackTcp('P2P security hardening', () => {
   let tmpDir1: string
   let tmpDir2: string
 
@@ -1523,7 +1527,7 @@ describe('P2P security hardening', () => {
   })
 })
 
-describe('P2P orphan block resolution', () => {
+describeLoopbackTcp('P2P orphan block resolution', () => {
   const TEST_TARGET = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
 
   it('should connect an orphan chain when the missing parent block arrives', async () => {
