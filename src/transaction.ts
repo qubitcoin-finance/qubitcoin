@@ -224,8 +224,8 @@ export function createTransaction(
     amount: r.amount,
   }))
 
-  // Add change output if needed
-  if (change > 0) {
+  // Fold dust-sized change into the fee instead of constructing an invalid output.
+  if (change >= DUST_THRESHOLD) {
     outputs.push({ address: wallet.address, amount: change })
   }
 

@@ -110,6 +110,40 @@ describe('createTransaction', () => {
     )
     expect(tx.outputs.length).toBe(1)
   })
+
+  it('omits dust change output and folds it into the effective fee', () => {
+    const wallet = walletA
+    const utxoId = 'a'.repeat(64)
+    const utxos: UTXO[] = [
+      { txId: utxoId, outputIndex: 0, address: wallet.address, amount: 6000 },
+    ]
+    const utxoSet = new Map<string, UTXO>()
+    utxoSet.set(utxoKey(utxoId, 0), utxos[0])
+
+    const tx = createTransaction(
+      wallet,
+      utxos,
+      [{ address: 'b'.repeat(64), amount: 5000 }],
+      500
+    )
+
+    expect(tx.outputs).toEqual([{ address: 'b'.repeat(64), amount: 5000 }])
+    expect(validateTransaction(tx, utxoSet).valid).toBe(true)
+    expect(calculateFee(tx, utxoSet)).toBe(1000)
+  })
+
+  it('keeps change output when the remainder is exactly at the dust threshold', () => {
+    const wallet = walletA
+    const tx = createTransaction(
+      wallet,
+      [{ txId: 'a'.repeat(64), outputIndex: 0, address: wallet.address, amount: 6000 }],
+      [{ address: 'b'.repeat(64), amount: 5454 }],
+      0
+    )
+
+    expect(tx.outputs.length).toBe(2)
+    expect(tx.outputs[1]).toEqual({ address: wallet.address, amount: DUST_THRESHOLD })
+  })
 })
 
 describe('validateTransaction', () => {
@@ -336,7 +370,7 @@ describe('calculateFee', () => {
     const tx = createTransaction(
       wallet,
       [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 1000 }],
-      [{ address: 'b'.repeat(64), amount: 500 }],
+      [{ address: 'b'.repeat(64), amount: 354 }],
       100
     )
 
@@ -486,7 +520,7 @@ describe('validateTransaction additional edge cases', () => {
       amount: 10_000,
     })
 
-    // createTransaction does not enforce dust threshold — only validateTransaction does
+    // Mutate a valid transaction to force a dust recipient output.
     const tx = createTransaction(
       wallet,
       [{ txId: utxoId, outputIndex: 0, address: wallet.address, amount: 10_000 }],
