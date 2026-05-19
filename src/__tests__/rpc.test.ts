@@ -1,4 +1,4 @@
-import { describe, it, expect, afterAll, afterEach, beforeAll, beforeEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach } from 'vitest'
 import fs from 'node:fs'
 import http from 'node:http'
 import os from 'node:os'
@@ -31,12 +31,22 @@ async function listenOnLoopback(server: Server): Promise<AddressInfo> {
   return addr
 }
 
+async function startRpcTestServer(node: Node): Promise<{ server: Server; baseUrl: string }> {
+  const app = startRpcServer(node, 0)
+  const server = app.listen(0, '127.0.0.1')
+  const addr = await listenOnLoopback(server)
+  return {
+    server,
+    baseUrl: `http://127.0.0.1:${addr.port}`,
+  }
+}
+
 describeLoopbackTcp('RPC endpoints', () => {
   let node: Node
   let server: Server
   let baseUrl: string
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     node = new Node('rpc-test')
     node.chain.difficulty = TEST_TARGET
 
@@ -45,13 +55,10 @@ describeLoopbackTcp('RPC endpoints', () => {
       node.mine(walletA.address, false)
     }
 
-    const app = startRpcServer(node, 0)
-    server = app.listen(0, '127.0.0.1')
-    const addr = await listenOnLoopback(server)
-    baseUrl = `http://127.0.0.1:${addr.port}`
+    ({ server, baseUrl } = await startRpcTestServer(node))
   })
 
-  afterAll(() => {
+  afterEach(() => {
     server.close()
   })
 
@@ -389,7 +396,6 @@ describeLoopbackTcp('RPC transaction endpoints', () => {
   it('GET /tx/:txid mempool tx has no confirmations field', async () => {
     const { snapshot, holders } = createMockSnapshot()
     const genesisHash = node.chain.blocks[0].hash
-    // Use holders[4]/entries[4] — holders[0-3] are used by other tests in this describe block
     const claimTx = createClaimTransaction(
       holders[4].secretKey,
       holders[4].publicKey,
@@ -651,7 +657,6 @@ describeLoopbackTcp('RPC transaction endpoints', () => {
   it('POST /tx with valid claim transaction returns 200 with txid', async () => {
     const { snapshot, holders } = createMockSnapshot()
     const genesisHash = node.chain.blocks[0].hash
-    // Use holders[1] — holders[0] is already pending in mempool from the earlier test
     const claimTx = createClaimTransaction(
       holders[1].secretKey,
       holders[1].publicKey,
@@ -678,22 +683,18 @@ describeLoopbackTcp('RPC edge cases', () => {
   let server: Server
   let baseUrl: string
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     node = new Node('rpc-edge-test')
     node.chain.difficulty = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
 
-    // Mine enough blocks to test pagination cap (>100)
     for (let i = 0; i < 3; i++) {
       node.mine(walletA.address, false)
     }
 
-    const app = startRpcServer(node, 0)
-    server = app.listen(0, '127.0.0.1')
-    const addr = await listenOnLoopback(server)
-    baseUrl = `http://127.0.0.1:${addr.port}`
+    ({ server, baseUrl } = await startRpcTestServer(node))
   })
 
-  afterAll(() => {
+  afterEach(() => {
     server.close()
   })
 
