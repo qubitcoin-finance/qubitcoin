@@ -9,6 +9,7 @@ import {
   createCoinbaseTransaction,
   utxoKey,
   MAX_TX_INPUTS,
+  MAX_TX_OUTPUTS,
 } from '../transaction.js'
 import {
   computeMerkleRoot,
@@ -466,6 +467,16 @@ describe('deserializeTransaction', () => {
     expect(() => deserializeTransaction(raw as any)).toThrow(/input count.*exceeds limit/)
   })
 
+  it('throws when output count exceeds MAX_TX_OUTPUTS before validating output entries', () => {
+    const raw = {
+      id: 'abc',
+      inputs: [],
+      outputs: new Array(MAX_TX_OUTPUTS + 1).fill(null),
+      timestamp: 1,
+    }
+    expect(() => deserializeTransaction(raw as any)).toThrow(/output count.*exceeds limit/)
+  })
+
   it('throws when an input entry is not an object', () => {
     const raw = {
       id: 'abc',
@@ -485,6 +496,63 @@ describe('deserializeTransaction', () => {
       claimData: 'not-an-object',
     }
     expect(() => deserializeTransaction(raw as any)).toThrow('Transaction claimData must be an object')
+  })
+
+  it('throws when transaction is not an object', () => {
+    expect(() => deserializeTransaction(null)).toThrow('Transaction must be an object')
+  })
+
+  it('throws when inputs is missing or not an array', () => {
+    const raw = {
+      id: 'abc',
+      outputs: [],
+      timestamp: 1,
+    }
+    expect(() => deserializeTransaction(raw as unknown as Record<string, unknown>)).toThrow('Transaction inputs must be an array')
+  })
+
+  it('throws when an input txId is not a string', () => {
+    const raw = {
+      id: 'abc',
+      inputs: [{ txId: 123, outputIndex: 0, publicKey: '00', signature: '00' }],
+      outputs: [],
+      timestamp: 1,
+    }
+    expect(() => deserializeTransaction(raw as any)).toThrow('Transaction input at index 0 must have a string txId')
+  })
+
+  it('throws when an output entry is not an object', () => {
+    const raw = {
+      id: 'abc',
+      inputs: [],
+      outputs: [null],
+      timestamp: 1,
+    }
+    expect(() => deserializeTransaction(raw as any)).toThrow('Transaction output at index 0 must be an object')
+  })
+
+  it('throws when an output amount is not a finite number', () => {
+    const raw = {
+      id: 'abc',
+      inputs: [],
+      outputs: [{ address: 'someaddr', amount: Number.NaN }],
+      timestamp: 1,
+    }
+    expect(() => deserializeTransaction(raw as any)).toThrow('Transaction output at index 0 must have a finite numeric amount')
+  })
+
+  it('throws when claimData addresses are not strings', () => {
+    const raw = {
+      id: 'abc',
+      inputs: [],
+      outputs: [],
+      timestamp: 1,
+      claimData: {
+        btcAddress: 123,
+        qbtcAddress: 'qbtcaddr',
+      },
+    }
+    expect(() => deserializeTransaction(raw as any)).toThrow('Transaction claimData.btcAddress must be a string')
   })
 })
 
@@ -568,6 +636,25 @@ describe('deserializeBlock', () => {
     }
     expect(() => deserializeBlock(raw as any)).toThrow(
       'Block transaction at index 0 is invalid: Transaction input at index 0 must be an object'
+    )
+  })
+
+  it('wraps oversized transaction output arrays before validating output entries', () => {
+    const raw = {
+      hash: VALID_BLOCK_HASH,
+      height: 1,
+      header: { version: 1, previousHash: validHeaderFields.previousHash, merkleRoot: validHeaderFields.merkleRoot, timestamp: 1, target: validHeaderFields.target, nonce: 0 },
+      transactions: [
+        {
+          id: 'tx1',
+          inputs: [],
+          outputs: new Array(MAX_TX_OUTPUTS + 1).fill(null),
+          timestamp: 1,
+        },
+      ],
+    }
+    expect(() => deserializeBlock(raw as any)).toThrow(
+      `Block transaction at index 0 is invalid: Transaction output count ${MAX_TX_OUTPUTS + 1} exceeds limit ${MAX_TX_OUTPUTS}`
     )
   })
 
