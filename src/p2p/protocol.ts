@@ -31,6 +31,19 @@ const VALID_MESSAGE_TYPES: ReadonlySet<string> = new Set<MessageType>([
   'addr', 'getaddr',
 ])
 
+const OBJECT_PAYLOAD_TYPES: ReadonlySet<MessageType> = new Set<MessageType>([
+  'version',
+  'reject',
+  'getblocks',
+  'blocks',
+  'tx',
+  'inv',
+  'getdata',
+  'getheaders',
+  'headers',
+  'addr',
+])
+
 /** Check if a string is a valid message type */
 export function isValidMessageType(type: string): type is MessageType {
   return VALID_MESSAGE_TYPES.has(type)
@@ -88,6 +101,33 @@ export interface Message {
   payload?: unknown
 }
 
+function isMessageObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function validateDecodedMessage(value: unknown): Message {
+  if (!isMessageObject(value)) {
+    throw new Error('Invalid message: expected object')
+  }
+
+  const type = value.type
+  if (typeof type !== 'string' || type.length === 0) {
+    throw new Error('Invalid message: missing type')
+  }
+
+  if (!isValidMessageType(type)) {
+    throw new Error(`Invalid message type: ${type}`)
+  }
+
+  if (OBJECT_PAYLOAD_TYPES.has(type) && !isMessageObject(value.payload)) {
+    throw new Error(`Invalid ${type} payload: expected object`)
+  }
+
+  return value.payload === undefined
+    ? { type }
+    : { type, payload: value.payload }
+}
+
 /** Encode a message to a length-prefixed buffer */
 export function encodeMessage(msg: Message): Buffer {
   const json = JSON.stringify(msg)
@@ -127,15 +167,7 @@ export function decodeMessages(
     }
 
     const json = buffer.toString('utf-8', offset + 4, offset + 4 + length)
-    const msg = JSON.parse(json) as Message
-
-    if (!msg.type || typeof msg.type !== 'string') {
-      throw new Error('Invalid message: missing type')
-    }
-
-    if (!isValidMessageType(msg.type)) {
-      throw new Error(`Invalid message type: ${msg.type}`)
-    }
+    const msg = validateDecodedMessage(JSON.parse(json))
 
     messages.push(msg)
     offset += 4 + length

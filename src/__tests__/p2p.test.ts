@@ -105,6 +105,36 @@ describe('protocol encoding', () => {
 
     expect(() => decodeMessages(frame)).toThrow('missing type')
   })
+
+  it('should reject non-object top-level JSON frames', () => {
+    const json = JSON.stringify(['not', 'a', 'message'])
+    const body = Buffer.from(json, 'utf-8')
+    const frame = Buffer.alloc(4 + body.length)
+    frame.writeUInt32BE(body.length, 0)
+    body.copy(frame, 4)
+
+    expect(() => decodeMessages(frame)).toThrow('expected object')
+  })
+
+  it('should reject tx messages with primitive payloads', () => {
+    const json = JSON.stringify({ type: 'tx', payload: 'not-an-object' })
+    const body = Buffer.from(json, 'utf-8')
+    const frame = Buffer.alloc(4 + body.length)
+    frame.writeUInt32BE(body.length, 0)
+    body.copy(frame, 4)
+
+    expect(() => decodeMessages(frame)).toThrow('Invalid tx payload')
+  })
+
+  it('should reject headers messages with array payloads', () => {
+    const json = JSON.stringify({ type: 'headers', payload: [] })
+    const body = Buffer.from(json, 'utf-8')
+    const frame = Buffer.alloc(4 + body.length)
+    frame.writeUInt32BE(body.length, 0)
+    body.copy(frame, 4)
+
+    expect(() => decodeMessages(frame)).toThrow('Invalid headers payload')
+  })
 })
 
 describeLoopbackTcp('P2P server integration', () => {
@@ -1482,6 +1512,32 @@ describeLoopbackTcp('P2P security hardening', () => {
       // After disconnect the server should have removed the peer
       await new Promise(r => setTimeout(r, 100))
       expect(p2p1.getPeers().length).toBe(0)
+    } finally {
+      await p2p1.stop()
+    }
+  })
+
+  it('should disconnect peer that sends a framed tx message with primitive payload', async () => {
+    const storage1 = new FileBlockStorage(tmpDir1)
+    const node1 = new Node('alice', undefined, storage1)
+    const p2p1 = new P2PServer(node1, 0, tmpDir1)
+    await p2p1.start()
+
+    try {
+      const port = p2p1.getPort()
+
+      const socket = net.createConnection({ host: '127.0.0.1', port })
+      await new Promise<void>(r => socket.once('connect', r))
+
+      socket.write(encodeMessage({ type: 'tx', payload: 'not-an-object' }))
+
+      await new Promise<void>((resolve, reject) => {
+        socket.once('close', resolve)
+        setTimeout(() => reject(new Error('socket did not close within 3s')), 3_000)
+      })
+
+      await new Promise(r => setTimeout(r, 100))
+      expect(p2p1.getPeerCount()).toBe(0)
     } finally {
       await p2p1.stop()
     }
