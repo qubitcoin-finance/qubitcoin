@@ -663,6 +663,14 @@ describe('deserializeBlock', () => {
     expect(() => deserializeBlock(raw as any)).toThrow('Block missing valid header object')
   })
 
+  it('throws when block is null', () => {
+    expect(() => deserializeBlock(null)).toThrow('Block must be an object')
+  })
+
+  it('throws when block is an array', () => {
+    expect(() => deserializeBlock([])).toThrow('Block must be an object')
+  })
+
   it('throws when header is null', () => {
     const raw = { hash: 'a'.repeat(64), height: 0, header: null, transactions: [] }
     expect(() => deserializeBlock(raw as any)).toThrow('Block missing valid header object')
@@ -824,6 +832,23 @@ describe('deserializeBlock', () => {
       transactions: [],
     }
     expect(() => deserializeBlock(raw as any)).toThrow('Block height must be a non-negative integer')
+  })
+
+  it('throws when transactions is missing', () => {
+    const raw = {
+      hash: 'a'.repeat(64), height: 0,
+      header: { version: 1, previousHash: validHeaderFields.previousHash, merkleRoot: validHeaderFields.merkleRoot, timestamp: 1, target: validHeaderFields.target, nonce: 0 },
+    }
+    expect(() => deserializeBlock(raw as any)).toThrow('Block transactions must be an array')
+  })
+
+  it('throws when transactions is not an array', () => {
+    const raw = {
+      hash: 'a'.repeat(64), height: 0,
+      header: { version: 1, previousHash: validHeaderFields.previousHash, merkleRoot: validHeaderFields.merkleRoot, timestamp: 1, target: validHeaderFields.target, nonce: 0 },
+      transactions: 'not-an-array',
+    }
+    expect(() => deserializeBlock(raw as any)).toThrow('Block transactions must be an array')
   })
 })
 

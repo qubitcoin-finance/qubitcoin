@@ -61,6 +61,10 @@ type RawTransactionRecord = Record<string, unknown> & {
   claimData?: Record<string, unknown>
 }
 
+type RawBlockRecord = Record<string, unknown> & {
+  transactions: unknown[]
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -172,7 +176,10 @@ export function deserializeTransaction(raw: unknown): Transaction {
   return tx
 }
 
-function validateBlockShape(raw: Record<string, unknown>): void {
+function validateBlockShape(raw: unknown): asserts raw is RawBlockRecord {
+  if (!isRecord(raw)) {
+    throw new Error('Block must be an object')
+  }
   if (!isRecord(raw.header)) {
     throw new Error('Block missing valid header object')
   }
@@ -199,27 +206,28 @@ function validateBlockShape(raw: Record<string, unknown>): void {
   if (!Number.isInteger(raw.height) || (raw.height as number) < 0) {
     throw new Error(`Block height must be a non-negative integer, got ${String(raw.height)}`)
   }
+  if (!Array.isArray(raw.transactions)) {
+    throw new Error('Block transactions must be an array')
+  }
 }
 
-export function deserializeBlock(raw: Record<string, unknown>): Block {
+export function deserializeBlock(raw: unknown): Block {
   validateBlockShape(raw)
   const block = raw as unknown as Block
-  if (Array.isArray(raw.transactions)) {
-    if (raw.transactions.length > MAX_BLOCK_TRANSACTIONS) {
-      throw new Error(`Block transaction count ${raw.transactions.length} exceeds limit ${MAX_BLOCK_TRANSACTIONS}`)
-    }
-    block.transactions = raw.transactions.map((tx, index) => {
-      if (!isRecord(tx)) {
-        throw new Error(`Block transaction at index ${index} must be an object`)
-      }
-      try {
-        return deserializeTransaction(tx)
-      } catch (err) {
-        const detail = err instanceof Error ? err.message : String(err)
-        throw new Error(`Block transaction at index ${index} is invalid: ${detail}`)
-      }
-    })
+  if (raw.transactions.length > MAX_BLOCK_TRANSACTIONS) {
+    throw new Error(`Block transaction count ${raw.transactions.length} exceeds limit ${MAX_BLOCK_TRANSACTIONS}`)
   }
+  block.transactions = raw.transactions.map((tx, index) => {
+    if (!isRecord(tx)) {
+      throw new Error(`Block transaction at index ${index} must be an object`)
+    }
+    try {
+      return deserializeTransaction(tx)
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err)
+      throw new Error(`Block transaction at index ${index} is invalid: ${detail}`)
+    }
+  })
   return block
 }
 
