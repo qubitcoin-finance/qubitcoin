@@ -86,7 +86,7 @@ export function startRpcServer(
   app.set('trust proxy', trustProxy);
   app.disable('x-powered-by');
   app.use(cors({ origin: bindAddress === '127.0.0.1' ? true : false }));
-  app.use(express.json({ limit: MAX_BODY_SIZE }));
+  app.use(express.json({ limit: MAX_BODY_SIZE, strict: false }));
 
   // Rate limiting
   const rateLimiter = createRateLimiter();

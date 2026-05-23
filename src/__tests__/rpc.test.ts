@@ -885,6 +885,21 @@ describeLoopbackTcp('RPC edge cases', () => {
       body: JSON.stringify('not-an-object'),
     })
     expect(res.status).toBe(400)
+    expect(res.headers.get('content-type')).toContain('application/json')
+    const body = await res.json()
+    expect(body.error).toBe('Transaction must be an object')
+  })
+
+  it('POST /tx with null body returns 400 JSON error payload', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'null',
+    })
+    expect(res.status).toBe(400)
+    expect(res.headers.get('content-type')).toContain('application/json')
+    const body = await res.json()
+    expect(body.error).toBe('Transaction must be an object')
   })
 
   it('POST /tx with array body returns 400', async () => {
@@ -894,6 +909,33 @@ describeLoopbackTcp('RPC edge cases', () => {
       body: JSON.stringify([]),
     })
     expect(res.status).toBe(400)
+    expect(res.headers.get('content-type')).toContain('application/json')
+    const body = await res.json()
+    expect(body.error).toBe('Transaction must be an object')
+  })
+
+  it('POST /tx with numeric body returns 400 JSON error payload', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '123',
+    })
+    expect(res.status).toBe(400)
+    expect(res.headers.get('content-type')).toContain('application/json')
+    const body = await res.json()
+    expect(body.error).toBe('Transaction must be an object')
+  })
+
+  it('POST /tx with boolean body returns 400 JSON error payload', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'true',
+    })
+    expect(res.status).toBe(400)
+    expect(res.headers.get('content-type')).toContain('application/json')
+    const body = await res.json()
+    expect(body.error).toBe('Transaction must be an object')
   })
 
   it('POST /tx with malformed JSON returns JSON error payload', async () => {
