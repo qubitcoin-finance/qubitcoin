@@ -245,6 +245,94 @@ describe('FileBlockStorage', () => {
     expect(loaded[1].hash).toBe(block2.hash)
   })
 
+  it('should skip top-level non-object persisted entries and keep loading valid blocks', () => {
+    const storage = new FileBlockStorage(tmpDir)
+    const chain = new Blockchain()
+    const wallet = walletA
+    const errorSpy = vi.spyOn(log, 'error').mockImplementation(() => log)
+
+    const block1 = mineOnChain(chain, wallet.address)
+    chain.addBlock(block1)
+    const block2 = mineOnChain(chain, wallet.address)
+    chain.addBlock(block2)
+    const blocksPath = path.join(tmpDir, 'blocks.jsonl')
+
+    fs.writeFileSync(
+      blocksPath,
+      [
+        JSON.stringify(sanitizeForStorage(block1)),
+        'null',
+        JSON.stringify(sanitizeForStorage(block2)),
+      ].join('\n') + '\n'
+    )
+
+    const loaded = storage.loadBlocks()
+
+    expect(loaded).toHaveLength(2)
+    expect(loaded[0].hash).toBe(block1.hash)
+    expect(loaded[1].hash).toBe(block2.hash)
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        component: 'storage',
+        line: 2,
+        detail: 'Block must be an object',
+      }),
+      'Skipping corrupted block entry in blocks.jsonl'
+    )
+
+    errorSpy.mockRestore()
+  })
+
+  it('should skip persisted block entries missing transactions and keep loading valid blocks', () => {
+    const storage = new FileBlockStorage(tmpDir)
+    const chain = new Blockchain()
+    const wallet = walletA
+    const errorSpy = vi.spyOn(log, 'error').mockImplementation(() => log)
+
+    const block1 = mineOnChain(chain, wallet.address)
+    chain.addBlock(block1)
+    const block2 = mineOnChain(chain, wallet.address)
+    chain.addBlock(block2)
+    const blocksPath = path.join(tmpDir, 'blocks.jsonl')
+    const malformedBlock = {
+      hash: VALID_BLOCK_HASH,
+      height: 1,
+      header: {
+        version: 1,
+        previousHash: VALID_BLOCK_HEADER_FIELDS.previousHash,
+        merkleRoot: VALID_BLOCK_HEADER_FIELDS.merkleRoot,
+        timestamp: 1,
+        target: VALID_BLOCK_HEADER_FIELDS.target,
+        nonce: 0,
+      },
+    }
+
+    fs.writeFileSync(
+      blocksPath,
+      [
+        JSON.stringify(sanitizeForStorage(block1)),
+        JSON.stringify(malformedBlock),
+        JSON.stringify(sanitizeForStorage(block2)),
+      ].join('\n') + '\n'
+    )
+
+    const loaded = storage.loadBlocks()
+
+    expect(loaded).toHaveLength(2)
+    expect(loaded[0].hash).toBe(block1.hash)
+    expect(loaded[1].hash).toBe(block2.hash)
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        component: 'storage',
+        line: 2,
+        detail: 'Block transactions must be an array',
+      }),
+      'Skipping corrupted block entry in blocks.jsonl'
+    )
+
+    errorSpy.mockRestore()
+  })
+
   it('should return null for corrupted metadata.json', () => {
     const storage = new FileBlockStorage(tmpDir)
     const metadataPath = path.join(tmpDir, 'metadata.json')
