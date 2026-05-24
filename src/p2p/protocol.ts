@@ -105,6 +105,47 @@ function isMessageObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
+function validateStructuredPayload(
+  type: MessageType,
+  payload: Record<string, unknown>,
+): void {
+  switch (type) {
+    case 'blocks':
+      if (!Array.isArray(payload.blocks)) {
+        throw new Error('Invalid blocks payload: expected blocks array')
+      }
+      return
+    case 'tx':
+      if (!isMessageObject(payload.tx)) {
+        throw new Error('Invalid tx payload: expected tx object')
+      }
+      return
+    case 'inv':
+    case 'getdata':
+      if (typeof payload.type !== 'string' || typeof payload.hash !== 'string') {
+        throw new Error(`Invalid ${type} payload: expected type/hash strings`)
+      }
+      return
+    case 'getheaders':
+      if (!Array.isArray(payload.locatorHashes)) {
+        throw new Error('Invalid getheaders payload: expected locatorHashes array')
+      }
+      return
+    case 'headers':
+      if (!Array.isArray(payload.headers)) {
+        throw new Error('Invalid headers payload: expected headers array')
+      }
+      return
+    case 'addr':
+      if (!Array.isArray(payload.addresses)) {
+        throw new Error('Invalid addr payload: expected addresses array')
+      }
+      return
+    default:
+      return
+  }
+}
+
 function validateDecodedMessage(value: unknown): Message {
   if (!isMessageObject(value)) {
     throw new Error('Invalid message: expected object')
@@ -119,13 +160,17 @@ function validateDecodedMessage(value: unknown): Message {
     throw new Error(`Invalid message type: ${type}`)
   }
 
-  if (OBJECT_PAYLOAD_TYPES.has(type) && !isMessageObject(value.payload)) {
-    throw new Error(`Invalid ${type} payload: expected object`)
+  const payload = value.payload
+  if (OBJECT_PAYLOAD_TYPES.has(type)) {
+    if (!isMessageObject(payload)) {
+      throw new Error(`Invalid ${type} payload: expected object`)
+    }
+    validateStructuredPayload(type, payload)
   }
 
-  return value.payload === undefined
+  return payload === undefined
     ? { type }
-    : { type, payload: value.payload }
+    : { type, payload }
 }
 
 /** Encode a message to a length-prefixed buffer */

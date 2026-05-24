@@ -126,6 +126,16 @@ describe('protocol encoding', () => {
     expect(() => decodeMessages(frame)).toThrow('Invalid tx payload')
   })
 
+  it('should reject tx messages without an object tx field', () => {
+    const json = JSON.stringify({ type: 'tx', payload: { tx: 'not-an-object' } })
+    const body = Buffer.from(json, 'utf-8')
+    const frame = Buffer.alloc(4 + body.length)
+    frame.writeUInt32BE(body.length, 0)
+    body.copy(frame, 4)
+
+    expect(() => decodeMessages(frame)).toThrow('expected tx object')
+  })
+
   it('should reject headers messages with array payloads', () => {
     const json = JSON.stringify({ type: 'headers', payload: [] })
     const body = Buffer.from(json, 'utf-8')
@@ -134,6 +144,46 @@ describe('protocol encoding', () => {
     body.copy(frame, 4)
 
     expect(() => decodeMessages(frame)).toThrow('Invalid headers payload')
+  })
+
+  it('should reject blocks messages without a blocks array', () => {
+    const json = JSON.stringify({ type: 'blocks', payload: { blocks: {} } })
+    const body = Buffer.from(json, 'utf-8')
+    const frame = Buffer.alloc(4 + body.length)
+    frame.writeUInt32BE(body.length, 0)
+    body.copy(frame, 4)
+
+    expect(() => decodeMessages(frame)).toThrow('expected blocks array')
+  })
+
+  it('should reject inv messages without string type/hash fields', () => {
+    const json = JSON.stringify({ type: 'inv', payload: { type: 'block', hash: 123 } })
+    const body = Buffer.from(json, 'utf-8')
+    const frame = Buffer.alloc(4 + body.length)
+    frame.writeUInt32BE(body.length, 0)
+    body.copy(frame, 4)
+
+    expect(() => decodeMessages(frame)).toThrow('expected type/hash strings')
+  })
+
+  it('should reject getheaders messages without a locatorHashes array', () => {
+    const json = JSON.stringify({ type: 'getheaders', payload: { locatorHashes: 'abc' } })
+    const body = Buffer.from(json, 'utf-8')
+    const frame = Buffer.alloc(4 + body.length)
+    frame.writeUInt32BE(body.length, 0)
+    body.copy(frame, 4)
+
+    expect(() => decodeMessages(frame)).toThrow('expected locatorHashes array')
+  })
+
+  it('should reject addr messages without an addresses array', () => {
+    const json = JSON.stringify({ type: 'addr', payload: { addresses: 'not-an-array' } })
+    const body = Buffer.from(json, 'utf-8')
+    const frame = Buffer.alloc(4 + body.length)
+    frame.writeUInt32BE(body.length, 0)
+    body.copy(frame, 4)
+
+    expect(() => decodeMessages(frame)).toThrow('expected addresses array')
   })
 })
 
