@@ -1335,14 +1335,17 @@ describeLoopbackTcp('RPC rate limiting', () => {
 
   it('GET traffic does not consume the stricter POST rate-limit bucket', async () => {
     const node = new Node('rpc-rate-isolation-test')
-    const app = startRpcServer(node, 0)
+    const app = startRpcServer(node, 0, undefined, '127.0.0.1', undefined, {
+      get: 3,
+      post: 1,
+    })
     const server = app.listen(0, '127.0.0.1')
     const addr = await listenOnLoopback(server)
     const baseUrl = `http://127.0.0.1:${addr.port}`
 
     try {
       const getResponses = await Promise.all(
-        Array.from({ length: 600 }, () => fetch(`${baseUrl}/api/v1/status`))
+        Array.from({ length: 3 }, () => fetch(`${baseUrl}/api/v1/status`))
       )
       expect(getResponses.every(r => r.status === 200)).toBe(true)
 

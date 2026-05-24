@@ -20,13 +20,19 @@ const GET_RATE_LIMIT = 600;   // requests per minute
 const POST_RATE_LIMIT = 100;  // requests per minute
 const RATE_WINDOW_MS = 60_000;
 
+export type RpcRateLimitConfig = {
+  get?: number;
+  post?: number;
+  windowMs?: number;
+};
+
 /** Simple in-memory per-IP rate limiter (sliding window) */
-function createRateLimiter() {
+function createRateLimiter(windowMs = RATE_WINDOW_MS) {
   const hits = new Map<string, { timestamps: number[] }>();
 
   // Cleanup stale entries every 5 minutes
   setInterval(() => {
-    const cutoff = Date.now() - RATE_WINDOW_MS;
+    const cutoff = Date.now() - windowMs;
     for (const [ip, data] of hits) {
       data.timestamps = data.timestamps.filter(t => t > cutoff);
       if (data.timestamps.length === 0) hits.delete(ip);
@@ -37,7 +43,7 @@ function createRateLimiter() {
     const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown';
     const key = `${bucket}:${ip}`;
     const now = Date.now();
-    const cutoff = now - RATE_WINDOW_MS;
+    const cutoff = now - windowMs;
 
     let data = hits.get(key);
     if (!data) {
@@ -81,21 +87,22 @@ export function startRpcServer(
   p2pServer?: P2PServer,
   bindAddress: string = '127.0.0.1',
   trustProxy: RpcTrustProxy = [...DEFAULT_TRUSTED_PROXIES],
+  rateLimitConfig: RpcRateLimitConfig = {},
 ): Express {
   const app = express();
   app.set('trust proxy', trustProxy);
   app.disable('x-powered-by');
-  app.use(cors({ origin: bindAddress === '127.0.0.1' ? true : false }));
-  app.use(express.json({ limit: MAX_BODY_SIZE, strict: false }));
 
   // Rate limiting
-  const rateLimiter = createRateLimiter();
+  const rateLimiter = createRateLimiter(rateLimitConfig.windowMs ?? RATE_WINDOW_MS);
+  const getRateLimiter = rateLimiter('GET', rateLimitConfig.get ?? GET_RATE_LIMIT);
+  const postRateLimiter = rateLimiter('POST', rateLimitConfig.post ?? POST_RATE_LIMIT);
+  app.use(cors({ origin: bindAddress === '127.0.0.1' ? true : false }));
   app.use((req: Request, res: Response, next: NextFunction) => {
-    const isPost = req.method === 'POST';
-    const bucket = isPost ? 'POST' : 'GET';
-    const limit = isPost ? POST_RATE_LIMIT : GET_RATE_LIMIT;
-    rateLimiter(bucket, limit)(req, res, next);
+    const limiter = req.method === 'POST' ? postRateLimiter : getRateLimiter;
+    limiter(req, res, next);
   });
+  app.use(express.json({ limit: MAX_BODY_SIZE, strict: false }));
 
   // Endpoint to get the status of the node
   app.get('/api/v1/status', (req, res) => {

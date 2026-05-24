@@ -145,21 +145,47 @@ export function mineBlockAsync(
   onProgress?: (progress: MiningProgress) => void,
 ): Promise<Block | null> {
   return new Promise((resolve) => {
+    let finished = false
     let nonce = 0
-    let batchSize = 100_000  // initial guess, auto-tunes
-    const TARGET_BATCH_MS = 100
+    let batchSize = 2_048  // small first batch keeps abort timers responsive on slow hosts
+    const ABORT_CHECK_INTERVAL = 256
+    const TARGET_BATCH_MS = 25
+    const MIN_BATCH_SIZE = 256
+    const MAX_BATCH_SIZE = 100_000
     const target = block.header.target
     const startTime = performance.now()
 
+    const finish = (result: Block | null) => {
+      if (finished) return
+      finished = true
+      signal?.removeEventListener('abort', abort)
+      resolve(result)
+    }
+
+    const abort = () => finish(null)
+
+    if (signal?.aborted) {
+      finish(null)
+      return
+    }
+    signal?.addEventListener('abort', abort, { once: true })
+
     function batch() {
+      if (finished) return
+
       if (signal?.aborted) {
-        resolve(null)
+        finish(null)
         return
       }
 
       const batchStart = performance.now()
 
       for (let i = 0; i < batchSize; i++) {
+        if (signal?.aborted && i % ABORT_CHECK_INTERVAL === 0) {
+          finish(null)
+          return
+        }
+
         block.header.nonce = nonce
         const hash = computeBlockHash(block.header)
 
@@ -167,7 +193,7 @@ export function mineBlockAsync(
           block.hash = hash
           const elapsed = ((performance.now() - startTime) / 1000).toFixed(2)
           log.info({ component: 'miner', block: block.height, nonce, elapsed: `${elapsed}s`, hash: hash.slice(0, 20) }, 'Block mined')
-          resolve(block)
+          finish(block)
           return
         }
 
@@ -179,16 +205,16 @@ export function mineBlockAsync(
         }
       }
 
-      // Adaptive batch sizing with exponential smoothing: aim for ~100ms per batch
+      // Adaptive batch sizing with exponential smoothing.
       const batchMs = performance.now() - batchStart
       if (batchMs > 0) {
         const idealBatch = Math.round(batchSize * TARGET_BATCH_MS / batchMs)
         const ALPHA = 0.3
-        batchSize = Math.max(10_000, Math.min(500_000, Math.round(ALPHA * idealBatch + (1 - ALPHA) * batchSize)))
+        batchSize = Math.max(MIN_BATCH_SIZE, Math.min(MAX_BATCH_SIZE, Math.round(ALPHA * idealBatch + (1 - ALPHA) * batchSize)))
       }
 
-      // Report progress every ~100k nonces
-      if (onProgress && nonce % 100_000 < batchSize) {
+      // Report progress once per completed batch so callers are not gated on hashrate.
+      if (onProgress && !signal?.aborted) {
         const elapsedMs = performance.now() - startTime
         const elapsedSec = elapsedMs / 1000
         onProgress({
