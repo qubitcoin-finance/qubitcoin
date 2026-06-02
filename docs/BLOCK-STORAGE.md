@@ -19,7 +19,7 @@ JSON has no native binary type, so `Uint8Array` fields would serialize as `{"0":
 | `src/storage.ts:244` | `appendBlock` — single-line O(1) append |
 | `src/storage.ts:249` | `rewriteBlocks` — full-file rewrite (genesis replace, reorg) |
 | `src/storage.ts:254` | `loadBlocks` — line-by-line parse, skips corrupt entries |
-| `src/utils.ts:38` | `sanitize` — recursive `Uint8Array` → hex (outbound) |
+| `src/utils.ts:40` | `sanitize` — recursive `Uint8Array` → hex (outbound) |
 | `src/storage.ts:214` | `deserializeBlock` — shape-validate + restore one block (inbound) |
 | `src/storage.ts:139` | `deserializeTransaction` — restore tx inputs + claimData binaries |
 | `src/storage.ts:179` | `validateBlockShape` — header/hash/height structural checks |
@@ -35,7 +35,7 @@ JSON has no native binary type, so `Uint8Array` fields would serialize as `{"0":
 
 ### Outbound: write path
 
-`appendBlock` and `rewriteBlocks` both run the block through `sanitize` before `JSON.stringify`. `sanitize` (`src/utils.ts:38`) recurses through arrays and plain objects; whenever it hits a `Uint8Array` it replaces it with `hexEncode(...)`. So an ML-DSA signature `Uint8Array(3309)` becomes a 6618-char hex string nested in the same JSON position. `appendBlock` writes `serialized + '\n'`; `rewriteBlocks` joins all lines and adds a trailing newline only when the list is non-empty.
+`appendBlock` and `rewriteBlocks` both run the block through `sanitize` before `JSON.stringify`. `sanitize` (`src/utils.ts:40`) recurses through arrays and plain objects; whenever it hits a `Uint8Array` it replaces it with `hexEncode(...)`. So an ML-DSA signature `Uint8Array(3309)` becomes a 6618-char hex string nested in the same JSON position. `appendBlock` writes `serialized + '\n'`; `rewriteBlocks` joins all lines and adds a trailing newline only when the list is non-empty.
 
 ```text
 Block (in memory)            JSON line on disk
