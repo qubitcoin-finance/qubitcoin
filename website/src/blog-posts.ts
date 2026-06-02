@@ -11,8 +11,10 @@ import runANode from './blog/run-a-node.js';
 import hardeningTheNode from './blog/hardening-the-node-against-dos.js';
 import o1TransactionIndex from './blog/o1-transaction-index.js';
 import miningWithoutBlocking from './blog/mining-without-blocking-the-event-loop.js';
+import revalidatingTheMempoolAfterAReorg from './blog/revalidating-the-mempool-after-a-reorg.js';
 
 export const BLOG_POSTS = [
+  revalidatingTheMempoolAfterAReorg,
   miningWithoutBlocking,
   treatingPersistedBlocksAsUntrustedInput,
   serverOwnedTransactionConfirmations,
