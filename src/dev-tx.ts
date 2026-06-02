@@ -16,11 +16,18 @@ import { sanitize } from './utils.js'
 const RPC = process.argv[2] || 'http://127.0.0.1:3001'
 const WALLET_PATH = process.argv[3] || 'data/node/wallet.json'
 const INTERVAL_MS = 3_000
+const REQUEST_TIMEOUT_MS = 10_000
 
 async function api<T>(path: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(`${RPC}/api/v1${path}`, opts)
-  if (!res.ok) throw new Error(`${path}: ${res.status} ${await res.text()}`)
-  return res.json() as Promise<T>
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  try {
+    const res = await fetch(`${RPC}/api/v1${path}`, { ...opts, signal: controller.signal })
+    if (!res.ok) throw new Error(`${path}: ${res.status} ${await res.text()}`)
+    return res.json() as Promise<T>
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 
