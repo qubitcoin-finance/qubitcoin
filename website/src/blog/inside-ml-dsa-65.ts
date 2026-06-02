@@ -27,10 +27,10 @@ ${p('NIST standardized three ML-DSA parameter sets. We use ML-DSA-65:')}
       <span class="text-text-muted">Public key size</span><span class="text-qubit-300">1,952 bytes</span>
     </div>
     <div class="flex justify-between items-center py-2 border-b border-border">
-      <span class="text-text-muted">Secret key size</span><span class="text-qubit-300">4,000 bytes</span>
+      <span class="text-text-muted">Secret key size</span><span class="text-qubit-300">4,032 bytes</span>
     </div>
     <div class="flex justify-between items-center py-2 border-b border-border">
-      <span class="text-text-muted">Signature size</span><span class="text-qubit-300">3,293 bytes</span>
+      <span class="text-text-muted">Signature size</span><span class="text-qubit-300">3,309 bytes</span>
     </div>
     <div class="flex justify-between items-center py-2">
       <span class="text-text-muted">Library</span><span class="text-qubit-300">@noble/post-quantum</span>

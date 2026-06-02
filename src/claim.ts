@@ -301,12 +301,12 @@ function verifyParsedScript(
 }
 
 /**
- * Verify a claim transaction's ECDSA proof against the BTC snapshot.
+ * Verify a claim transaction's ownership proof against the BTC snapshot.
  *
  * Checks:
  * 1. The BTC address exists in the snapshot
- * 2. HASH160(ecdsaPubKey) matches the claimed address
- * 3. The ECDSA signature is valid for the claim message
+ * 2. The submitted key or script matches the claimed address
+ * 3. The submitted signature proof is valid for the claim message
  * 4. The output amount matches the snapshot amount
  */
 export function verifyClaimProof(

@@ -22,7 +22,7 @@ ${p('You need Docker. That\'s it.')}
   <p>&nbsp;&nbsp;--restart unless-stopped \\</p>
   <p>&nbsp;&nbsp;-v $(pwd)/qbtc-data:/data \\</p>
   <p>&nbsp;&nbsp;ghcr.io/qubitcoin-finance/qbtcd:main \\</p>
-  <p>&nbsp;&nbsp;--datadir=/data --port=3010 --mine</p>
+  <p>&nbsp;&nbsp;--datadir=/data --port=3010 --mine --full</p>
 </div>
 ${p('Your node will connect to <span class="font-mono text-xs text-qubit-400">qubitcoin.finance:6001</span> as a seed peer, sync the chain, and start mining. P2P is on port 6001 — open it inbound if you\'re behind a firewall so other nodes can reach you.')}
 ${p('Check it\'s running:')}
