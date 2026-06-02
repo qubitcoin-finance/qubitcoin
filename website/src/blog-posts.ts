@@ -12,8 +12,12 @@ import hardeningTheNode from './blog/hardening-the-node-against-dos.js';
 import o1TransactionIndex from './blog/o1-transaction-index.js';
 import miningWithoutBlocking from './blog/mining-without-blocking-the-event-loop.js';
 import revalidatingTheMempoolAfterAReorg from './blog/revalidating-the-mempool-after-a-reorg.js';
+import validatingP2pMessagesAtTheWire from './blog/validating-p2p-messages-at-the-wire.js';
+import anchorPeersAndSubnetDiversity from './blog/anchor-peers-and-subnet-diversity.js';
 
 export const BLOG_POSTS = [
+  anchorPeersAndSubnetDiversity,
+  validatingP2pMessagesAtTheWire,
   revalidatingTheMempoolAfterAReorg,
   miningWithoutBlocking,
   treatingPersistedBlocksAsUntrustedInput,
