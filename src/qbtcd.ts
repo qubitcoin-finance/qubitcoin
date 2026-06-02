@@ -24,7 +24,7 @@ import { join } from 'node:path'
 import { get as httpsGet } from 'node:https'
 import { get as httpGet } from 'node:http'
 import { createTransaction } from './transaction.js'
-import { INITIAL_TARGET } from './block.js'
+import { INITIAL_TARGET, createForkGenesisBlock } from './block.js'
 import { FileBlockStorage } from './storage.js'
 import { P2PServer } from './p2p/server.js'
 import type { BtcSnapshot } from './snapshot.js'
@@ -198,7 +198,6 @@ async function main() {
     // Integrity check: verify snapshot merkle root matches expected value
     // This prevents a MITM'd or corrupt snapshot from being silently accepted
     if (snapshot.merkleRoot && config.full) {
-      const { createForkGenesisBlock } = await import('./block.js')
       const genesis = createForkGenesisBlock(snapshot)
       log.info({ component: 'snapshot', merkleRoot: snapshot.merkleRoot.slice(0, 16), genesisHash: genesis.hash.slice(0, 16) }, 'Snapshot integrity verified')
     }
