@@ -128,7 +128,7 @@ The legacy `pnpm ship` script still exists as a reminder shim; its message still
    - Commit any file containing private keys, seeds, or `.env` secrets.
 4. **No force-push** — Never `git push --force` to `main`.
 5. **Hook bypass** — Never use `--no-verify`. If a hook fails, fix the underlying issue.
-6. **Stale npm scripts** — `generate-snapshot`, `snapshot:activate`, and `q` in `package.json` reference files that do not exist (`scripts/generate-snapshot.sh`, `scripts/activate-snapshot.sh`, `scripts/q.ts`). Do not run these scripts; verify the underlying file exists before attempting to use or recreate them.
+6. **Snapshot/monitoring scripts** — `generate-snapshot` (`scripts/generate-snapshot.sh`), `snapshot:activate` (`scripts/activate-snapshot.sh`), and `q` (`scripts/q.ts`, production container monitoring dashboard) now exist and are runnable. `generate-snapshot`/`snapshot:activate` regenerate and swap in BTC snapshot data — treat as data-mutating; do not run without explicit approval. Always verify the underlying file exists before invoking any npm script.
 
 ## Docs Reference
 
