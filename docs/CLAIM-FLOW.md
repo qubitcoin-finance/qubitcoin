@@ -22,7 +22,7 @@ Two problems shape the design:
 | `verifyClaimProof` | `src/claim.ts:312` | The consensus validator — dispatches on `entry.type` |
 | `verifyMultisig` / `verifyParsedScript` | `src/claim.ts:248` / `:280` | Ordered CHECKMULTISIG-style signature checks |
 | `BtcAddressBalance` / `BtcSnapshot` | `src/snapshot.ts:24` / `:30` | Snapshot entry + header (`btcBlockHash`) |
-| `getSnapshotIndex` | `src/snapshot.ts:97` | WeakMap-cached `Map<btcAddress, entry>` for O(1) lookup |
+| `getSnapshotIndex` | `src/snapshot.ts:91` | WeakMap-cached `Map<btcAddress, entry>` for O(1) lookup |
 | `CLAIM_TXID` | `src/transaction.ts:81` | 64×`'c'` sentinel input (mirrors `COINBASE_TXID`) |
 | `CLAIM_MATURITY` | `src/transaction.ts:66` | Claim outputs locked for 10 blocks |
 | `claimedBtcAddresses` | `src/chain.ts:50` | In-memory `Set` of spent BTC addresses |
