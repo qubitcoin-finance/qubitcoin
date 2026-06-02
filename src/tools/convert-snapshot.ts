@@ -252,7 +252,6 @@ const CHECKPOINT_INTERVAL = 5_000_000n // every 5M coins
 
 function loadCheckpoint(workdir: string): Checkpoint | null {
   const cpPath = join(workdir, 'checkpoint.json')
-  if (!existsSync(cpPath)) return null
   try {
     return JSON.parse(readFileSync(cpPath, 'utf8')) as Checkpoint
   } catch {
