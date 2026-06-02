@@ -10,8 +10,10 @@ import testnetWhatWeveLearned from './blog/testnet-what-weve-learned.js';
 import runANode from './blog/run-a-node.js';
 import hardeningTheNode from './blog/hardening-the-node-against-dos.js';
 import o1TransactionIndex from './blog/o1-transaction-index.js';
+import miningWithoutBlocking from './blog/mining-without-blocking-the-event-loop.js';
 
 export const BLOG_POSTS = [
+  miningWithoutBlocking,
   treatingPersistedBlocksAsUntrustedInput,
   serverOwnedTransactionConfirmations,
   bridgingBitcoinClaimsAcrossScriptTypes,
