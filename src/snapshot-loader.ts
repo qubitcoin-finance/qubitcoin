@@ -7,7 +7,8 @@
  */
 import fs from 'node:fs'
 import readline from 'node:readline'
-import { type BtcSnapshot, type BtcAddressBalance } from './snapshot.js'
+import { type BtcSnapshot, type BtcAddressBalance, computeSnapshotMerkleRoot } from './snapshot.js'
+import { doubleSha256Hex } from './crypto.js'
 
 export async function loadSnapshot(filePath: string): Promise<BtcSnapshot> {
   const entries: BtcAddressBalance[] = []
@@ -71,11 +72,9 @@ export async function loadSnapshot(filePath: string): Promise<BtcSnapshot> {
 
   if (!merkleRoot) {
     // Legacy format without header — compute merkle root
-    const { computeSnapshotMerkleRoot } = await import('./snapshot.js')
     merkleRoot = computeSnapshotMerkleRoot(entries)
   }
   if (!btcBlockHash) {
-    const { doubleSha256Hex } = await import('./crypto.js')
     btcBlockHash = doubleSha256Hex(new TextEncoder().encode('btc-snapshot'))
   }
 
