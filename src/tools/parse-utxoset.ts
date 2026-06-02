@@ -121,7 +121,7 @@ class BufferedReader {
     this.compact()
     this.stream.resume()
     await new Promise<void>((resolve, reject) => {
-      (this as any).pendingRead = { resolve, reject, needed: n }
+      this.pendingRead = { resolve, reject, needed: n }
     })
     this.stream.pause()
   }
