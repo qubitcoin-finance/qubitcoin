@@ -155,7 +155,7 @@ A set of pure functions formats display values without touching the DOM:
 
 The docs and blog views are self-contained within the module:
 
-- `renderDocs(section?)` (`explorer-main.ts:2164`) — renders one of seven doc sections defined in `DOC_SECTIONS` (line 880) by matching `section` against their `id` field. Falls back to the overview when `section` is undefined.
+- `renderDocs(section?)` (`explorer-main.ts:2164`) — renders one of ten doc sections defined in `DOC_SECTIONS` (line 880) by matching `section` against their `id` field. Falls back to the overview when `section` is undefined.
 - `renderBlogList()` / `renderBlogPost(slug)` (`explorer-main.ts:2067`, `2127`) — renders the blog index or a single post. Blog posts are imported as TypeScript modules from `website/src/blog/`.
 
 Neither view makes network requests; all content is bundled at build time.
