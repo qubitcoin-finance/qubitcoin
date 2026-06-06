@@ -1,7 +1,6 @@
 ---
 model: sonnet
-schedule: 24h
+schedule: 48h
 skillIds: ["agent-manage-agents"]
 ---
-
 
