@@ -1,5 +1,6 @@
 export { type BlogPost, BLOG_TAG_COLORS } from './blog/types.js';
 
+import whenChangeBecomesDust from './blog/when-change-becomes-dust.js';
 import treatingPersistedBlocksAsUntrustedInput from './blog/treating-persisted-blocks-as-untrusted-input.js';
 import serverOwnedTransactionConfirmations from './blog/server-owned-transaction-confirmations.js';
 import bridgingBitcoinClaimsAcrossScriptTypes from './blog/bridging-bitcoin-claims-across-script-types.js';
@@ -17,6 +18,7 @@ import anchorPeersAndSubnetDiversity from './blog/anchor-peers-and-subnet-divers
 import trustingProxiesWithoutBreakingRpcRateLimits from './blog/trusting-proxies-without-breaking-rpc-rate-limits.js';
 
 export const BLOG_POSTS = [
+  whenChangeBecomesDust,
   trustingProxiesWithoutBreakingRpcRateLimits,
   anchorPeersAndSubnetDiversity,
   validatingP2pMessagesAtTheWire,
