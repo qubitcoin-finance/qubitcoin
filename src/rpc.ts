@@ -152,7 +152,9 @@ export function startRpcServer(
     }
     const parsed = req.query.count ? parseInt(req.query.count as string, 10) : 10;
     const count = Math.min(parsed, 100);
-    const blocks = [...node.chain.blocks].reverse().slice(0, count);
+    // Slice the newest `count` blocks before reversing, so we never copy/reverse the whole chain.
+    const start = Math.max(0, node.chain.blocks.length - count);
+    const blocks = node.chain.blocks.slice(start).reverse();
     res.json(sanitize(blocks));
   });
 
