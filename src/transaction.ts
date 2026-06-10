@@ -320,8 +320,9 @@ export function validateTransaction(
 
   // Verify each input
   let totalIn = 0
+  const inputOutpoints = tx.inputs.map((i) => ({ txId: i.txId, outputIndex: i.outputIndex }))
   const sighash = serializeForSigning(
-    tx.inputs.map((i) => ({ txId: i.txId, outputIndex: i.outputIndex })),
+    inputOutpoints,
     tx.outputs,
     tx.timestamp
   )
@@ -383,7 +384,7 @@ export function validateTransaction(
 
   // Verify txId
   const expectedId = computeTxId(
-    tx.inputs.map((i) => ({ txId: i.txId, outputIndex: i.outputIndex })),
+    inputOutpoints,
     tx.outputs,
     tx.timestamp
   )
