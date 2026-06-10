@@ -561,7 +561,7 @@ Like `POST /api/v1/tx`, JSON parse failures should return JSON error payloads:
 // - bridgeUnlockData.publicInputs  (Uint8Array → hex)
 ```
 
-`deserializeTransaction()` in `rpc.ts` reverses this, same pattern as existing `ecdsaPublicKey`/`ecdsaSignature` handling.
+`deserializeTransaction()` in `src/storage.ts` reverses this, same pattern as existing `ecdsaPublicKey`/`ecdsaSignature` handling.
 
 ### 4.7 P2P Relay (`src/p2p/server.ts`)
 
