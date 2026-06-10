@@ -445,7 +445,7 @@ async function modeSend(filepath: string) {
   const rpcUrl = `${RPC_BASE}/api/v1`
   console.log(`  Connecting to node at ${RPC_BASE} ...`)
   try {
-    const res = await fetch(`${rpcUrl}/status`)
+    const res = await fetch(`${rpcUrl}/status`, { signal: AbortSignal.timeout(30_000) })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const status = await res.json() as Record<string, unknown>
     console.log(`  ✓ Connected — chain height: ${status.height}\n`)
