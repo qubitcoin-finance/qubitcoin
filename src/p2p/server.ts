@@ -125,6 +125,8 @@ export class P2PServer {
   private seeds: Array<{ host: string; port: number }> = []
   private reconnectTimer: ReturnType<typeof setInterval> | null = null
   private discoveryTimer: ReturnType<typeof setInterval> | null = null
+  private seedReconnectTimers: Set<ReturnType<typeof setTimeout>> = new Set()
+  private stopping = false
   private forkResolutionInProgress = false
   private forkResolutionTimer: ReturnType<typeof setTimeout> | null = null
   private knownAddresses: Map<string, { host: string; port: number; lastSeen: number }> = new Map()
@@ -214,6 +216,7 @@ export class P2PServer {
   getNode(): Node { return this.node }
 
   start(): Promise<void> {
+    this.stopping = false
     return new Promise((resolve, reject) => {
       const onError = (err: Error) => {
         this.server.off('listening', onListening)
@@ -240,6 +243,7 @@ export class P2PServer {
   }
 
   stop(): Promise<void> {
+    this.stopping = true
     if (this.reconnectTimer) {
       clearInterval(this.reconnectTimer)
       this.reconnectTimer = null
@@ -248,6 +252,10 @@ export class P2PServer {
       clearInterval(this.discoveryTimer)
       this.discoveryTimer = null
     }
+    for (const timer of this.seedReconnectTimers) {
+      clearTimeout(timer)
+    }
+    this.seedReconnectTimers.clear()
     this.clearForkResolution()
     this.saveAnchors()
     return new Promise((resolve) => {
@@ -406,7 +414,7 @@ export class P2PServer {
     else this.outboundCount--
 
     // Schedule reconnect with exponential backoff if it was a seed
-    if (!peer.inbound) {
+    if (!peer.inbound && !this.stopping) {
       for (const seed of this.seeds) {
         if (peerMatchesHost(peer, seed.host, seed.port)) {
           const seedKey = `${seed.host}:${seed.port}`
@@ -414,11 +422,13 @@ export class P2PServer {
           const nextDelay = Math.min(currentDelay * 2, SEED_RECONNECT_MAX_MS)
           this.seedBackoff.set(seedKey, nextDelay)
           log.debug({ component: 'p2p', seed: seedKey, delayMs: currentDelay }, 'Scheduling seed reconnect')
-          setTimeout(() => {
+          const timer = setTimeout(() => {
+            this.seedReconnectTimers.delete(timer)
             if (!this.isConnectedToSeed(seed.host, seed.port)) {
               this.connectOutbound(seed.host, seed.port)
             }
           }, currentDelay)
+          this.seedReconnectTimers.add(timer)
           break
         }
       }

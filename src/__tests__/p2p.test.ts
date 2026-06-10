@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
@@ -479,6 +479,22 @@ describeLoopbackTcp('P2P server integration', () => {
     expect(seeds).toHaveLength(1)
     expect(seeds[0].host).toBe('127.0.0.1')
     expect(seeds[0].port).toBe(port)
+  })
+
+  it('does not schedule seed reconnects while stopping', async () => {
+    const port = p2p1.getPort()
+    const connectSpy = vi.spyOn(p2p2, 'connectOutbound')
+
+    p2p2.connectToSeeds([`127.0.0.1:${port}`])
+    await waitFor(() => p2p2.getPeers().length > 0 && p2p1.getPeers().length > 0)
+
+    p2p2.getSeedBackoff().set(`127.0.0.1:${port}`, 10)
+    expect(connectSpy).toHaveBeenCalledTimes(1)
+
+    await p2p2.stop()
+    await new Promise((resolve) => setTimeout(resolve, 30))
+
+    expect(connectSpy).toHaveBeenCalledTimes(1)
   })
 })
 
