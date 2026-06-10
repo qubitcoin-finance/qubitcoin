@@ -2039,7 +2039,7 @@ ${docFaqItem('Why NDJSON for storage instead of a binary format?',
 ${docFaqItem('Why no scripting language (like Bitcoin Script)?',
   'QubitCoin is a proof of concept focused on demonstrating post-quantum signatures. Adding a scripting language would add complexity without advancing the core goal. Transactions support simple pay-to-address outputs and claim transactions.')}
 ${docFaqItem('How does the snapshot merkle root work?',
-  'The merkle root is a SHA-256 hash tree over all 55.5M address-balance pairs, sorted by address. It\'s committed in the genesis block\'s coinbase. Any node can independently recompute it from the snapshot file and verify it matches genesis — ensuring the snapshot hasn\'t been tampered with.')}
+  'The merkle root is a SHA-256 hash tree over all 58,001,652 address-balance pairs, sorted by address. It\'s committed in the genesis block\'s coinbase. Any node can independently recompute it from the snapshot file and verify it matches genesis — ensuring the snapshot hasn\'t been tampered with.')}
 </div>
 
 ${docH2('Troubleshooting')}
