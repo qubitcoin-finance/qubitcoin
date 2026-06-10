@@ -160,7 +160,7 @@ Testing and code review are critical. QubitCoin is a security-critical project w
 
 ### Automated Testing
 
-The test suite uses [vitest](https://vitest.dev/) with 218 tests covering cryptography, transactions, blocks, chain state, mempool, storage, P2P networking, and snapshot loading.
+The test suite uses [vitest](https://vitest.dev/) with ~635 tests covering cryptography, transactions, blocks, chain state, mempool, storage, P2P networking, and snapshot loading.
 
 ```bash
 pnpm test               # Run full test suite
