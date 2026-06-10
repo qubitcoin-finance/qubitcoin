@@ -98,6 +98,7 @@ Options:
 const SNAPSHOT_URL = 'https://qubitcoin.finance/snapshot/qbtc-snapshot.jsonl'
 
 const MAX_REDIRECTS = 5
+const SNAPSHOT_DOWNLOAD_TIMEOUT_MS = 30_000
 
 function downloadFile(url: string, destPath: string, redirectCount = 0): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -113,7 +114,7 @@ function downloadFile(url: string, destPath: string, redirectCount = 0): Promise
     const tmpPath = destPath + '.tmp'
     const get = url.startsWith('https') ? httpsGet : httpGet
 
-    get(url, (res) => {
+    const req = get(url, (res) => {
       // Follow redirects
       if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location) {
         downloadFile(res.headers.location, destPath, redirectCount + 1).then(resolve, reject)
@@ -149,7 +150,11 @@ function downloadFile(url: string, destPath: string, redirectCount = 0): Promise
         })
       })
       file.on('error', (err) => reject(err))
-    }).on('error', (err) => reject(err))
+    })
+    req.setTimeout(SNAPSHOT_DOWNLOAD_TIMEOUT_MS, () => {
+      req.destroy(new Error(`Snapshot download timed out after ${SNAPSHOT_DOWNLOAD_TIMEOUT_MS}ms`))
+    })
+    req.on('error', (err) => reject(err))
   })
 }
 
