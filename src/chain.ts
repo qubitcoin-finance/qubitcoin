@@ -555,7 +555,8 @@ export class Blockchain {
 
   /** Get total value of unclaimed BTC addresses */
   getUnclaimedValue(): number {
-    return this.getClaimableEntries().reduce((sum, e) => sum + e.amount, 0)
+    if (!this.btcSnapshot) return 0
+    return this.snapshotTotalAmount - this.claimedAmount
   }
 
   /** Get claim statistics (O(1) — uses incrementally tracked counters) */
