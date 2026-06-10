@@ -46,8 +46,8 @@ export function serializeClaimMessage(
 }
 
 /**
- * Create a claim transaction.
- * The BTC holder signs a message with their ECDSA key, proving ownership.
+ * Create a single-key claim transaction.
+ * Signs with ECDSA (P2PKH/P2WPKH/P2SH) or Schnorr (P2TR), proving ownership.
  * The output goes to their new ML-DSA-65 qbtc address.
  */
 export function createClaimTransaction(

@@ -26,6 +26,7 @@ import { get as httpGet } from 'node:http'
 import { createTransaction } from './transaction.js'
 import { INITIAL_TARGET, createForkGenesisBlock } from './block.js'
 import { FileBlockStorage } from './storage.js'
+import { loadSnapshot } from './snapshot-loader.js'
 import { P2PServer } from './p2p/server.js'
 import type { BtcSnapshot } from './snapshot.js'
 import { log } from './log.js'
@@ -191,7 +192,6 @@ async function main() {
   let snapshot: BtcSnapshot | undefined
   if (config.snapshotPath) {
     log.info({ component: 'snapshot', path: config.snapshotPath }, 'Loading snapshot')
-    const { loadSnapshot } = await import('./snapshot-loader.js')
     snapshot = await loadSnapshot(config.snapshotPath)
     log.info({ component: 'snapshot', addresses: snapshot.entries.length }, 'Snapshot loaded')
 
