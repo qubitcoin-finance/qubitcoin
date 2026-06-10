@@ -1186,13 +1186,11 @@ export class P2PServer {
   private loadBanList(): void {
     if (!this.banListPath) return
     try {
-      if (fs.existsSync(this.banListPath)) {
-        const raw = JSON.parse(fs.readFileSync(this.banListPath, 'utf-8'))
-        const now = Date.now()
-        for (const [ip, expiry] of Object.entries(raw)) {
-          if (typeof expiry === 'number' && expiry > now) {
-            this.banList.set(ip, expiry)
-          }
+      const raw = JSON.parse(fs.readFileSync(this.banListPath, 'utf-8'))
+      const now = Date.now()
+      for (const [ip, expiry] of Object.entries(raw)) {
+        if (typeof expiry === 'number' && expiry > now) {
+          this.banList.set(ip, expiry)
         }
       }
     } catch (err) {
