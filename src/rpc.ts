@@ -19,6 +19,7 @@ const MAX_BODY_SIZE = '1mb';
 const GET_RATE_LIMIT = 600;   // requests per minute
 const POST_RATE_LIMIT = 100;  // requests per minute
 const RATE_WINDOW_MS = 60_000;
+const ADDRESS_RE = /^[0-9a-f]{64}$/i;
 
 export type RpcRateLimitConfig = {
   get?: number;
@@ -68,7 +69,7 @@ export { sanitize };
 
 /** Validate that an address is a valid 64-character hex string */
 function isValidAddress(address: string): boolean {
-  return typeof address === 'string' && address.length === 64 && /^[0-9a-f]{64}$/i.test(address);
+  return typeof address === 'string' && address.length === 64 && ADDRESS_RE.test(address);
 }
 
 type RequestError = Error & {
