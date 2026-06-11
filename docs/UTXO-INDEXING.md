@@ -28,7 +28,7 @@ QubitCoin keeps three derived indexes in memory so all of these are O(1) (or O(U
 
 ### utxoSet — the authoritative unspent set
 
-`utxoSet` maps a `utxoKey` (the string `"<txId>:<outputIndex>"`) to a `UTXO` record holding `address`, `amount`, `height`, and the `isCoinbase` / `isClaim` flags. This is the structure block validation consults: `validateBlock` is handed `this.utxoSet` at `src/chain.ts:154`, and `validateTransaction` looks up each spent input via `utxoSet.get(utxoKey(...))` at `src/transaction.ts:405`. `Node` also surfaces `utxoSet.size` as `utxoCount` in `/api/v1/status` (`src/node.ts:191`).
+`utxoSet` maps a `utxoKey` (the string `"<txId>:<outputIndex>"`) to a `UTXO` record holding `address`, `amount`, `height`, and the `isCoinbase` / `isClaim` flags. This is the structure block validation consults: `validateBlock` is handed `this.utxoSet` at `src/chain.ts:154`, and `validateTransaction` looks up each spent input via `utxoSet.get(utxoKey(...))` at `src/transaction.ts:333`. `Node` also surfaces `utxoSet.size` as `utxoCount` in `/api/v1/status` (`src/node.ts:191`).
 
 A `UTXO` is added when an output is created and deleted when an input spends it. Both happen in `applyBlock` (`src/chain.ts:604`); both are reversed in `disconnectBlock` (`src/chain.ts:697`).
 

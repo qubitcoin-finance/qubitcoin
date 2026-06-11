@@ -24,7 +24,7 @@ Key properties:
 License
 -------
 
-QubitCoin is released under the terms of the MIT license. See [LICENSE](LICENSE) for more information or see https://opensource.org/license/MIT.
+QubitCoin is released under the terms of the MIT license; see https://opensource.org/license/MIT for more information.
 
 Building
 --------
