@@ -496,7 +496,7 @@ async function modeFull() {
   console.log(`  Connecting to node at ${RPC_BASE} ...`)
   let status: Record<string, unknown>
   try {
-    const res = await fetch(`${rpcUrl}/status`)
+    const res = await fetch(`${rpcUrl}/status`, { signal: AbortSignal.timeout(30_000) })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     status = await res.json() as Record<string, unknown>
   } catch {
