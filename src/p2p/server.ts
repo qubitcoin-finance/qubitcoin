@@ -10,6 +10,14 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { Peer } from './peer.js'
 import {
+  type KnownAddress,
+  getSubnet16,
+  normalizeIP,
+  parseAddressEntry,
+  peerMatchesHost,
+  upsertKnownAddress as upsertKnownAddressEntry,
+} from './address-book.js'
+import {
   type Message,
   type VersionPayload,
   type RejectPayload,
@@ -48,51 +56,6 @@ const MAX_ADDR_RESPONSE = 100
 const DISCOVERY_INTERVAL_MS = 60_000
 const MAX_OUTBOUND_PER_SUBNET = 2
 
-/** Extract /16 subnet prefix from an IPv4 address (e.g., "1.2" from "1.2.3.4") */
-function getSubnet16(ip: string): string {
-  const normalized = ip.replace(/^::ffff:/i, '')
-  const match = normalized.match(/^(\d+\.\d+)\.\d+\.\d+$/)
-  return match ? match[1] : ip // non-IPv4 addresses use full IP as "subnet"
-}
-
-/** Returns true if host is a valid IPv4 or IPv6 address string */
-function isValidIPAddress(host: string): boolean {
-  return net.isIP(host) !== 0
-}
-
-/** Check if an IP address is publicly routable (not private/loopback/link-local) */
-function isRoutableAddress(host: string): boolean {
-  // IPv6 loopback and private
-  if (host === '::1' || host === '::') return false
-  if (host.startsWith('fc') || host.startsWith('fd')) return false // fc00::/7 (ULA)
-  if (host.startsWith('fe80')) return false // link-local
-
-  // IPv4 (may be plain or IPv6-mapped like ::ffff:127.0.0.1)
-  const ipv4Match = host.match(/(?:::ffff:)?(\d+\.\d+\.\d+\.\d+)$/i)
-  if (ipv4Match) {
-    const parts = ipv4Match[1].split('.').map(Number)
-    const [a, b] = parts
-    if (a === 127) return false                          // 127.0.0.0/8
-    if (a === 10) return false                           // 10.0.0.0/8
-    if (a === 172 && b >= 16 && b <= 31) return false    // 172.16.0.0/12
-    if (a === 192 && b === 168) return false              // 192.168.0.0/16
-    if (a === 169 && b === 254) return false              // 169.254.0.0/16
-    if (a === 0) return false                             // 0.0.0.0/8
-  }
-
-  return true
-}
-/** Strip ::ffff: prefix from IPv4-mapped IPv6 addresses */
-function normalizeIP(ip: string): string {
-  return ip.replace(/^::ffff:/i, '')
-}
-
-/** Check if a peer matches a given host:port, with IPv6 normalization */
-function peerMatchesHost(peer: { id: string; address: string }, host: string, port: number): boolean {
-  if (peer.id === `${host}:${port}`) return true
-  return normalizeIP(peer.address) === normalizeIP(host)
-}
-
 const MAX_INBOUND_PER_IP = 3
 
 const FORK_RESOLUTION_TIMEOUT_MS = 60_000
@@ -102,12 +65,6 @@ const ORPHAN_EXPIRY_MS = 10 * 60_000
 interface OrphanBlock {
   block: Block
   receivedAt: number
-}
-
-interface ParsedAddressEntry {
-  host: string
-  port: number
-  lastSeen?: number
 }
 
 export class P2PServer {
@@ -129,7 +86,7 @@ export class P2PServer {
   private stopping = false
   private forkResolutionInProgress = false
   private forkResolutionTimer: ReturnType<typeof setTimeout> | null = null
-  private knownAddresses: Map<string, { host: string; port: number; lastSeen: number }> = new Map()
+  private knownAddresses: Map<string, KnownAddress> = new Map()
   private seedBackoff: Map<string, number> = new Map() // seed key -> current delay ms
   private orphanBlocks: Map<string, OrphanBlock> = new Map() // parentHash -> orphan
   private rejectedBlocks: Set<string> = new Set()
@@ -195,7 +152,7 @@ export class P2PServer {
   isForkResolutionInProgress(): boolean { return this.forkResolutionInProgress }
 
   /** Returns the known-address book (read-only) */
-  getKnownAddresses(): ReadonlyMap<string, { host: string; port: number; lastSeen: number }> {
+  getKnownAddresses(): ReadonlyMap<string, KnownAddress> {
     return this.knownAddresses
   }
 
@@ -1232,27 +1189,6 @@ export class P2PServer {
     peer.send({ type: 'addr', payload: { addresses } as AddrPayload })
   }
 
-  private parseAddressEntry(entry: unknown): ParsedAddressEntry | null {
-    if (entry == null || typeof entry !== 'object') return null
-
-    const candidate = entry as {
-      host?: unknown
-      port?: unknown
-      lastSeen?: unknown
-    }
-
-    if (typeof candidate.host !== 'string' || !isValidIPAddress(candidate.host)) return null
-    if (typeof candidate.port !== 'number' || !Number.isInteger(candidate.port) || candidate.port <= 0 || candidate.port > 65535) return null
-    if (candidate.lastSeen !== undefined && (typeof candidate.lastSeen !== 'number' || !Number.isFinite(candidate.lastSeen))) return null
-
-    const parsed: ParsedAddressEntry = {
-      host: candidate.host,
-      port: candidate.port,
-    }
-    if (candidate.lastSeen !== undefined) parsed.lastSeen = candidate.lastSeen
-    return parsed
-  }
-
   private handleAddr(peer: Peer, payload: AddrPayload): void {
     if (!payload || !Array.isArray(payload.addresses)) {
       peer.addMisbehavior(10)
@@ -1277,7 +1213,7 @@ export class P2PServer {
     const newAddresses: Array<{ host: string; port: number; lastSeen?: number }> = []
     let malformedEntrySeen = false
     for (const entry of payload.addresses) {
-      const parsed = this.parseAddressEntry(entry)
+      const parsed = parseAddressEntry(entry)
       if (!parsed) {
         // Skip null/non-object entries — a peer sending these is malformed but we continue processing valid ones
         if (entry != null && typeof entry === 'object') malformedEntrySeen = true
@@ -1315,28 +1251,11 @@ export class P2PServer {
   }
 
   private upsertKnownAddress(host: string, port: number, lastSeen?: number, enforceRoutability = true): void {
-    // Filter private IPs unless in local mode, but allow trusted persisted anchors to reload.
-    if (enforceRoutability && !this.localMode && !isRoutableAddress(host)) return
-    const key = `${host}:${port}`
-    const existing = this.knownAddresses.get(key)
-    // Clamp lastSeen to at most 2 hours in the future to prevent permanent stale entries
-    const maxFuture = Date.now() + 2 * 3600_000
-    const now = Math.min(lastSeen ?? Date.now(), maxFuture)
-    if (existing && existing.lastSeen >= now) return
-    this.knownAddresses.set(key, { host, port, lastSeen: now })
-
-    // Cap address book size — evict oldest
-    if (this.knownAddresses.size > MAX_ADDR_BOOK) {
-      let oldestKey = ''
-      let oldestTime = Infinity
-      for (const [k, v] of this.knownAddresses) {
-        if (v.lastSeen < oldestTime) {
-          oldestTime = v.lastSeen
-          oldestKey = k
-        }
-      }
-      if (oldestKey) this.knownAddresses.delete(oldestKey)
-    }
+    upsertKnownAddressEntry(this.knownAddresses, host, port, lastSeen, {
+      localMode: this.localMode,
+      enforceRoutability,
+      maxAddresses: MAX_ADDR_BOOK,
+    })
   }
 
   addKnownAddress(host: string, port: number, lastSeen?: number): void {
@@ -1467,7 +1386,7 @@ export class P2PServer {
       if (!Array.isArray(anchors)) return
       let loadedCount = 0
       for (const a of anchors) {
-        const parsed = this.parseAddressEntry(a)
+        const parsed = parseAddressEntry(a)
         if (parsed) {
           this.upsertKnownAddress(parsed.host, parsed.port, parsed.lastSeen, false)
           loadedCount++

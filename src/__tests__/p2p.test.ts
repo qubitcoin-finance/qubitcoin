@@ -6,6 +6,13 @@ import net from 'node:net'
 import { Node } from '../node.js'
 import { P2PServer } from '../p2p/server.js'
 import { Peer } from '../p2p/peer.js'
+import {
+  getSubnet16,
+  isRoutableAddress,
+  parseAddressEntry,
+  upsertKnownAddress,
+  type KnownAddress,
+} from '../p2p/address-book.js'
 import { FileBlockStorage, sanitizeForStorage } from '../storage.js'
 import { walletA, walletB } from './fixtures.js'
 import { probeLoopbackTcpListen } from './network-test-utils.js'
@@ -184,6 +191,45 @@ describe('protocol encoding', () => {
     body.copy(frame, 4)
 
     expect(() => decodeMessages(frame)).toThrow('expected addresses array')
+  })
+})
+
+describe('P2P address book helpers', () => {
+  it('parses only IP address entries with valid ports and timestamps', () => {
+    expect(parseAddressEntry({ host: '203.0.113.10', port: 6001 })).toEqual({
+      host: '203.0.113.10',
+      port: 6001,
+    })
+    expect(parseAddressEntry({ host: 'example.com', port: 6001 })).toBeNull()
+    expect(parseAddressEntry({ host: '203.0.113.10', port: 0 })).toBeNull()
+    expect(parseAddressEntry({ host: '203.0.113.10', port: 6001, lastSeen: Infinity })).toBeNull()
+  })
+
+  it('filters routability and clamps future timestamps when upserting', () => {
+    const known = new Map<string, KnownAddress>()
+    const now = 1_000_000
+
+    upsertKnownAddress(known, '10.0.0.1', 6001, now, {
+      localMode: false,
+      enforceRoutability: true,
+      maxAddresses: 10,
+      now,
+    })
+    expect(known.size).toBe(0)
+
+    upsertKnownAddress(known, '10.0.0.1', 6001, now + 10 * 3600_000, {
+      localMode: true,
+      enforceRoutability: true,
+      maxAddresses: 10,
+      now,
+    })
+    expect(known.get('10.0.0.1:6001')?.lastSeen).toBe(now + 2 * 3600_000)
+  })
+
+  it('groups IPv4-mapped addresses by /16 subnet', () => {
+    expect(getSubnet16('::ffff:198.51.100.7')).toBe('198.51')
+    expect(getSubnet16('2001:db8::1')).toBe('2001:db8::1')
+    expect(isRoutableAddress('127.0.0.1')).toBe(false)
   })
 })
 
