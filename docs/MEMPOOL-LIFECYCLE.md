@@ -30,9 +30,9 @@ Mining reads the same pool through `getTransactionsForBlock`, where claim transa
 | `src/node.ts:88` | `Node.receiveBlock` removes peer-mined transactions and aborts stale mining |
 | `src/node.ts:144` | `Node.resetToHeight` revalidates the mempool after a rollback |
 | `src/miner.ts:27` | `assembleCandidateBlock`, the miner's mempool-to-block selection path |
-| `src/rpc.ts:190` | `POST /api/v1/tx`, RPC submission into `Node.receiveTransaction` |
-| `src/rpc.ts:207` | `GET /api/v1/mempool/txs`, lightweight sorted mempool summaries |
-| `src/p2p/server.ts:793` | `P2PServer.handleTx`, peer transaction admission and relay behavior |
+| `src/rpc.ts:202` | `POST /api/v1/tx`, RPC submission into `Node.receiveTransaction` |
+| `src/rpc.ts:219` | `GET /api/v1/mempool/txs`, lightweight sorted mempool summaries |
+| `src/p2p/server.ts:803` | `P2PServer.handleTx`, peer transaction admission and relay behavior |
 | `src/__tests__/mempool.test.ts:32` | Core mempool admission tests |
 | `src/__tests__/mempool.test.ts:166` | Claim-specific mempool tests |
 | `src/__tests__/mempool.test.ts:823` | Sorting tests for `getTransactionsForBlock` |

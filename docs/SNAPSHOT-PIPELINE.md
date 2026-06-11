@@ -16,10 +16,10 @@ The other constraint is scale. A production snapshot can contain many Bitcoin ad
 
 | Anchor | Role |
 |--------|------|
-| `src/qbtcd.ts:97` | `SNAPSHOT_URL`, the default URL used by `--full` when no local snapshot path is provided |
-| `src/qbtcd.ts:101` | `downloadFile`, redirect-limited downloader that writes to `<dest>.tmp` before rename |
-| `src/qbtcd.ts:176` | `--full` snapshot bootstrap: create data dir, reuse existing file, or download default snapshot |
-| `src/qbtcd.ts:190` | Runtime snapshot load path before `Node` and `Blockchain` construction |
+| `src/qbtcd.ts:98` | `SNAPSHOT_URL`, the default URL used by `--full` when no local snapshot path is provided |
+| `src/qbtcd.ts:103` | `downloadFile`, redirect-limited downloader that writes to `<dest>.tmp` before rename |
+| `src/qbtcd.ts:183` | `--full` snapshot bootstrap: create data dir, reuse existing file, or download default snapshot |
+| `src/qbtcd.ts:198` | Runtime snapshot load path before `Node` and `Blockchain` construction |
 | `src/snapshot-loader.ts:13` | `loadSnapshot`, the NDJSON parser and metadata normalizer |
 | `src/snapshot-loader.ts:31` | First-line header detection using `merkleRoot` |
 | `src/snapshot-loader.ts:56` | Entry address validation: lowercase 40- or 64-character hex only |
@@ -36,7 +36,7 @@ The other constraint is scale. A production snapshot can contain many Bitcoin ad
 | `src/chain.ts:60` | `Blockchain` constructor stores snapshot totals and builds the lookup index |
 | `src/claim.ts:312` | `verifyClaimProof`, the claim validator that uses the cached snapshot index |
 | `src/chain.ts:549` | `getClaimableEntries`, the remaining-unclaimed listing path |
-| `src/chain.ts:562` | `getClaimStats`, O(1) aggregate claim counters for RPC status |
+| `src/chain.ts:563` | `getClaimStats`, O(1) aggregate claim counters for RPC status |
 
 ## Snapshot File Shape
 

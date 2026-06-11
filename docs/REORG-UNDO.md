@@ -24,7 +24,7 @@ The journal is bounded: only the last `MAX_REORG_DEPTH` (100) records are retain
 | `src/chain.ts:487` | `resetToHeight` | Fast undo path vs slow full-replay path; rewrites storage |
 | `src/chain.ts:305` | `validateChain` | Whole-chain re-check using a `tempClaimed` shadow set |
 | `src/node.ts:145` | `Node.resetToHeight` | Wraps chain reset + mempool revalidate + mining abort |
-| `src/p2p/server.ts:1100` | reorg call site | Work comparison, then `node.resetToHeight(forkPoint)` |
+| `src/p2p/server.ts:1110` | reorg call site | Work comparison, then `node.resetToHeight(forkPoint)` |
 
 ## What a BlockUndo records
 
@@ -88,7 +88,7 @@ The `hasUndoData = undoData.length === currentHeight` check is the trigger: in s
 
 ## Cumulative work is the reorg tiebreaker
 
-`cumulativeWork` (`src/chain.ts:58`) is summed via `blockWork(target)` in the constructor's replay loop, in `addBlock`, and in both `resetToHeight` paths; `disconnectBlock` subtracts it. The P2P layer compares `peer.remoteCumulativeWork` against `chain.cumulativeWork` (`src/p2p/server.ts:1084`) and only reorgs when the peer strictly exceeds it. A peer claiming more work than its headers can justify (over the `1.5×` sanity bound at `server.ts:1076`) is banned. When a peer omits work, the node falls back to height comparison. Because work is restored exactly on disconnect and re-summed on replay, the counter stays consistent across any number of reorgs — a drift here is a sign the undo record missed a `blockWork` entry.
+`cumulativeWork` (`src/chain.ts:58`) is summed via `blockWork(target)` in the constructor's replay loop, in `addBlock`, and in both `resetToHeight` paths; `disconnectBlock` subtracts it. The P2P layer compares `peer.remoteCumulativeWork` against `chain.cumulativeWork` (`src/p2p/server.ts:1094`) and only reorgs when the peer strictly exceeds it. A peer claiming more work than its headers can justify (over the `1.5×` sanity bound at `server.ts:1086`) is banned. When a peer omits work, the node falls back to height comparison. Because work is restored exactly on disconnect and re-summed on replay, the counter stays consistent across any number of reorgs — a drift here is a sign the undo record missed a `blockWork` entry.
 
 ## validateChain and the tempClaimed shadow set
 
@@ -98,7 +98,7 @@ The `hasUndoData = undoData.length === currentHeight` check is the trigger: in s
 
 - **Exact restoration.** `disconnectBlock(applyBlock(b))` must return every structure — `utxoSet`, `utxosByAddress`, `claimedBtcAddresses`, `claimedCount`/`claimedAmount`, `transactionIndex`, `difficulty`, `cumulativeWork` — to its pre-apply value. Any field `applyBlock` writes but the `BlockUndo` omits is a latent reorg corruption.
 - **Journal/height alignment.** `undoData[i]` is the undo for height `i+1`. The fast path relies on `undoData.length === currentHeight`; pruning to `MAX_REORG_DEPTH` deliberately breaks that for deep targets, forcing the slow path.
-- **Depth cap is enforced twice.** `src/p2p/server.ts:1053` refuses reorgs deeper than `MAX_REORG_DEPTH` before calling `resetToHeight`, and `addBlock` prunes `undoData` to the same bound (`src/chain.ts:184`). Raising one without the other leaves the fast path unable to honor what the network accepts.
+- **Depth cap is enforced twice.** `src/p2p/server.ts:1063` refuses reorgs deeper than `MAX_REORG_DEPTH` before calling `resetToHeight`, and `addBlock` prunes `undoData` to the same bound (`src/chain.ts:184`). Raising one without the other leaves the fast path unable to honor what the network accepts.
 - **Storage is rewritten, not appended.** Unlike `addBlock` (which appends), `resetToHeight` calls `rewriteBlocks` — a reorg truncates the on-disk log. `replayHeight` is updated so subsequent `addBlock` calls persist new tip blocks correctly.
 - **Reorg is more than the chain.** `Node.resetToHeight` (`src/node.ts:145`) also calls `mempool.revalidate(...)` against the rewound UTXO/claim state and aborts in-progress mining (`miningAbort?.abort()`), so transactions that became invalid or double-spent are dropped and the miner restarts on the new tip.
 
