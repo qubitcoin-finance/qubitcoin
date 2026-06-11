@@ -461,6 +461,7 @@ async function modeSend(filepath: string) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: txPayload,
+    signal: AbortSignal.timeout(30_000),
   })
 
   if (res.ok) {
@@ -613,6 +614,7 @@ async function modeFull() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: testPayload,
+      signal: AbortSignal.timeout(30_000),
     })
 
     if (testRes.ok) {
@@ -644,6 +646,7 @@ async function modeFull() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: payload,
+      signal: AbortSignal.timeout(30_000),
     })
 
     if (res.ok) {
