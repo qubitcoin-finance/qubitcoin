@@ -17,6 +17,7 @@ import {
   peerMatchesHost,
   upsertKnownAddress as upsertKnownAddressEntry,
 } from './address-book.js'
+import { OrphanBlockPool } from './orphan-pool.js'
 import {
   type Message,
   type VersionPayload,
@@ -34,7 +35,7 @@ import {
 } from './protocol.js'
 import type { Node } from '../node.js'
 import { sanitizeForStorage, deserializeTransaction, deserializeBlock } from '../storage.js'
-import { type Block, computeBlockHash, hashMeetsTarget, blockWork } from '../block.js'
+import { type Block, blockWork } from '../block.js'
 import type { Transaction } from '../transaction.js'
 import { log } from '../log.js'
 import { isValidHash } from '../utils.js'
@@ -62,11 +63,6 @@ const FORK_RESOLUTION_TIMEOUT_MS = 60_000
 const MAX_ORPHAN_BLOCKS = 50
 const ORPHAN_EXPIRY_MS = 10 * 60_000
 
-interface OrphanBlock {
-  block: Block
-  receivedAt: number
-}
-
 export class P2PServer {
   private server: net.Server
   private peers: Map<string, Peer> = new Map()
@@ -88,7 +84,7 @@ export class P2PServer {
   private forkResolutionTimer: ReturnType<typeof setTimeout> | null = null
   private knownAddresses: Map<string, KnownAddress> = new Map()
   private seedBackoff: Map<string, number> = new Map() // seed key -> current delay ms
-  private orphanBlocks: Map<string, OrphanBlock> = new Map() // parentHash -> orphan
+  private orphanBlocks = new OrphanBlockPool(MAX_ORPHAN_BLOCKS, ORPHAN_EXPIRY_MS)
   private rejectedBlocks: Set<string> = new Set()
   private rejectedTxs: Set<string> = new Set()
   /** Per-peer last getblocks response timestamp (rate limiting) */
@@ -1306,29 +1302,8 @@ export class P2PServer {
 
   /** Add a block to the orphan pool (validates PoW before caching) */
   addOrphan(block: Block): void {
-    // Validate PoW before storing — prevents filling orphan cache with junk
-    if (computeBlockHash(block.header) !== block.hash) return
-    if (!hashMeetsTarget(block.hash, block.header.target)) return
-
-    // Expire old orphans first
-    this.expireOrphans()
-
-    if (this.orphanBlocks.size >= MAX_ORPHAN_BLOCKS) {
-      // Evict oldest orphan
-      let oldestKey = ''
-      let oldestTime = Infinity
-      for (const [key, orphan] of this.orphanBlocks) {
-        if (orphan.receivedAt < oldestTime) {
-          oldestTime = orphan.receivedAt
-          oldestKey = key
-        }
-      }
-      if (oldestKey) this.orphanBlocks.delete(oldestKey)
-    }
-
-    const parentHash = block.header.previousHash
-    if (!this.orphanBlocks.has(parentHash)) {
-      this.orphanBlocks.set(parentHash, { block, receivedAt: Date.now() })
+    if (this.orphanBlocks.add(block)) {
+      const parentHash = block.header.previousHash
       log.debug({ component: 'p2p', hash: block.hash.slice(0, 16), parent: parentHash.slice(0, 16) }, 'Cached orphan block')
     }
   }
@@ -1338,15 +1313,14 @@ export class P2PServer {
     let added = 0
     let currentHash = parentHash
 
-    while (this.orphanBlocks.has(currentHash) && added < MAX_ORPHAN_BLOCKS) {
-      const orphan = this.orphanBlocks.get(currentHash)!
-      this.orphanBlocks.delete(currentHash)
-
+    let orphan = this.orphanBlocks.take(currentHash)
+    while (orphan && added < MAX_ORPHAN_BLOCKS) {
       const result = this.node.receiveBlock(orphan.block)
       if (result.success) {
         this.addSeen(this.seenBlocks, orphan.block.hash)
         added++
         currentHash = orphan.block.hash
+        orphan = this.orphanBlocks.take(currentHash)
       } else {
         break
       }
@@ -1356,16 +1330,6 @@ export class P2PServer {
       log.info({ component: 'p2p', connected: added }, 'Connected orphan blocks')
     }
     return added
-  }
-
-  /** Remove expired orphan blocks */
-  private expireOrphans(): void {
-    const cutoff = Date.now() - ORPHAN_EXPIRY_MS
-    for (const [key, orphan] of this.orphanBlocks) {
-      if (orphan.receivedAt < cutoff) {
-        this.orphanBlocks.delete(key)
-      }
-    }
   }
 
   private saveBanList(): void {

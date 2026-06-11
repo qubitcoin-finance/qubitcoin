@@ -13,6 +13,7 @@ import {
   upsertKnownAddress,
   type KnownAddress,
 } from '../p2p/address-book.js'
+import { OrphanBlockPool } from '../p2p/orphan-pool.js'
 import { FileBlockStorage, sanitizeForStorage } from '../storage.js'
 import { walletA, walletB } from './fixtures.js'
 import { probeLoopbackTcpListen } from './network-test-utils.js'
@@ -230,6 +231,76 @@ describe('P2P address book helpers', () => {
     expect(getSubnet16('::ffff:198.51.100.7')).toBe('198.51')
     expect(getSubnet16('2001:db8::1')).toBe('2001:db8::1')
     expect(isRoutableAddress('127.0.0.1')).toBe(false)
+  })
+})
+
+describe('P2P orphan block pool', () => {
+  const TEST_TARGET = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+
+  it('validates PoW and rejects duplicate parent entries', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-orphan-pool-'))
+    const node = new Node('miner', undefined, new FileBlockStorage(tmpDir))
+    node.chain.difficulty = TEST_TARGET
+    node.mine(walletA.address, false)
+    const block = node.chain.blocks[1]
+
+    try {
+      const pool = new OrphanBlockPool(10, 10_000)
+      expect(pool.add({ ...block, hash: 'f'.repeat(64) })).toBe(false)
+      expect(pool.add(block, 1_000)).toBe(true)
+      expect(pool.add(block, 1_001)).toBe(false)
+      expect(pool.size).toBe(1)
+      expect(pool.take(block.header.previousHash)?.block.hash).toBe(block.hash)
+      expect(pool.size).toBe(0)
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('expires stale entries before enforcing the size cap', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-orphan-pool-'))
+    const node = new Node('miner', undefined, new FileBlockStorage(tmpDir))
+    node.chain.difficulty = TEST_TARGET
+    node.mine(walletA.address, false)
+    node.mine(walletA.address, false)
+    node.mine(walletA.address, false)
+    const [, block1, block2, block3] = node.chain.blocks
+
+    try {
+      const pool = new OrphanBlockPool(2, 500)
+      expect(pool.add(block1, 1_000)).toBe(true)
+      expect(pool.add(block2, 1_010)).toBe(true)
+      expect(pool.add(block3, 2_000)).toBe(true)
+      expect(pool.size).toBe(1)
+      expect(pool.take(block1.header.previousHash)).toBeNull()
+      expect(pool.take(block2.header.previousHash)).toBeNull()
+      expect(pool.take(block3.header.previousHash)?.block.hash).toBe(block3.hash)
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('evicts the oldest orphan when full', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qbtc-orphan-pool-'))
+    const node = new Node('miner', undefined, new FileBlockStorage(tmpDir))
+    node.chain.difficulty = TEST_TARGET
+    node.mine(walletA.address, false)
+    node.mine(walletA.address, false)
+    node.mine(walletA.address, false)
+    const [, block1, block2, block3] = node.chain.blocks
+
+    try {
+      const pool = new OrphanBlockPool(2, 10_000)
+      expect(pool.add(block1, 1_000)).toBe(true)
+      expect(pool.add(block2, 1_010)).toBe(true)
+      expect(pool.add(block3, 1_020)).toBe(true)
+      expect(pool.size).toBe(2)
+      expect(pool.take(block1.header.previousHash)).toBeNull()
+      expect(pool.take(block2.header.previousHash)?.block.hash).toBe(block2.hash)
+      expect(pool.take(block3.header.previousHash)?.block.hash).toBe(block3.hash)
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
   })
 })
 
