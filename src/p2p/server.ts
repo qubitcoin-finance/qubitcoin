@@ -149,6 +149,11 @@ export class P2PServer {
     this.node = node
     this.port = port
     this.server = net.createServer((socket) => this.handleInbound(socket))
+    this.server.on('error', (err) => {
+      if (!this.stopping) {
+        log.warn({ component: 'p2p', err }, 'P2P server error')
+      }
+    })
 
     if (dataDir) {
       this.banListPath = path.join(dataDir, 'banned.json')
