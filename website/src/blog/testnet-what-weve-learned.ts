@@ -18,7 +18,7 @@ ${p('BTC claims work as special transactions. A claim transaction has no inputs 
 ${p('The node verifies: the ECDSA public key hashes to the BTC address, the ECDSA signature is valid over the claim message, the address exists in the snapshot with unclaimed balance, and then mints the QBTC into the new ML-DSA-65 address. First claim wins — no double-claiming.')}
 ${p('This is clean and trustless. The claim message binds the QBTC address into the signature so you can\'t replay someone else\'s claim proof to redirect funds to your own key.')}
 ${h2('P2P and Mining')}
-${p('The difficulty adjustment runs every 2016 blocks targeting a 10-minute average. On testnet with a single node, we see consistent block times once difficulty stabilizes.')}
+${p('The difficulty adjustment runs every 10 blocks targeting a 10-minute average. On testnet with a single node, we see consistent block times once difficulty stabilizes.')}
 ${h2('What Changed From the Design')}
 ${p('A few things evolved during implementation:')}
 ${steps([
