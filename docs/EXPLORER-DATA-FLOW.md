@@ -21,9 +21,8 @@ The explorer is a single TypeScript module (`website/src/explorer-main.ts`) that
 | `website/src/explorer-main.ts` | 805–871 | `renderAddress()` — address balance + UTXOs |
 | `website/src/explorer-main.ts` | 2248–2279 | `setupSearch()` — search-bar disambiguation |
 | `website/src/explorer-main.ts` | 2283–2353 | `dispatch()` — central router; `hashchange` + init |
-| `website/index.html` | — | Landing page (id=`landing-content`) |
-| `website/explorer.html` | — | Explorer shell (id=`explorer-main`, id=`explorer-content`) |
-| `website/vite.config.ts` | — | Multi-page build: `index.html` + `explorer.html` |
+| `website/index.html` | — | Landing page and explorer shell (id=`landing-content`, id=`explorer-main`, id=`explorer-content`) |
+| `website/vite.config.ts` | — | Single-page build for `index.html` |
 
 ## Routing
 
@@ -88,7 +87,7 @@ fetchUtxos(addr)        → GET /api/v1/address/:addr/utxos
 fetchClaimStats()       → GET /api/v1/claims/stats
 ```
 
-The Vite dev server proxies `/api` → `localhost:3001` (the local `qbtcd` RPC port). In production, nginx proxies `/api` → `127.0.0.1:3010`.
+The Vite dev server proxies `/api` to `API_URL` when set, otherwise `https://qubitcoin.finance`. In production, nginx proxies `/api` → `127.0.0.1:3010`.
 
 ## TypeScript Interfaces
 
@@ -105,7 +104,7 @@ Key shapes:
 
 ## Render Functions
 
-Each render function is `async`, fetches its own data, and writes to `root.innerHTML` (the `#explorer-content` div inside `explorer.html`).
+Each render function is `async`, fetches its own data, and writes to `root.innerHTML` (the `#explorer-content` div inside `index.html`).
 
 ### `renderDashboard()` (`explorer-main.ts:456`)
 
@@ -162,7 +161,7 @@ Neither view makes network requests; all content is bundled at build time.
 
 ## Invariants and Edge Cases
 
-- **`root` never null** — `document.getElementById('explorer-content')!` uses a non-null assertion; if `explorer.html` changes the element id, every render call throws at runtime.
+- **`root` never null** — `document.getElementById('explorer-content')!` uses a non-null assertion; if `index.html` changes the element id, every render call throws at runtime.
 - **Hash format** — `parseRoute()` strips exactly two characters (`#/`). A hash without the slash prefix (e.g. `#block/...`) will not route correctly.
 - **Concurrent dispatches** — `hashchange` events can fire in rapid succession. The `refreshTimer` is cleared at the top of `dispatch()`, but there is no in-flight fetch cancellation; a slow render from a prior hash can still write to `root` after a new dispatch has already started a new render.
 - **senderAddress race** — `renderTx` resolves sender addresses with secondary fetches inside a loop. If the RPC returns 404 for a spent input's txid (pruned or reorged), `fetchTx` returns null and the input renders without an address rather than erroring.
