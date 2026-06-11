@@ -1,10 +1,8 @@
 
 import express from 'express';
 import { Node } from './node.js';
-import { deriveAddress } from './crypto.js';
 import cors from 'cors';
 import type { P2PServer } from './p2p/server.js';
-import { type Transaction, isClaimTransaction, COINBASE_TXID } from './transaction.js';
 import { deserializeTransaction } from './storage.js';
 import { DIFFICULTY_ADJUSTMENT_INTERVAL, STARTING_DIFFICULTY } from './block.js';
 import { log } from './log.js';
@@ -12,6 +10,7 @@ import { isValidHash, sanitize } from './utils.js';
 import type { Request, Response, NextFunction, Express } from 'express';
 import { DEFAULT_TRUSTED_PROXIES, type RpcTrustProxy } from './rpc-trust-proxy.js';
 import { createRateLimiter, GET_RATE_LIMIT, POST_RATE_LIMIT, RATE_WINDOW_MS } from './rpc-rate-limit.js';
+import { summarizeMempoolTransaction } from './rpc-mempool.js';
 
 /** Maximum JSON body size (1 MB) */
 const MAX_BODY_SIZE = '1mb';
@@ -186,22 +185,7 @@ export function startRpcServer(
     const parsedLimit = req.query.limit ? parseInt(req.query.limit as string, 10) : 1000;
     const limit = Math.min(parsedLimit, 1000);
     const txs = node.mempool.getTransactionsForBlock(node.chain.utxoSet).slice(0, limit);
-    const summaries = txs.map(tx => {
-      const isCoinbase = tx.inputs.length === 1 && tx.inputs[0].txId === COINBASE_TXID;
-      const isClaim = isClaimTransaction(tx);
-      let sender: string | null = null;
-      if (!isCoinbase && !isClaim && tx.inputs[0]?.publicKey) {
-        sender = deriveAddress(tx.inputs[0].publicKey);
-      }
-      return {
-        id: tx.id,
-        timestamp: tx.timestamp,
-        sender,
-        inputs: tx.inputs.map(i => ({ txId: i.txId, outputIndex: i.outputIndex })),
-        outputs: tx.outputs,
-        claimData: tx.claimData ? sanitize(tx.claimData) : undefined,
-      };
-    });
+    const summaries = txs.map(summarizeMempoolTransaction);
     res.json(summaries);
   });
 
