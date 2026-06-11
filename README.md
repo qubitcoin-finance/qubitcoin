@@ -213,4 +213,4 @@ QubitCoin forks from a Bitcoin UTXO set snapshot. To generate one:
 pnpm run convert-snapshot -- --input ~/utxos.dat --output ~/qbtc-snapshot.jsonl
 ```
 
-The converter parses Bitcoin Core's `dumptxoutset` v2 binary format, filters to claimable output types (P2PKH, P2WPKH), aggregates by address, and produces an NDJSON file.
+The converter parses Bitcoin Core's `dumptxoutset` v2 binary format, filters to claimable output types (P2PKH, P2WPKH, P2SH, P2TR, P2PK, P2WSH, multisig), aggregates by address, and produces an NDJSON file.
