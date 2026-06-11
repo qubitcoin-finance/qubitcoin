@@ -32,7 +32,7 @@ function createRateLimiter(windowMs = RATE_WINDOW_MS) {
   const hits = new Map<string, { timestamps: number[] }>();
 
   // Cleanup stale entries every 5 minutes
-  setInterval(() => {
+  const cleanupTimer = setInterval(() => {
     const cutoff = Date.now() - windowMs;
     for (const [ip, data] of hits) {
       data.timestamps = data.timestamps.filter(t => t > cutoff);
@@ -40,7 +40,7 @@ function createRateLimiter(windowMs = RATE_WINDOW_MS) {
     }
   }, 5 * 60_000).unref();
 
-  return (bucket: string, limit: number) => (req: Request, res: Response, next: NextFunction) => {
+  const limiter = (bucket: string, limit: number) => (req: Request, res: Response, next: NextFunction) => {
     const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown';
     const key = `${bucket}:${ip}`;
     const now = Date.now();
@@ -63,6 +63,8 @@ function createRateLimiter(windowMs = RATE_WINDOW_MS) {
     data.timestamps.push(now);
     next();
   };
+  limiter.close = () => clearInterval(cleanupTimer);
+  return limiter;
 }
 
 export { sanitize };
@@ -96,6 +98,12 @@ export function startRpcServer(
 
   // Rate limiting
   const rateLimiter = createRateLimiter(rateLimitConfig.windowMs ?? RATE_WINDOW_MS);
+  const listen = app.listen.bind(app);
+  app.listen = ((...args: Parameters<typeof app.listen>) => {
+    const server = listen(...args);
+    server.once('close', rateLimiter.close);
+    return server;
+  }) as typeof app.listen;
   const getRateLimiter = rateLimiter('GET', rateLimitConfig.get ?? GET_RATE_LIMIT);
   const postRateLimiter = rateLimiter('POST', rateLimitConfig.post ?? POST_RATE_LIMIT);
   app.use(cors({ origin: bindAddress === '127.0.0.1' ? true : false }));
