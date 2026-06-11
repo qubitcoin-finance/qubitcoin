@@ -111,7 +111,7 @@ function logApiError(path: string, error: Error | string, statusCode?: number): 
 
 async function apiFull<T>(path: string): Promise<ApiResult<T>> {
   try {
-    const res = await fetch(`${API}${path}`);
+    const res = await fetch(`${API}${path}`, { signal: AbortSignal.timeout(15_000) });
     if (!res.ok) {
       logApiError(path, `HTTP ${res.status}: ${res.statusText}`, res.status);
       return { ok: false, status: res.status, networkError: false };
