@@ -579,7 +579,7 @@ async function modeFull() {
     let snapshotBlockHash: string
     let genesisHash: string
     try {
-      const genesisRes = await fetch(`${rpcUrl}/block-by-height/0`)
+      const genesisRes = await fetch(`${rpcUrl}/block-by-height/0`, { signal: AbortSignal.timeout(30_000) })
       const genesis = await genesisRes.json() as Record<string, unknown>
       genesisHash = (genesis as { hash: string }).hash
       const txs = (genesis as { transactions: Array<{ inputs: Array<{ publicKey: string }> }> }).transactions
