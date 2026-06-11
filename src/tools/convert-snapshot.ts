@@ -157,7 +157,7 @@ function detectNextVersion(dir: string): string {
   try {
     const files = readdirSync(dir)
     for (const f of files) {
-      const m = f.match(/qtc-snapshot-v(\d+)\.jsonl/)
+      const m = f.match(/qbtc-snapshot-v(\d+)\.jsonl/)
       if (m) {
         const n = parseInt(m[1], 10)
         if (n > max) max = n
@@ -228,9 +228,9 @@ function parseArgs(): Args {
     postfix = detectNextVersion(HOME)
   }
 
-  // Default output includes postfix: ~/qtc-snapshot-v10.jsonl
+  // Default output includes postfix: ~/qbtc-snapshot-v10.jsonl
   const effectiveOutput = output || (postfix
-    ? join(HOME, `qtc-snapshot-${postfix}.jsonl`)
+    ? join(HOME, `qbtc-snapshot-${postfix}.jsonl`)
     : DEFAULT_OUTPUT)
 
   // Default: full pipeline (dump? + extract + aggregate)
