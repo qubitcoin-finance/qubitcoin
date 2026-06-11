@@ -510,7 +510,7 @@ async function modeFull() {
   // Check snapshot
   let claimStats: Record<string, unknown>
   try {
-    const res = await fetch(`${rpcUrl}/claims/stats`)
+    const res = await fetch(`${rpcUrl}/claims/stats`, { signal: AbortSignal.timeout(30_000) })
     claimStats = await res.json() as Record<string, unknown>
     if (!claimStats.totalEntries || (claimStats.totalEntries as number) === 0) {
       console.error('  ✗ Node has no BTC snapshot loaded. Start with --snapshot or --full.\n')
