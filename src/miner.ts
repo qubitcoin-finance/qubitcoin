@@ -127,7 +127,7 @@ export function mineBlock(block: Block, verbose = true): Block {
  * Async non-blocking mining — yields to the event loop between nonce batches
  * so RPC and P2P stay responsive during mining.
  *
- * Uses adaptive batch sizing: targets ~100ms per batch to balance throughput
+ * Uses adaptive batch sizing: targets ~25ms per batch to balance throughput
  * with event loop responsiveness. Batch size auto-tunes based on measured time.
  *
  * Returns the mined block, or null if the AbortSignal fires (e.g. a peer
