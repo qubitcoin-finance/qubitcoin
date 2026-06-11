@@ -419,16 +419,15 @@ async function modeSend(filepath: string) {
   console.log()
 
   // Load transaction from file
-  if (!fs.existsSync(filepath)) {
-    console.error(`  ✗ File not found: ${filepath}\n`)
-    process.exit(1)
-  }
-
   let txPayload: string
   try {
     txPayload = fs.readFileSync(filepath, 'utf-8')
     JSON.parse(txPayload) // validate JSON
-  } catch {
+  } catch (err) {
+    if (err && typeof err === 'object' && 'code' in err && err.code === 'ENOENT') {
+      console.error(`  ✗ File not found: ${filepath}\n`)
+      process.exit(1)
+    }
     console.error(`  ✗ Failed to parse claim transaction file.\n`)
     process.exit(1)
   }
