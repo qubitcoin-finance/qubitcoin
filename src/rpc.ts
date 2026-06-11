@@ -11,14 +11,11 @@ import { log } from './log.js';
 import { isValidHash, sanitize } from './utils.js';
 import type { Request, Response, NextFunction, Express } from 'express';
 import { DEFAULT_TRUSTED_PROXIES, type RpcTrustProxy } from './rpc-trust-proxy.js';
+import { createRateLimiter, GET_RATE_LIMIT, POST_RATE_LIMIT, RATE_WINDOW_MS } from './rpc-rate-limit.js';
 
 /** Maximum JSON body size (1 MB) */
 const MAX_BODY_SIZE = '1mb';
 
-/** Rate limit windows */
-const GET_RATE_LIMIT = 600;   // requests per minute
-const POST_RATE_LIMIT = 100;  // requests per minute
-const RATE_WINDOW_MS = 60_000;
 const ADDRESS_RE = /^[0-9a-f]{64}$/i;
 
 export type RpcRateLimitConfig = {
@@ -26,46 +23,6 @@ export type RpcRateLimitConfig = {
   post?: number;
   windowMs?: number;
 };
-
-/** Simple in-memory per-IP rate limiter (sliding window) */
-function createRateLimiter(windowMs = RATE_WINDOW_MS) {
-  const hits = new Map<string, { timestamps: number[] }>();
-
-  // Cleanup stale entries every 5 minutes
-  const cleanupTimer = setInterval(() => {
-    const cutoff = Date.now() - windowMs;
-    for (const [ip, data] of hits) {
-      data.timestamps = data.timestamps.filter(t => t > cutoff);
-      if (data.timestamps.length === 0) hits.delete(ip);
-    }
-  }, 5 * 60_000).unref();
-
-  const limiter = (bucket: string, limit: number) => (req: Request, res: Response, next: NextFunction) => {
-    const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown';
-    const key = `${bucket}:${ip}`;
-    const now = Date.now();
-    const cutoff = now - windowMs;
-
-    let data = hits.get(key);
-    if (!data) {
-      data = { timestamps: [] };
-      hits.set(key, data);
-    }
-
-    // Remove old timestamps
-    data.timestamps = data.timestamps.filter(t => t > cutoff);
-
-    if (data.timestamps.length >= limit) {
-      sendError(res, 429, 'Too many requests');
-      return;
-    }
-
-    data.timestamps.push(now);
-    next();
-  };
-  limiter.close = () => clearInterval(cleanupTimer);
-  return limiter;
-}
 
 export { sanitize };
 
