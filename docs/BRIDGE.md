@@ -856,7 +856,7 @@ No new npm dependencies needed for the QBTC node — `@noble/curves/bn254` is al
 ### Phase 5: Tooling & UI
 
 - `src/tools/bridge-lock.ts` — CLI tool for locking QBTC (similar to `src/tools/claim-btc.ts`)
-- `website/src/bridge.html` — Bridge UI in the explorer
+- `website/src/explorer-main.ts` — Bridge UI in the explorer
 - Relayer status dashboard
 
 ---
