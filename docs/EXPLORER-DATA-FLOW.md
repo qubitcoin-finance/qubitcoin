@@ -95,7 +95,7 @@ The interfaces at `explorer-main.ts:11–102` are the frontend's view of the RPC
 
 Key shapes:
 
-- `Status` (line 11) — `/api/v1/status` response; includes `height`, `difficulty`, `hashrate`, `miningAddress`, `targetBlockTime`.
+- `Status` (line 11) — `/api/v1/status` response; includes `height`, `difficulty`, `hashrate`, `peers`, `totalTxs`, and `targetBlockTime`.
 - `Transaction` (line 45) — used by both `/api/v1/tx/:txid` and embedded inside `Block`. Carries optional `blockHash`/`blockHeight` for confirmed tx, optional `claimData` for claim transactions.
 - `MempoolTx` (line 72) — lighter shape returned by `/api/v1/mempool/txs`; omits block fields.
 - `Block` (line 65) — `/api/v1/blocks` and `/api/v1/block/:hash`; includes `transactions: Transaction[]`.
