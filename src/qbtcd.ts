@@ -236,9 +236,26 @@ async function main() {
 
   // Start RPC
   const rpcApp = startRpcServer(node, config.port, p2p, config.rpcBind, config.rpcTrustProxy)
-  rpcApp.listen(config.port, config.rpcBind, () => {
+  const rpcServer = rpcApp.listen(config.port, config.rpcBind, () => {
     log.info({ component: 'rpc', port: config.port, bind: config.rpcBind, url: `http://${config.rpcBind}:${config.port}` }, 'RPC server listening')
   })
+
+  const simulationTimers: ReturnType<typeof setTimeout>[] = []
+  let shuttingDown = false
+  async function shutdown(signal: string): Promise<void> {
+    if (shuttingDown) return
+    shuttingDown = true
+    log.info({ component: 'daemon', signal }, 'Shutting down')
+    for (const timer of simulationTimers) clearTimeout(timer)
+    node.stopMining()
+    await p2p.stop()
+    await new Promise<void>((resolve) => {
+      rpcServer.close(() => resolve())
+    })
+    process.exit(0)
+  }
+  process.once('SIGTERM', () => { void shutdown('SIGTERM') })
+  process.once('SIGINT', () => { void shutdown('SIGINT') })
 
   // Mining mode — load or generate a wallet, then mine continuously
   if (config.mine) {
@@ -320,17 +337,17 @@ async function main() {
     }
 
     // Mine a new block every 10 seconds
-    setInterval(() => {
+    simulationTimers.push(setInterval(() => {
       simMine(minerWallet.address)
-    }, 10_000)
+    }, 10_000))
 
     // Create a random transaction every 15 seconds
-    setInterval(() => {
+    simulationTimers.push(setInterval(() => {
       simulateTransaction()
-    }, 15_000)
+    }, 15_000))
 
     // Kick off one transaction right away
-    setTimeout(simulateTransaction, 2000)
+    simulationTimers.push(setTimeout(simulateTransaction, 2000))
 
     log.info({ component: 'simulate' }, 'Simulation mode active (mining every 10s, txs every 15s)')
   }
