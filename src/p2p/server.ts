@@ -6,7 +6,6 @@
  * Ban list, max peers, genesis check.
  */
 import net from 'node:net'
-import fs from 'node:fs'
 import path from 'node:path'
 import { Peer } from './peer.js'
 import {
@@ -18,6 +17,8 @@ import {
   upsertKnownAddress as upsertKnownAddressEntry,
 } from './address-book.js'
 import { OrphanBlockPool } from './orphan-pool.js'
+import { BanList } from './ban-list.js'
+import { MAX_ANCHORS, readAnchors, writeAnchors } from './anchors.js'
 import {
   type Message,
   type VersionPayload,
@@ -47,7 +48,6 @@ const MAX_INBOUND = 25
 const MAX_OUTBOUND = 25
 const IBD_BATCH_SIZE = 200
 const SEEN_CACHE_MAX = 10_000
-const BAN_DURATION_MS = 24 * 60 * 60 * 1000 // 24h
 const MAX_REORG_DEPTH = 100
 const MAX_HEADERS_RESPONSE = 500
 const SEED_RECONNECT_BASE_MS = 5_000
@@ -69,8 +69,7 @@ export class P2PServer {
   private inboundCount = 0
   private outboundCount = 0
   private node: Node
-  private banList: Map<string, number> = new Map() // IP -> expiry timestamp
-  private banListPath: string | null = null
+  private banList: BanList = new BanList()
   private seenBlocks: Set<string> = new Set()
   private seenTxs: Set<string> = new Set()
   private port: number
@@ -96,7 +95,6 @@ export class P2PServer {
 
   private localMode = false
   private anchorsPath: string | null = null
-  private readonly MAX_ANCHORS = 10
 
   constructor(node: Node, port: number, dataDir?: string) {
     this.node = node
@@ -108,9 +106,8 @@ export class P2PServer {
       }
     })
 
+    this.banList = new BanList(dataDir ? path.join(dataDir, 'banned.json') : null)
     if (dataDir) {
-      this.banListPath = path.join(dataDir, 'banned.json')
-      this.loadBanList()
       this.anchorsPath = path.join(dataDir, 'anchors.json')
       this.loadAnchors()
     }
@@ -276,7 +273,7 @@ export class P2PServer {
 
   connectOutbound(host: string, port: number): void {
     if (this.outboundCount >= MAX_OUTBOUND) return
-    if (this.isBanned(host)) return
+    if (this.banList.isBanned(host)) return
 
     const label = `${host}:${port}`
     const socket = net.createConnection({ host, port }, () => {
@@ -306,7 +303,7 @@ export class P2PServer {
 
   private handleInbound(socket: net.Socket): void {
     const addr = socket.remoteAddress ?? ''
-    if (this.isBanned(addr)) {
+    if (this.banList.isBanned(addr)) {
       log.info({ component: 'p2p', ip: addr }, 'Rejected banned peer')
       const frame = encodeMessage({ type: 'reject', payload: { reason: 'banned' } as RejectPayload })
       socket.end(frame)
@@ -356,7 +353,7 @@ export class P2PServer {
 
     // Ban if misbehavior was the cause
     if (peer.getMisbehaviorScore() >= 100) {
-      this.ban(peer.address)
+      this.banList.ban(peer.address)
     }
 
     // Clear fork resolution flag if this peer was involved
@@ -1133,39 +1130,6 @@ export class P2PServer {
     }
   }
 
-  private isBanned(ip: string): boolean {
-    const normalized = normalizeIP(ip)
-    const expiry = this.banList.get(normalized)
-    if (expiry === undefined) return false
-    if (Date.now() > expiry) {
-      this.banList.delete(normalized)
-      return false
-    }
-    return true
-  }
-
-  private ban(ip: string): void {
-    const normalized = normalizeIP(ip)
-    log.warn({ component: 'p2p', ip: normalized }, 'Banning peer for 24h')
-    this.banList.set(normalized, Date.now() + BAN_DURATION_MS)
-    this.saveBanList()
-  }
-
-  private loadBanList(): void {
-    if (!this.banListPath) return
-    try {
-      const raw = JSON.parse(fs.readFileSync(this.banListPath, 'utf-8'))
-      const now = Date.now()
-      for (const [ip, expiry] of Object.entries(raw)) {
-        if (typeof expiry === 'number' && expiry > now) {
-          this.banList.set(ip, expiry)
-        }
-      }
-    } catch (err) {
-      log.debug({ component: 'p2p', err }, 'Could not load ban list — starting fresh')
-    }
-  }
-
   private handleGetAddr(peer: Peer): void {
     // Rate limit: max 1 getaddr response per peer per 60 seconds
     const now = Date.now()
@@ -1266,7 +1230,7 @@ export class P2PServer {
 
       // Pick a random known address we're not already connected to
       const candidates = Array.from(this.knownAddresses.values()).filter(
-        (a) => !this.isConnectedToSeed(a.host, a.port) && !this.isBanned(a.host)
+        (a) => !this.isConnectedToSeed(a.host, a.port) && !this.banList.isBanned(a.host)
       )
       if (candidates.length === 0) return
 
@@ -1332,58 +1296,29 @@ export class P2PServer {
     return added
   }
 
-  private saveBanList(): void {
-    if (!this.banListPath) return
-    const obj: Record<string, number> = {}
-    for (const [ip, expiry] of this.banList) {
-      obj[ip] = expiry
-    }
-    fs.writeFileSync(this.banListPath, JSON.stringify(obj, null, 2) + '\n')
-  }
-
   /** Load anchor peers from disk and add to known addresses */
   private loadAnchors(): void {
     if (!this.anchorsPath) return
-    try {
-      const data = fs.readFileSync(this.anchorsPath, 'utf-8')
-      const anchors: unknown = JSON.parse(data)
-      if (!Array.isArray(anchors)) return
-      let loadedCount = 0
-      for (const a of anchors) {
-        const parsed = parseAddressEntry(a)
-        if (parsed) {
-          this.upsertKnownAddress(parsed.host, parsed.port, parsed.lastSeen, false)
-          loadedCount++
-        } else {
-          log.warn({ component: 'p2p' }, 'Skipping malformed anchor entry')
-        }
-      }
-      if (loadedCount > 0) {
-        log.info({ component: 'p2p', count: loadedCount }, 'Loaded anchor peers')
-      }
-    } catch (err) {
-      log.debug({ component: 'p2p', err }, 'Could not load anchors — starting fresh')
+    const entries = readAnchors(this.anchorsPath)
+    for (const entry of entries) {
+      this.upsertKnownAddress(entry.host, entry.port, entry.lastSeen, false)
+    }
+    if (entries.length > 0) {
+      log.info({ component: 'p2p', count: entries.length }, 'Loaded anchor peers')
     }
   }
 
   /** Persist the most recently seen known addresses as anchor peers */
   saveAnchors(): void {
     if (!this.anchorsPath) return
-    const entries = Array.from(this.knownAddresses.values())
-      .sort((a, b) => b.lastSeen - a.lastSeen)
-      .slice(0, this.MAX_ANCHORS)
-    try {
-      fs.writeFileSync(this.anchorsPath, JSON.stringify(entries, null, 2) + '\n')
-    } catch (err) {
-      log.debug({ component: 'p2p', err }, 'Could not save anchors — data dir may not be writable')
-    }
+    writeAnchors(this.anchorsPath, this.knownAddresses, MAX_ANCHORS)
   }
 
   /** Connect to anchor peers (called after loading) */
   connectToAnchors(): void {
     if (!this.anchorsPath) return
     for (const [, addr] of this.knownAddresses) {
-      if (!this.isConnectedToSeed(addr.host, addr.port) && !this.isBanned(addr.host)) {
+      if (!this.isConnectedToSeed(addr.host, addr.port) && !this.banList.isBanned(addr.host)) {
         this.connectOutbound(addr.host, addr.port)
       }
     }
