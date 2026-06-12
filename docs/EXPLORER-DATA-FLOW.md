@@ -1,17 +1,16 @@
 # Explorer Data Flow
 
-Read this when working on `website/src/explorer-main.ts`, adding new explorer views, hooking up new `/api/v1` endpoints in the frontend, or debugging why a route renders wrong or goes blank.
+Read this when working on `website/src/explorer-main.ts` or `website/src/explorer-api.ts`, adding new explorer views, hooking up new `/api/v1` endpoints in the frontend, or debugging why a route renders wrong or goes blank.
 
-The explorer is a single TypeScript module (`website/src/explorer-main.ts`) that drives all block-explorer views, the embedded documentation, and the blog. It uses `window.location.hash` for routing, `fetch` against `/api/v1` for data, and innerHTML assignment for rendering. There is no framework, no virtual DOM, and no global state store.
+The explorer is a vanilla TypeScript app. `website/src/explorer-main.ts` drives all block-explorer views, the embedded documentation, and the blog; `website/src/explorer-api.ts` owns the typed `/api/v1` fetch layer. It uses `window.location.hash` for routing, `fetch` against `/api/v1` for data, and innerHTML assignment for rendering. There is no framework, no virtual DOM, and no global state store.
 
 ## Key Files
 
 | Path | Lines | Role |
 |---|---|---|
-| `website/src/explorer-main.ts` | 1–10 | Module constants (`API = '/api/v1'`) |
-| `website/src/explorer-main.ts` | 11–102 | TypeScript interfaces for every API response shape |
-| `website/src/explorer-main.ts` | 99–130 | `ApiResult<T>`, `apiFull<T>`, `api<T>` — fetch helpers |
-| `website/src/explorer-main.ts` | 132–140 | Named fetch shortcuts (`fetchStatus`, `fetchBlocks`, …) |
+| `website/src/explorer-api.ts` | — | TypeScript interfaces for every API response shape |
+| `website/src/explorer-api.ts` | — | `API = '/api/v1'`, `ApiResult<T>`, `apiFull<T>`, `api<T>` — fetch helpers |
+| `website/src/explorer-api.ts` | — | Named fetch shortcuts (`fetchStatus`, `fetchBlocks`, …) |
 | `website/src/explorer-main.ts` | 366–386 | `Route` union type + `parseRoute()` — hash router |
 | `website/src/explorer-main.ts` | 394–408 | `isExplorerRoute()`, `showExplorer()`, `showLanding()` |
 | `website/src/explorer-main.ts` | 410–454 | `renderError()`, `renderLoading()` — UI chrome |
@@ -59,7 +58,7 @@ Only the `mempool` view installs a `setInterval` refresh (every 15 s). All other
 
 Every network call flows through two wrappers:
 
-### `apiFull<T>` (`explorer-main.ts:112`)
+### `apiFull<T>` (`explorer-api.ts`)
 
 Returns a discriminated union `ApiResult<T>`:
 
@@ -69,11 +68,11 @@ Returns a discriminated union `ApiResult<T>`:
 
 All errors are logged via `logApiError()` to `console.error` with a timestamp and the API path.
 
-### `api<T>` (`explorer-main.ts:127`)
+### `api<T>` (`explorer-api.ts`)
 
 Thin wrapper over `apiFull`. Returns `T | null`. Render functions use this for convenience; they treat `null` as a signal to call `renderError()`.
 
-### Named shortcuts (`explorer-main.ts:132–140`)
+### Named shortcuts (`explorer-api.ts`)
 
 ```
 fetchStatus()           → GET /api/v1/status
@@ -91,7 +90,7 @@ The Vite dev server proxies `/api` to `API_URL` when set, otherwise `https://qub
 
 ## TypeScript Interfaces
 
-The interfaces at `explorer-main.ts:11–102` are the frontend's view of the RPC contract. They are maintained by hand — there is no code-generation step that derives them from the backend types.
+The interfaces in `website/src/explorer-api.ts` are the frontend's view of the RPC contract. They are maintained by hand — there is no code-generation step that derives them from the backend types.
 
 Key shapes:
 
