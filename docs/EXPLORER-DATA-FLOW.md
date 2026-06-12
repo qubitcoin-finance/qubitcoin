@@ -52,7 +52,7 @@ URL hash              parseRoute() result
 5. Sets `max-w-6xl` for data views, `max-w-[90rem]` for docs/blog (sidebar/grid layout).
 6. Calls `window.scrollTo(0, 0)` after every render.
 
-Only the `mempool` view installs a `setInterval` refresh (every 15 s). All other views are one-shot renders.
+Only the `#/mempool` route installs a `setInterval` refresh (every 15 s) by re-rendering the dashboard. All other views are one-shot renders.
 
 ## Fetch Layer
 
