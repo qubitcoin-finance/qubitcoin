@@ -12,6 +12,7 @@
  *   --mine            Enable mining (generates a wallet and mines continuously)
  *   --full            Auto-download snapshot if missing, then start as full node
  *   --local           Run without default seed (isolated local chain)
+ *   --message <text>  Coinbase message included in every mined block
  *   --rpc-bind <addr> RPC bind address (default 127.0.0.1)
  *   --rpc-trust-proxy <value> Trusted proxy hops/networks for forwarded client IPs
  *   --simulate        Enable periodic mining and transaction simulation (dev only)
