@@ -301,7 +301,7 @@ async function renderBlock(hash: string): Promise<void> {
       </div>
       ${(() => {
         const cbPubKey = block.transactions[0]?.inputs[0]?.publicKey;
-        if (!cbPubKey || cbPubKey === '' || cbPubKey === '00'.repeat(0)) {
+        if (!cbPubKey || cbPubKey === '') {
           return '';
         }
         try {
