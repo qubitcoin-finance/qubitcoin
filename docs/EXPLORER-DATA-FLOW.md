@@ -11,15 +11,15 @@ The explorer is a vanilla TypeScript app. `website/src/explorer-main.ts` drives 
 | `website/src/explorer-api.ts` | — | TypeScript interfaces for every API response shape |
 | `website/src/explorer-api.ts` | — | `API = '/api/v1'`, `ApiResult<T>`, `apiFull<T>`, `api<T>` — fetch helpers |
 | `website/src/explorer-api.ts` | — | Named fetch shortcuts (`fetchStatus`, `fetchBlocks`, …) |
-| `website/src/explorer-main.ts` | 366–386 | `Route` union type + `parseRoute()` — hash router |
-| `website/src/explorer-main.ts` | 394–408 | `isExplorerRoute()`, `showExplorer()`, `showLanding()` |
-| `website/src/explorer-main.ts` | 410–454 | `renderError()`, `renderLoading()` — UI chrome |
-| `website/src/explorer-main.ts` | 456–553 | `renderDashboard()` — main overview page |
-| `website/src/explorer-main.ts` | 554–660 | `renderBlock()` — block detail view |
-| `website/src/explorer-main.ts` | 661–804 | `renderTx()` — transaction detail view |
-| `website/src/explorer-main.ts` | 805–871 | `renderAddress()` — address balance + UTXOs |
-| `website/src/explorer-main.ts` | 2248–2279 | `setupSearch()` — search-bar disambiguation |
-| `website/src/explorer-main.ts` | 2283–2353 | `dispatch()` — central router; `hashchange` + init |
+| `website/src/explorer-main.ts` | 46–66 | `Route` union type + `parseRoute()` — hash router |
+| `website/src/explorer-main.ts` | 74–88 | `isExplorerRoute()`, `showExplorer()`, `showLanding()` |
+| `website/src/explorer-main.ts` | 90–132 | `renderError()`, `renderLoading()` — UI chrome |
+| `website/src/explorer-main.ts` | 136–230 | `renderDashboard()` — main overview page |
+| `website/src/explorer-main.ts` | 234–337 | `renderBlock()` — block detail view |
+| `website/src/explorer-main.ts` | 341–481 | `renderTx()` — transaction detail view |
+| `website/src/explorer-main.ts` | 485–548 | `renderAddress()` — address balance + UTXOs |
+| `website/src/explorer-main.ts` | 734–765 | `setupSearch()` — search-bar disambiguation |
+| `website/src/explorer-main.ts` | 771–833 | `dispatch()` — central router; `hashchange` + init |
 | `website/index.html` | — | Landing page and explorer shell (id=`landing-content`, id=`explorer-main`, id=`explorer-content`) |
 | `website/vite.config.ts` | — | Single-page build for `index.html` |
 
@@ -41,9 +41,9 @@ URL hash              parseRoute() result
 #/blog/<slug>         { view: 'blog', slug }
 ```
 
-`parseRoute()` at `explorer-main.ts:375` slices `location.hash` after `#/`, splits on `/`, and matches the first segment. Unknown segments fall through to `{ view: 'dashboard' }`.
+`parseRoute()` at `explorer-main.ts:55` slices `location.hash` after `#/`, splits on `/`, and matches the first segment. Unknown segments fall through to `{ view: 'dashboard' }`.
 
-`dispatch()` at `explorer-main.ts:2285` is called on page load and on every `hashchange` event. It:
+`dispatch()` at `explorer-main.ts:771` is called on page load and on every `hashchange` event. It:
 
 1. Clears any running `refreshTimer` (dashboard auto-refresh).
 2. Calls `isExplorerRoute()` — returns `false` only for `#/` or an empty hash. When false, `showLanding()` is called and dispatch returns immediately.
@@ -105,23 +105,23 @@ Key shapes:
 
 Each render function is `async`, fetches its own data, and writes to `root.innerHTML` (the `#explorer-content` div inside `index.html`).
 
-### `renderDashboard()` (`explorer-main.ts:456`)
+### `renderDashboard()` (`explorer-main.ts:136`)
 
 Fires four parallel fetches: `fetchStatus()`, `fetchBlocks(10)`, `fetchMempoolStats()`, `fetchClaimStats()`. Renders the stats card grid, the block strip (`renderBlockStrip()`), and up to 8 recent mempool transactions.
 
-### `renderBlock(hash)` (`explorer-main.ts:554`)
+### `renderBlock(hash)` (`explorer-main.ts:234`)
 
 Fetches `/api/v1/block/:hash`. If the hash is 64-hex but the block API returns null, attempts `/api/v1/tx/:hash` and redirects to the tx view. Renders block header fields, then a transaction list with type badges.
 
-### `renderTx(txid)` (`explorer-main.ts:661`)
+### `renderTx(txid)` (`explorer-main.ts:341`)
 
 Fetches `/api/v1/tx/:txid`. For each non-coinbase, non-claim input, makes a secondary `fetchTx(inp.txId)` call to resolve the source output's address and amount — this is the only place where the explorer makes more than one API call serially per user action. Renders inputs, outputs, claim data if present, and confirmation status.
 
-### `renderAddress(addr)` (`explorer-main.ts:805`)
+### `renderAddress(addr)` (`explorer-main.ts:485`)
 
 Fires `fetchBalance(addr)` and `fetchUtxos(addr)` in parallel. Renders the balance summary and a UTXO list. Empty UTXO list with non-zero balance is possible while UTXOs are still being indexed on a fresh node.
 
-## Search Disambiguation (`setupSearch`, `explorer-main.ts:2248`)
+## Search Disambiguation (`setupSearch`, `explorer-main.ts:734`)
 
 On Enter keypress, the search bar applies this heuristic:
 
@@ -138,14 +138,14 @@ A set of pure functions formats display values without touching the DOM:
 
 | Function | Lines | Purpose |
 |---|---|---|
-| `formatQBTC(satoshis)` | 147 | Satoshis → QBTC string with up to 8 decimal places |
-| `truncHash(hash, len)` | 166 | Shorten a hash to `len` prefix chars |
-| `timeAgo(ms)` | 175 | Millisecond timestamp → "X seconds ago" |
-| `formatHashrate(h)` | 185 | H/s → KH/s / MH/s / GH/s |
-| `formatDifficulty(hexTarget)` | 227 | Hex target → decimal difficulty ratio |
-| `isCoinbase(tx)` | 258 | True when inputs[0].txId === `'0'.repeat(64)` |
-| `isClaim(tx)` | 262 | True when `tx.claimData !== undefined` |
-| `senderAddress(tx)` | 243 | Async: SHA-256 of `inputs[0].publicKey` hex → sender addr |
+| `formatQBTC(satoshis)` | 10 | Satoshis → QBTC string with up to 8 decimal places |
+| `truncHash(hash, len)` | 29 | Shorten a hash to `len` prefix chars |
+| `timeAgo(ms)` | 38 | Millisecond timestamp → "X seconds ago" |
+| `formatHashrate(h)` | 48 | H/s → KH/s / MH/s / GH/s |
+| `formatDifficulty(hexTarget)` | 90 | Hex target → decimal difficulty ratio |
+| `isCoinbase(tx)` | 121 | True when inputs[0].txId === `'0'.repeat(64)` |
+| `isClaim(tx)` | 125 | True when `tx.claimData !== undefined` |
+| `senderAddress(tx)` | 106 | Async: SHA-256 of `inputs[0].publicKey` hex → sender addr |
 
 `senderAddress` uses the browser's `crypto.subtle.digest` — it never calls the backend.
 
@@ -153,8 +153,8 @@ A set of pure functions formats display values without touching the DOM:
 
 The docs and blog views are self-contained within the module:
 
-- `renderDocs(section?)` (`explorer-main.ts:2164`) — renders one of ten doc sections defined in `DOC_SECTIONS` (line 880) by matching `section` against their `id` field. Falls back to the overview when `section` is undefined.
-- `renderBlogList()` / `renderBlogPost(slug)` (`explorer-main.ts:2067`, `2127`) — renders the blog index or a single post. Blog posts are imported as TypeScript modules from `website/src/blog/`.
+- `renderDocs(section?)` (`explorer-main.ts:650`) — renders one of ten doc sections defined in `DOC_SECTIONS` by matching `section` against their `id` field. Falls back to the overview when `section` is undefined.
+- `renderBlogList()` / `renderBlogPost(slug)` (`explorer-main.ts:553`, `613`) — renders the blog index or a single post. Blog posts are imported as TypeScript modules from `website/src/blog/`.
 
 Neither view makes network requests; all content is bundled at build time.
 
