@@ -1032,11 +1032,9 @@ export class P2PServer {
       for (let i = 0; i <= forkPoint; i++) {
         verifiedPeerWork += blockWork(chain.blocks[i].header.target)
       }
-      for (const h of payload.headers) {
-        // Headers only have hash/height/previousHash — estimate work from our difficulty
-        // Full verification happens when blocks arrive; this is a sanity check
-        verifiedPeerWork += blockWork(chain.getDifficulty())
-      }
+      // Headers only have hash/height/previousHash — estimate work from our difficulty
+      // Full verification happens when blocks arrive; this is a sanity check
+      verifiedPeerWork += blockWork(chain.getDifficulty()) * BigInt(payload.headers.length)
       // If peer claims more work than headers can justify, ban them
       if (peer.remoteCumulativeWork > verifiedPeerWork * 3n / 2n) {
         log.warn({ component: 'p2p', peer: peer.id, claimed: peer.remoteCumulativeWork.toString(16).slice(0, 16), verified: verifiedPeerWork.toString(16).slice(0, 16) }, 'Peer claims impossibly high cumulative work — banning')
