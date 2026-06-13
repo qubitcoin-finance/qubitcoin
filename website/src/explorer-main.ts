@@ -882,7 +882,7 @@ ${docP('Get a QubitCoin node running in under 5 minutes.')}
 ${docH2('Requirements')}
 <ul class="text-text-secondary text-sm leading-relaxed mb-3 list-disc list-inside space-y-1">
   <li><span class="text-text-primary font-medium">Node.js 20+</span></li>
-  <li><span class="text-text-primary font-medium">pnpm</span> — install with <span class="font-mono text-xs text-qubit-400">npm install -g pnpm</span></li>
+  <li><span class="text-text-primary font-medium">pnpm</span> — enable via <span class="font-mono text-xs text-qubit-400">corepack enable</span></li>
 </ul>
 
 ${docH2('Install')}
