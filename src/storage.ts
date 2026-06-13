@@ -252,9 +252,13 @@ export class FileBlockStorage implements BlockStorage {
   }
 
   loadBlocks(): Block[] {
-    if (!fs.existsSync(this.blocksPath)) return []
-
-    const content = fs.readFileSync(this.blocksPath, 'utf-8').trimEnd()
+    let content: string
+    try {
+      content = fs.readFileSync(this.blocksPath, 'utf-8').trimEnd()
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return []
+      throw err
+    }
     if (!content) return []
 
     const blocks: Block[] = []
