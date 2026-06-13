@@ -164,7 +164,7 @@ Neither view makes network requests; all content is bundled at build time.
 - **Hash format** — `parseRoute()` strips exactly two characters (`#/`). A hash without the slash prefix (e.g. `#block/...`) will not route correctly.
 - **Concurrent dispatches** — `hashchange` events can fire in rapid succession. The `refreshTimer` is cleared at the top of `dispatch()`, but there is no in-flight fetch cancellation; a slow render from a prior hash can still write to `root` after a new dispatch has already started a new render.
 - **senderAddress race** — `renderTx` resolves sender addresses with secondary fetches inside a loop. If the RPC returns 404 for a spent input's txid (pruned or reorged), `fetchTx` returns null and the input renders without an address rather than erroring.
-- **Landing vs. explorer split** — `isExplorerRoute()` treats `#/` as the landing page. Any hash that is *not* `#/` but does not match a known route falls to `{ view: 'dashboard' }` → `showLanding()` as well, which may be surprising when experimenting with new route segments.
+- **Landing vs. explorer split** — `isExplorerRoute()` treats `#/` as the landing page. Any other `#/...` hash still shows the explorer shell; unknown segments fall through to `{ view: 'dashboard' }`, which renders the dashboard inside the explorer rather than switching back to the landing page.
 
 ## Cross-References
 
