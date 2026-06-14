@@ -173,7 +173,7 @@ Changes should be tested by somebody other than the developer who wrote the code
 
 ```bash
 # Start a node with mining
-pnpm run qbtcd
+pnpm run qbtcd -- --mine
 
 # In another terminal, generate random transactions
 pnpm run dev:tx
