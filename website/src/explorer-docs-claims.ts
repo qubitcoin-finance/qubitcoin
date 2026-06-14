@@ -319,7 +319,7 @@ const tx = createTransaction(wallet, utxos, recipients, fee);
 ${docH3('Broadcasting')}
 ${docCode(`curl -X POST http://127.0.0.1:3001/api/v1/tx \\
   -H "Content-Type: application/json" \\
-  -d '{"transaction": <full tx JSON>}'`)}
+  -d '<full tx JSON>'`)}
 
 ${docH2('Transaction Fees')}
 ${docP('The transaction fee is implicit: <span class="font-mono text-xs text-qubit-400">fee = sum(inputs) - sum(outputs)</span>. The miner who includes your transaction in a block collects the fee.')}
