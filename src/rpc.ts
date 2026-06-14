@@ -57,10 +57,8 @@ export function startRpcServer(
   const listen = app.listen.bind(app);
   app.listen = ((...args: Parameters<typeof app.listen>) => {
     const server = listen(...args);
-    server.once('listening', () => {
-      server.on('error', (err) => {
-        log.error({ component: 'rpc', err }, 'RPC server error');
-      });
+    server.on('error', (err) => {
+      log.error({ component: 'rpc', err }, 'RPC server error');
     });
     server.once('close', rateLimiter.close);
     return server;
