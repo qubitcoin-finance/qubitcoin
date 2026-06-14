@@ -274,11 +274,11 @@ export class FileBlockStorage implements BlockStorage {
   }
 
   loadMetadata(): BlockStorageMetadata | null {
-    if (!fs.existsSync(this.metadataPath)) return null
     try {
       const content = fs.readFileSync(this.metadataPath, 'utf-8')
       return JSON.parse(content) as BlockStorageMetadata
     } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null
       log.error({ component: 'storage', err }, 'Failed to parse metadata.json; treating as missing')
       return null
     }
