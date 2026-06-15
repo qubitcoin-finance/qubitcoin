@@ -118,7 +118,7 @@ ${docH2('Core Parameters')}
   </tr></thead>
   <tbody>
     <tr class="border-b border-border"><td class="py-2 pr-4 font-mono text-xs text-qubit-300">STARTING_DIFFICULTY</td><td class="py-2 pr-4 font-mono text-xs">0000000fff...fff</td><td class="py-2 text-text-muted">Easiest allowed target (difficulty floor)</td></tr>
-    <tr class="border-b border-border"><td class="py-2 pr-4 font-mono text-xs text-qubit-300">TARGET_BLOCK_TIME_MS</td><td class="py-2 pr-4">30 minutes</td><td class="py-2 text-text-muted">Target time between blocks (1,800,000 ms)</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 font-mono text-xs text-qubit-300">TARGET_BLOCK_TIME_MS</td><td class="py-2 pr-4">10 minutes</td><td class="py-2 text-text-muted">Target time between blocks (600,000 ms)</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 font-mono text-xs text-qubit-300">DIFFICULTY_ADJUSTMENT_INTERVAL</td><td class="py-2 pr-4">10 blocks</td><td class="py-2 text-text-muted">Blocks between difficulty recalculations</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 font-mono text-xs text-qubit-300">MAX_BLOCK_SIZE</td><td class="py-2 pr-4">1,000,000 bytes</td><td class="py-2 text-text-muted">Maximum serialized block size (1 MB)</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 font-mono text-xs text-qubit-300">INITIAL_SUBSIDY</td><td class="py-2 pr-4">3.125 QBTC</td><td class="py-2 text-text-muted">Block reward at launch</td></tr>
@@ -130,7 +130,7 @@ ${docH2('Core Parameters')}
 ${docH2('Difficulty Adjustment')}
 ${docP('Every 10 blocks, the network recalculates the mining difficulty target. The algorithm compares the actual time taken for the last interval to the expected time:')}
 ${docCode(`expectedTime = (DIFFICULTY_ADJUSTMENT_INTERVAL - 1) × TARGET_BLOCK_TIME
-             = 9 × 30 min = 270 min
+             = 9 × 10 min = 90 min
 
 actualTime = latestBlock.timestamp - intervalStartBlock.timestamp
 ratio = actualTime / expectedTime
