@@ -77,7 +77,7 @@ pnpm run qbtcd -- --mine --snapshot /path/to/qbtc-snapshot.jsonl
 pnpm run qbtcd -- --full
 ```
 
-The `--full` flag automatically downloads the 3.6 GB BTC snapshot from `qubitcoin.finance` on first run (saved to `<datadir>/qbtc-snapshot.jsonl`). Subsequent starts skip the download. The default seed node is `qubitcoin.finance:6001`.
+The `--full` flag automatically downloads the 3.6 GB BTC snapshot from `qubitcoin.finance` on first run (saved to `<datadir>/qbtc-snapshot.jsonl`). Subsequent starts skip the download. When you run with `--mine` or `--full` (without `--local` or explicit `--seeds`), the node defaults to `qubitcoin.finance:6001`.
 
 ### qbtcd CLI options
 
@@ -86,7 +86,7 @@ The `--full` flag automatically downloads the 3.6 GB BTC snapshot from `qubitcoi
 --p2p-port <n>          P2P port (default 6001)
 --snapshot <path>       Path to BTC snapshot NDJSON file
 --datadir <path>        Data directory (default data/node)
---seeds <host:port,...> Comma-separated seed peers (default qubitcoin.finance:6001)
+--seeds <host:port,...> Comma-separated seed peers (default with `--mine`/`--full`)
 --mine                  Enable mining
 --full                  Auto-download snapshot if missing, then start as full node
 --simulate              Dev mode: easy difficulty, fake transactions
