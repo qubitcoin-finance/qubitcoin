@@ -33,10 +33,10 @@ Mining reads the same pool through `getTransactionsForBlock`, where claim transa
 | `src/rpc.ts:202` | `POST /api/v1/tx`, RPC submission into `Node.receiveTransaction` |
 | `src/rpc.ts:219` | `GET /api/v1/mempool/txs`, lightweight sorted mempool summaries |
 | `src/p2p/server.ts:803` | `P2PServer.handleTx`, peer transaction admission and relay behavior |
-| `src/__tests__/mempool.test.ts:32` | Core mempool admission tests |
-| `src/__tests__/mempool.test.ts:166` | Claim-specific mempool tests |
-| `src/__tests__/mempool.test.ts:823` | Sorting tests for `getTransactionsForBlock` |
-| `src/__tests__/mempool.test.ts:893` | Revalidation edge-case tests |
+| `src/__tests__/mempool-basic.test.ts:7` | Core mempool admission tests |
+| `src/__tests__/mempool-claims.test.ts:10` | Claim-specific mempool tests |
+| `src/__tests__/mempool-sorting.test.ts:7` | Sorting tests for `getTransactionsForBlock` |
+| `src/__tests__/mempool-revalidate.test.ts:9` | Revalidation edge-case tests |
 
 ## How It Works
 
