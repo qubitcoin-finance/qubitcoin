@@ -5,7 +5,7 @@
  * Two-phase pipeline with checkpointed resume:
  *
  *   Phase 1 — Extract (slow, resumable):
- *     Parse binary → filter P2PKH+P2WPKH+P2SH → append intermediate NDJSON
+ *     Parse binary → filter all claimable script types → append intermediate NDJSON
  *     Periodic checkpoints store byte offset; kill & re-run to resume.
  *
  *   Phase 2 — Aggregate (fast, ~2 min):
