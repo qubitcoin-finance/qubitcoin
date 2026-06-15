@@ -69,11 +69,11 @@ The validator is the single consensus authority for claim correctness. It:
 - `chain.ts:398` — during fork/reorg re-application (using a local `tempClaimed` set so a fork can't double-claim within its own branch).
 - `mempool.ts:99` — on admission, gated by `MAX_CLAIM_COUNT = 5000` pending claims.
 
-`block.ts:407` performs only *structural* validation (sentinel input, single output, dust threshold, integer amount); it deliberately does **not** check the ECDSA/Schnorr proof — that is the chain's job, because only the chain holds the snapshot and the claimed-address set.
+`block.ts:411` performs only *structural* validation (sentinel input, single output, dust threshold, integer amount); it deliberately does **not** check the ECDSA/Schnorr proof — that is the chain's job, because only the chain holds the snapshot and the claimed-address set.
 
 ### Minting and unminting
 
-On apply (`chain.ts:622`), the chain adds `claim.btcAddress` to `claimedBtcAddresses`, records it in the block's `undo.claimedAddresses`, bumps `claimedCount`/`claimedAmount`, and creates the new UTXO flagged `isClaim: true`. On disconnect (`chain.ts:713`) the undo record removes the address from the set and decrements the counters, so a reorg cleanly releases the claim for re-claiming on the winning branch.
+On apply (`chain.ts:625`), the chain adds `claim.btcAddress` to `claimedBtcAddresses`, records it in the block's `undo.claimedAddresses`, bumps `claimedCount`/`claimedAmount`, and creates the new UTXO flagged `isClaim: true`. On disconnect (`chain.ts:715`) the undo record removes the address from the set and decrements the counters, so a reorg cleanly releases the claim for re-claiming on the winning branch.
 
 ## Invariants and edge cases
 
