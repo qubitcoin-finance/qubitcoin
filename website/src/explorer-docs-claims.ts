@@ -273,7 +273,7 @@ ${docP('Query the RPC API to check the balance and UTXOs for any address:')}
 ${docH3('Get Balance')}
 ${docCode(`curl -s http://127.0.0.1:3001/api/v1/address/<address>/balance | jq`)}
 ${docJson(`{
-  "balance": 6.25  // total QBTC across all UTXOs
+  "balance": 625000000  // 6.25 QBTC in satoshis
 }`)}
 ${docH3('List UTXOs')}
 ${docCode(`curl -s http://127.0.0.1:3001/api/v1/address/<address>/utxos | jq`)}
@@ -282,7 +282,7 @@ ${docJson(`[
     "txId": "a1b2c3...64hex",
     "outputIndex": 0,
     "address": "deadbeef...64hex",
-    "amount": 3.125
+    "amount": 312500000
   },
   {
     "txId": "d4e5f6...64hex",
