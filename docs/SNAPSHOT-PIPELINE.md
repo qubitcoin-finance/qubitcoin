@@ -57,7 +57,7 @@ An entry has compact fields:
 
 `b` becomes `amount` in satoshis. It must already be a JSON number, must be a safe integer, and must be non-negative. String amounts are rejected instead of coerced.
 
-`t` maps to the optional `type` field. Recognized values are `p2sh`, `p2tr`, `p2wsh`, and `multisig`. Unknown values are ignored, leaving `type` absent; the claim path then treats the entry as the default single-key P2PKH/P2WPKH style.
+`t` maps to the optional `type` field. Recognized values are `p2sh`, `p2tr`, `p2wsh`, and `multisig`. P2PK entries are retained as HASH160(pubkey) addresses with no `type`, so the claim path treats them like the default single-key P2PKH/P2WPKH style. Unknown values are ignored, also leaving `type` absent.
 
 ## Loader Flow
 

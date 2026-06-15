@@ -1,6 +1,6 @@
 # BTC → QBTC Claim Flow
 
-How a Bitcoin holder proves ECDSA ownership of a snapshotted BTC address and mints the matching post-quantum (ML-DSA-65) UTXO on the QubitCoin chain. Read this when working on claim construction, the `verifyClaimProof` validator, the BTC snapshot index, double-claim prevention, claim maturity, or any of the five supported address types (P2PKH/P2WPKH, P2SH-P2WPKH, P2TR, P2WSH, bare/P2SH multisig). Key symbols: `createClaimTransaction`, `verifyClaimProof`, `serializeClaimMessage`, `CLAIM_TXID`, `CLAIM_MATURITY`, `claimedBtcAddresses`, `getSnapshotIndex`.
+How a Bitcoin holder proves ECDSA ownership of a snapshotted BTC address and mints the matching post-quantum (ML-DSA-65) UTXO on the QubitCoin chain. Read this when working on claim construction, the `verifyClaimProof` validator, the BTC snapshot index, double-claim prevention, claim maturity, or any supported BTC claim path (P2PKH/P2PK/P2WPKH, P2SH-P2WPKH, P2TR, P2WSH, bare/P2SH multisig). Key symbols: `createClaimTransaction`, `verifyClaimProof`, `serializeClaimMessage`, `CLAIM_TXID`, `CLAIM_MATURITY`, `claimedBtcAddresses`, `getSnapshotIndex`.
 
 ## Why it exists
 
@@ -9,14 +9,14 @@ QubitCoin mints no coins at genesis. Instead, the genesis block commits to a Bit
 Two problems shape the design:
 
 1. **Replay and cross-fork safety.** A signature over a bare address could be lifted onto another fork or another destination. The signed message binds the BTC address, the destination QBTC address, the snapshot block hash, and the genesis hash together.
-2. **Address-type sprawl.** Bitcoin balances live behind five different script templates. Each needs its own ownership check, but all funnel through one `ClaimData` envelope and one validator.
+2. **Address-type sprawl.** Bitcoin balances live behind multiple script templates. Each needs its own ownership check, but all funnel through one `ClaimData` envelope and one validator.
 
 ## Key files
 
 | Symbol | Location | Role |
 |---|---|---|
 | `serializeClaimMessage` | `src/claim.ts:38` | Builds + double-SHA256s the canonical signed message |
-| `createClaimTransaction` | `src/claim.ts:53` | Single-key claim (P2PKH/P2WPKH/P2SH-P2WPKH ECDSA, P2TR Schnorr) |
+| `createClaimTransaction` | `src/claim.ts:53` | Single-key claim (P2PKH/P2PK/P2WPKH/P2SH-P2WPKH ECDSA, P2TR Schnorr) |
 | `createP2wshClaimTransaction` | `src/claim.ts:122` | P2WSH script claim (m-of-n ECDSA) |
 | `createP2shMultisigClaimTransaction` | `src/claim.ts:185` | P2SH multisig claim (redeem script) |
 | `verifyClaimProof` | `src/claim.ts:312` | The consensus validator — dispatches on `entry.type` |
@@ -58,7 +58,7 @@ The validator is the single consensus authority for claim correctness. It:
    - **`p2wsh` / `multisig`** — `deriveP2wshAddress(witnessScript)` must equal the address; `parseWitnessScript` yields single-key or m-of-n; `verifyParsedScript` runs ordered CHECKMULTISIG verification.
    - **`p2tr`** — `computeTaprootOutputKey(schnorrPublicKey)` must equal the address (tweaked output key), then `verifySchnorrSignature`.
    - **`p2sh`** — if `witnessScript` is present it's P2SH multisig (`deriveP2shMultisigAddress`); otherwise P2SH-P2WPKH (`deriveP2shP2wpkhAddress` over the ECDSA pubkey).
-   - **default (P2PKH/P2WPKH)** — `hash160(ecdsaPublicKey)` must equal the address, then `verifyEcdsaSignature`.
+   - **default (P2PKH/P2PK/P2WPKH)** — `hash160(ecdsaPublicKey)` must equal the snapshot keyhash, then `verifyEcdsaSignature`.
 4. Confirms exactly one output, `amount === entry.amount`, and the output address equals `claim.qbtcAddress`.
 
 ### Where validation runs

@@ -207,7 +207,7 @@ ${docP('Post-quantum signatures are significantly larger than classical ones. Th
   </tbody>
 </table>
 </div>
-${docP('The 30-minute block time compensates for the reduced per-block throughput, and the fee market ensures miners prioritize high-value transactions.')}
+${docP('QubitCoin keeps Bitcoin\'s 10-minute block cadence. Because each post-quantum transaction is larger, each 1 MB block fits fewer transactions and miners still rely on fees to prioritize demand.')}
 
 ${docH2('SHA-256 PoW Security')}
 ${docP('QubitCoin uses the same double-SHA-256 proof-of-work as Bitcoin. Unlike signature schemes, hash functions are <span class="text-text-primary font-medium">not broken</span> by quantum computers.')}

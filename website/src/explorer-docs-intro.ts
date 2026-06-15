@@ -37,7 +37,7 @@ ${docH2('How It Differs from Bitcoin')}
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Signature size</td><td class="py-2 pr-4">71-73 bytes</td><td class="py-2">3,309 bytes</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Quantum safe</td><td class="py-2 pr-4 text-red-400">No</td><td class="py-2 text-green-400">Yes</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Mining</td><td class="py-2 pr-4">SHA-256 PoW</td><td class="py-2">SHA-256 PoW (same)</td></tr>
-    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Block time</td><td class="py-2 pr-4">10 minutes</td><td class="py-2">30 minutes</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Block time</td><td class="py-2 pr-4">10 minutes</td><td class="py-2">10 minutes</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">UTXO model</td><td class="py-2 pr-4">Yes</td><td class="py-2">Yes (same)</td></tr>
     <tr class="border-b border-border last:border-0"><td class="py-2 pr-4 text-text-muted">Address format</td><td class="py-2 pr-4">Base58 / Bech32</td><td class="py-2">64-char hex (SHA-256 of pubkey)</td></tr>
   </tbody>

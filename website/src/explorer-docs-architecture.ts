@@ -56,7 +56,7 @@ ${docP('All ongoing transaction signatures use <span class="text-qubit-400 font-
   </tbody>
 </table>
 </div>
-${docP('The larger key and signature sizes (vs ECDSA\'s 33-byte keys and ~72-byte signatures) are the tradeoff for quantum resistance. The 1 MB max block size accommodates fewer transactions per block, but the 30-minute block time and fee market ensure throughput.')}
+${docP('The larger key and signature sizes (vs ECDSA\'s 33-byte keys and ~72-byte signatures) are the tradeoff for quantum resistance. The 1 MB max block size accommodates fewer transactions per block, so effective throughput is lower than Bitcoin\'s even with the same 10-minute cadence.')}
 
 ${docH2('SHA-256 Proof-of-Work')}
 ${docP('Mining uses double-SHA-256, identical to Bitcoin. The block header (112 bytes) is serialized and hashed; the result must be below the current difficulty target.')}

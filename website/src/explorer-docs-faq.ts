@@ -58,8 +58,8 @@ ${docFaqItem('What if ML-DSA-65 is broken in the future?',
 
 ${docH2('Technical')}
 <div class="bg-surface rounded-xl glow-border p-5 mb-6">
-${docFaqItem('Why 30-minute block times instead of 10 minutes?',
-  'ML-DSA-65 signatures are ~3.3 KB vs ECDSA\'s ~72 bytes. With a 1 MB block size limit, each block fits ~180 transactions. The 30-minute block time gives the fee market more time to accumulate transactions, improving block utilization.')}
+${docFaqItem('Why 10-minute block times?',
+  'QubitCoin currently targets Bitcoin\'s 10-minute cadence. ML-DSA-65 signatures are still much larger than ECDSA\'s, so throughput per block is lower, but the live consensus constant remains <span class="font-mono text-xs text-qubit-400">TARGET_BLOCK_TIME_MS = 600000</span>.')}
 ${docFaqItem('Why NIST Security Level 3 instead of Level 5?',
   'Level 3 (ML-DSA-65) provides 128-bit quantum security, matching AES-128. Level 5 (ML-DSA-87) would increase key sizes by ~50% and signature sizes by ~40% for 192-bit quantum security — diminishing returns given that 128-bit quantum security is already considered infeasible to break.')}
 ${docFaqItem('Why are transactions so large?',
