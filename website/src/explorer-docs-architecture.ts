@@ -159,7 +159,7 @@ ${docP('Miners also collect transaction fees — the difference between total in
 ${docH3('Supply Schedule')}
 ${docP('New QBTC enters circulation from two sources:')}
 <ul class="text-text-secondary text-sm leading-relaxed mb-3 list-disc list-inside space-y-1">
-  <li><span class="text-text-primary font-medium">BTC claims</span> — QBTC claimable from the snapshot (P2PKH, P2PK, P2WPKH, P2SH-P2WPKH, P2TR, P2WSH)</li>
+  <li><span class="text-text-primary font-medium">BTC claims</span> — QBTC claimable from the snapshot (P2PKH, P2PK, P2WPKH, P2SH-P2WPKH, P2SH multisig, P2TR, P2WSH, bare multisig)</li>
   <li><span class="text-text-primary font-medium">Mining rewards</span> — 3.125 QBTC per block, halving every 210,000 blocks</li>
 </ul>
 ${docP('There is no premine, no ICO, and no team allocation. All coins come from either BTC claims or mining.')}

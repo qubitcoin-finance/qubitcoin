@@ -226,7 +226,7 @@ ${docP('The BTC claim process involves a one-time ECDSA signature to prove Bitco
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-primary font-medium">One-time exposure</td><td class="py-2 text-xs">ECDSA key is used once during the claim. After that, all QBTC operations use ML-DSA-65.</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-primary font-medium">Snapshot binding</td><td class="py-2 text-xs">The claim message includes the BTC snapshot block hash, binding the signature to a specific chain state. Cannot be replayed on a different fork.</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-primary font-medium">Double-claim prevention</td><td class="py-2 text-xs">Each BTC address can only be claimed once. The chain tracks claimed addresses permanently.</td></tr>
-    <tr class="border-b border-border last:border-0"><td class="py-2 pr-4 text-text-primary font-medium">Address-type verification</td><td class="py-2 text-xs">Each address type uses its native verification: ECDSA for P2PKH/P2WPKH/P2SH-P2WPKH/P2WSH, Schnorr for P2TR.</td></tr>
+    <tr class="border-b border-border last:border-0"><td class="py-2 pr-4 text-text-primary font-medium">Address-type verification</td><td class="py-2 text-xs">Each address type uses its native verification: ECDSA for P2PKH/P2WPKH/P2SH-P2WPKH/P2SH multisig/P2WSH/bare multisig, Schnorr for P2TR.</td></tr>
   </tbody>
 </table>
 </div>
