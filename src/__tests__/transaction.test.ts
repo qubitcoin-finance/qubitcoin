@@ -577,7 +577,7 @@ describe('validateTransaction additional edge cases', () => {
       1000
     )
 
-    // Attempt to spend at height 50 — coinbase requires COINBASE_MATURITY (100) blocks
+    // Attempt to spend one block before maturity — coinbase requires COINBASE_MATURITY (100) blocks
     const currentHeight = COINBASE_MATURITY - 1
     const result = validateTransaction(tx, utxoSet, currentHeight)
     expect(result.valid).toBe(false)
