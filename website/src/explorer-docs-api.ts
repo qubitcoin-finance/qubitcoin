@@ -188,7 +188,7 @@ ${docP('All endpoints return standard HTTP status codes:')}
   <li><span class="font-mono text-xs text-green-400">200</span> — success</li>
   <li><span class="font-mono text-xs text-yellow-400">400</span> — bad request (invalid transaction, malformed JSON, malformed input)</li>
   <li><span class="font-mono text-xs text-orange-400">413</span> — request body too large (JSON body exceeds 1 MB limit)</li>
-  <li><span class="font-mono text-xs text-red-400">404</span> — resource not found (block, tx, or address)</li>
+  <li><span class="font-mono text-xs text-red-400">404</span> — resource not found (block or tx)</li>
   <li><span class="font-mono text-xs text-red-400">500</span> — internal server error</li>
 </ul>`;
 }
