@@ -628,7 +628,7 @@ The relayer is a standalone service (not part of `qbtcd`). It bridges the gap be
    - Execute burn circuit in SP1 zkVM
    - Compress STARK → Groth16
 5. **Submit to QBTC:** Create bridge unlock transaction with proof
-   - `POST /api/v1/bridge/lock` (or `POST /api/v1/tx`)
+   - `POST /api/v1/tx`
 6. **Record:** Mark burn as processed
 
 ### 5.4 Batching

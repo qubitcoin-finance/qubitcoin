@@ -22,7 +22,7 @@ ${p('The difficulty adjustment runs every 10 blocks targeting a 10-minute averag
 ${h2('What Changed From the Design')}
 ${p('A few things evolved during implementation:')}
 ${steps([
-  '<strong>Transaction index:</strong> We added an O(1) transaction index to the chain. Block search is fast, but looking up a TX by ID without scanning every block was slow at scale. The index is rebuilt on startup if missing.',
+  '<strong>Transaction index:</strong> We added an O(1) transaction index to the chain. Block search is fast, but looking up a TX by ID without scanning every block was slow at scale. The index is rebuilt on startup from block replay.',
   '<strong>Input/output limits:</strong> We added per-transaction input and output count limits after realizing unbounded transactions could be used to bloat blocks trivially.',
   '<strong>Validation helpers:</strong> Signature verification and validation logic got extracted into dedicated modules after the main chain file grew unwieldy. This made testing significantly easier.',
   '<strong>P2P snapshot tests:</strong> We added snapshot tests for P2P message serialization — these caught a subtle encoding regression during a refactor.',

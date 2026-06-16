@@ -84,7 +84,7 @@ SLOW  (journal incomplete, e.g. after startup replay, or target == genesis):
 
 Both paths finish by calling `storage.rewriteBlocks(this.blocks)` and `saveMetadata(...)` so the on-disk NDJSON matches the truncated chain, then set `replayHeight = targetHeight`. (Storage persistence details are in [BLOCK-STORAGE](./BLOCK-STORAGE.md).)
 
-The `hasUndoData = undoData.length === currentHeight` check is the trigger: in steady state the journal is pruned to `MAX_REORG_DEPTH`, so after the chain grows past 100 blocks the lengths diverge and `resetToHeight` would take the slow path for any target — but the network layer never asks for a reorg deeper than `MAX_REORG_DEPTH`, and shallow reorgs at a low tip keep `undoData.length === currentHeight` true. The slow path's main real-world caller is logic that resets all the way to genesis or runs before the journal is full.
+The `hasUndoData = undoData.length === currentHeight` check is the trigger: in steady state the journal is pruned to `MAX_REORG_DEPTH`, so after the chain grows past 100 blocks the lengths diverge and `resetToHeight` currently takes the slow path for any target. The network layer still refuses reorgs deeper than `MAX_REORG_DEPTH`; this doc reflects the current implementation rather than the ideal fast-path behavior.
 
 ## Cumulative work is the reorg tiebreaker
 
