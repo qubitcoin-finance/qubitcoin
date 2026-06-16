@@ -11,7 +11,7 @@ ${docP('BTC holders migrate to QubitCoin by submitting a claim transaction that 
 ${docH2('Quick Start')}
 ${docP('The easiest way to claim is with the interactive CLI tool:')}
 ${docCode(`pnpm run claim`)}
-${docP('This walks you through every step: generating a QBTC wallet, signing the claim message, and broadcasting the transaction to the network. You\'ll need one of the following for a BTC address included in the snapshot:')}
+${docP('This walks you through every step for single-key (P2PKH, P2WPKH, P2SH-P2WPKH, P2TR) and P2WSH claims: generating a QBTC wallet, signing the claim message, and broadcasting the transaction to the network. You\'ll need one of the following for a BTC address included in the snapshot:')}
 <ul class="text-text-secondary text-sm leading-relaxed mb-3 list-disc list-inside space-y-1">
   <li><span class="text-text-primary font-medium">Seed phrase</span> — 12 or 24 word BIP39 mnemonic (the tool derives addresses from BIP44/BIP84 paths and lets you pick)</li>
   <li><span class="text-text-primary font-medium">WIF key</span> — Bitcoin private key in Wallet Import Format (starts with 5, K, or L)</li>
