@@ -64,7 +64,7 @@ cd qubitcoin
 pnpm install`)}
 
 ${docH2('Quick Start — Join the Network')}
-${docP('The fastest way to get started. The <span class="font-mono text-xs text-qubit-400">--full</span> flag auto-downloads the BTC snapshot (~3.6 GB) from the seed node and starts mining immediately:')}
+${docP('The fastest way to get started. The <span class="font-mono text-xs text-qubit-400">--full</span> flag auto-downloads the BTC snapshot (~3.6 GB) from the default snapshot URL and starts mining immediately:')}
 ${docCode(`pnpm run qbtcd -- --mine --full`)}
 ${docP('This will:')}
 <ol class="text-text-secondary text-sm leading-relaxed mb-3 list-decimal list-inside space-y-1">

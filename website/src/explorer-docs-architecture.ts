@@ -98,7 +98,7 @@ ${docH2('Persistence & Replay')}
 ${docP('Blocks are stored in NDJSON format — one JSON object per line — enabling efficient append-only writes and streaming reads.')}
 ${docCode(`data/node/
   blocks.jsonl     # one block per line (append-only)
-  metadata.json    # { height, tipHash, difficulty }`)}
+  metadata.json    # { height, difficulty, genesisHash }`)}
 ${docP('On startup, the blockchain replays all stored blocks from genesis to reconstruct the full UTXO set, claim state, and difficulty. This ensures the node state is always derivable from the block data alone.')}
 ${docH3('Reorg Support')}
 ${docP('Each applied block produces an undo record capturing spent UTXOs, created UTXO keys, claimed addresses, and the previous difficulty. Reorgs up to 100 blocks deep can be performed efficiently by disconnecting blocks using their undo data, then applying the new chain.')}`;
