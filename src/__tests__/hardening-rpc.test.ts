@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest'
+import express from 'express'
+import cors from 'cors'
 import { Node } from '../node.js'
+import { startRpcServer } from '../rpc.js'
 import { walletA } from './fixtures.js'
 import { describeLoopbackTcp, listenOnLoopback } from './hardening-test-helpers.js'
 
 describeLoopbackTcp('RPC blocks count cap', () => {
   it('should cap blocks endpoint count to 100', async () => {
-    const { startRpcServer } = await import('../rpc.js')
     const node = new Node('rpc-test')
     const TEST_TARGET = '0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
     node.chain.difficulty = TEST_TARGET
@@ -41,7 +43,6 @@ describeLoopbackTcp('RPC blocks count cap', () => {
 
 describeLoopbackTcp('RPC hardening', () => {
   it('should return 400 for NaN count parameter', async () => {
-    const { startRpcServer } = await import('../rpc.js')
     const node = new Node('rpc-nan')
     const app = startRpcServer(node, 0)
     const server = app.listen(0, '127.0.0.1')
@@ -58,7 +59,6 @@ describeLoopbackTcp('RPC hardening', () => {
   })
 
   it('should return 400 for negative count parameter', async () => {
-    const { startRpcServer } = await import('../rpc.js')
     const node = new Node('rpc-neg')
     const app = startRpcServer(node, 0)
     const server = app.listen(0, '127.0.0.1')
@@ -73,7 +73,6 @@ describeLoopbackTcp('RPC hardening', () => {
   })
 
   it('should reject non-integer mempool limit with 400', async () => {
-    const { startRpcServer } = await import('../rpc.js')
     const node = new Node('rpc-mlimit')
     const app = startRpcServer(node, 0)
     const server = app.listen(0, '127.0.0.1')
@@ -90,7 +89,6 @@ describeLoopbackTcp('RPC hardening', () => {
   })
 
   it('should not expose X-Powered-By header', async () => {
-    const { startRpcServer } = await import('../rpc.js')
     const node = new Node('rpc-xpb')
     const app = startRpcServer(node, 0)
     const server = app.listen(0, '127.0.0.1')
@@ -105,12 +103,9 @@ describeLoopbackTcp('RPC hardening', () => {
   })
 
   it('should deny CORS when bound to non-localhost', async () => {
-    const { startRpcServer } = await import('../rpc.js')
     const node = new Node('rpc-cors')
     // Bind to 0.0.0.0 — CORS should be restrictive
     // Build a minimal express app to test CORS behavior directly
-    const express = (await import('express')).default
-    const cors = (await import('cors')).default
     const app = express()
     // Simulate the CORS behavior for non-localhost bind
     app.use(cors({ origin: false }))
@@ -128,4 +123,3 @@ describeLoopbackTcp('RPC hardening', () => {
     }
   })
 })
-
