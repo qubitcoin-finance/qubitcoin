@@ -115,7 +115,7 @@ Fetches `/api/v1/block/:hash`. If the hash is 64-hex but the block API returns n
 
 ### `renderTx(txid)` (`explorer-main.ts:341`)
 
-Fetches `/api/v1/tx/:txid`. For each non-coinbase, non-claim input, makes a secondary `fetchTx(inp.txId)` call to resolve the source output's address and amount — this is the only place where the explorer makes more than one API call serially per user action. Renders inputs, outputs, claim data if present, and confirmation status.
+Fetches `/api/v1/tx/:txid`. For each non-coinbase, non-claim input, it then batches secondary `fetchTx(inp.txId)` calls with `Promise.all` to resolve source output amounts. Renders inputs, outputs, claim data if present, and confirmation status.
 
 ### `renderAddress(addr)` (`explorer-main.ts:485`)
 
