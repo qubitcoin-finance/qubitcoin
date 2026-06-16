@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { Blockchain } from '../chain.js'
 import { Mempool, MAX_MEMPOOL_BYTES } from '../mempool.js'
 import { computeBlockHash, computeMerkleRoot, hashMeetsTarget, validateBlock, type BlockHeader } from '../block.js'
+import { createClaimTransaction } from '../claim.js'
 import { createTransaction, createCoinbaseTransaction, validateTransaction, utxoKey, CLAIM_TXID, DUST_THRESHOLD, MAX_MONEY, type UTXO } from '../transaction.js'
 import { doubleSha256Hex } from '../crypto.js'
 import { createMockSnapshot } from '../snapshot.js'
@@ -46,9 +47,6 @@ describe('Minimum relay fee', () => {
   })
 
   it('should still accept claim transactions (fee-free)', async () => {
-    const { createClaimTransaction } = await import('../claim.js')
-    const { createMockSnapshot } = await import('../snapshot.js')
-
     const mempool = new Mempool()
     const { snapshot, holders } = createMockSnapshot()
 
@@ -278,4 +276,3 @@ describe('Amount overflow protection', () => {
     expect(result.valid).toBe(true)
   })
 })
-
