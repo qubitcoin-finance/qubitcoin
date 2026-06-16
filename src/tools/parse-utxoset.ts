@@ -129,6 +129,9 @@ class BufferedReader {
   /** Read exactly n bytes */
   async readBytes(n: number): Promise<Buffer> {
     await this.ensureAvailable(n)
+    if (this.available() < n) {
+      throw new Error(`Unexpected EOF: needed ${n} bytes, only ${this.available()} available`)
+    }
     const result = Buffer.alloc(n)
     let written = 0
     let offset = this.consumed + this.pos
