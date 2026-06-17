@@ -268,7 +268,7 @@ const wallet = generateWallet();
 console.log('Address:', wallet.address);    // 64-char hex
 console.log('PK size:', wallet.publicKey.length);  // 1952 bytes
 console.log('SK size:', wallet.secretKey.length);  // 4032 bytes`)}
-${docP('The node daemon generates an ephemeral wallet on startup when <span class="font-mono text-xs text-qubit-400">--mine</span> is enabled. This wallet receives mining rewards but exists only in memory — it is not persisted to disk.')}
+${docP('The node daemon loads or generates a wallet when <span class="font-mono text-xs text-qubit-400">--mine</span> is enabled. The wallet is saved to <span class="font-mono text-xs text-qubit-400">wallet.json</span> in the data directory and reloaded on subsequent runs, so mining rewards always go to the same address.')}
 
 ${docH2('Checking Your Balance')}
 ${docP('Query the RPC API to check the balance and UTXOs for any address:')}
