@@ -334,7 +334,7 @@ async function modeGenerate() {
       btc = await resolveBtcCredentials(rl)
       btcAddress = btc.address
       console.log(`  Public key (compressed): ${bytesToHex(btc.publicKey)}`)
-      console.log(`  BTC address (HASH160):   ${btcAddress}`)
+      console.log(`  BTC address:             ${btcAddress}`)
     }
 
     // Snapshot block hash — user must provide it for offline mode
@@ -548,7 +548,7 @@ async function modeFull() {
       btc = await resolveBtcCredentials(rl)
       btcAddress = btc.address
       console.log(`  Public key (compressed): ${bytesToHex(btc.publicKey)}`)
-      console.log(`  BTC address (HASH160):   ${btcAddress}`)
+      console.log(`  BTC address:             ${btcAddress}`)
     }
 
     // Generate QBTC wallet
