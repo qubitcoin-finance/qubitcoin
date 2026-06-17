@@ -32,8 +32,8 @@ export interface TransactionOutput {
 
 export interface ClaimData {
   btcAddress: string          // the BTC address being claimed (40-char hex HASH160 or 64-char hex for P2TR/P2WSH)
-  ecdsaPublicKey: Uint8Array  // compressed secp256k1 public key (33 bytes, empty for P2TR/P2WSH)
-  ecdsaSignature: Uint8Array  // ECDSA signature proving BTC ownership (64 bytes, empty for P2TR/P2WSH)
+  ecdsaPublicKey: Uint8Array  // compressed secp256k1 public key (33 bytes, empty for P2TR/P2WSH/P2SH multisig)
+  ecdsaSignature: Uint8Array  // ECDSA signature proving BTC ownership (64 bytes, empty for P2TR/P2WSH/P2SH multisig)
   qbtcAddress: string        // destination ML-DSA-65 address
   schnorrPublicKey?: Uint8Array  // 32-byte x-only internal pubkey (P2TR only)
   schnorrSignature?: Uint8Array  // 64-byte BIP340 Schnorr signature (P2TR only)

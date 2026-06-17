@@ -1,7 +1,7 @@
 /**
  * BTC → qbtc claim transaction logic
  *
- * Allows Bitcoin holders to prove ECDSA ownership and receive
+ * Allows Bitcoin holders to prove BTC ownership and receive
  * post-quantum (ML-DSA-65) native UTXOs on the qbtc chain.
  */
 import {

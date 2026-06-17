@@ -156,7 +156,7 @@ export class Blockchain {
       return { success: false, error: result.error }
     }
 
-    // Verify claim transactions (ECDSA proofs)
+    // Verify claim transactions (BTC ownership proofs)
     for (let i = 1; i < block.transactions.length; i++) {
       const tx = block.transactions[i]
       if (isClaimTransaction(tx)) {
