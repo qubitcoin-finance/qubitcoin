@@ -49,7 +49,7 @@ ${docH2('Security')}
 ${docFaqItem('When will quantum computers break Bitcoin?',
   'Estimates range from 10 to 30+ years for a cryptographically relevant quantum computer. The exact timeline is uncertain, but the "harvest now, decrypt later" threat means exposed public keys are at risk <span class="text-text-primary font-medium">today</span> — an adversary can record them now and crack them later.')}
 ${docFaqItem('Is QBTC already safe from quantum attacks?',
-  'Yes. All ongoing QBTC transactions use ML-DSA-65 (FIPS 204), whose security relies on the Module-LWE problem — no known quantum algorithm can solve it efficiently. The one-time ECDSA claim is the only classical cryptography exposure.')}
+  'Yes. All ongoing QBTC transactions use ML-DSA-65 (FIPS 204), whose security relies on the Module-LWE problem — no known quantum algorithm can solve it efficiently. The one-time BTC claim proof is the only classical Bitcoin cryptography exposure.')}
 ${docFaqItem('What about 51% attacks?',
   'QubitCoin uses SHA-256 PoW, same as Bitcoin. A quantum computer using Grover\'s algorithm could achieve a quadratic speedup in mining, but this is equivalent to having better hardware — not a fundamental break. The difficulty adjustment compensates for hashrate changes.')}
 ${docFaqItem('What if ML-DSA-65 is broken in the future?',

@@ -7,7 +7,7 @@ import { docCode, docH2, docH3, docP } from './explorer-docs-helpers';
 export function renderDocsOverview(): string {
   return `<h1 class="text-2xl font-bold mb-6">Overview</h1>
 ${docP('QubitCoin (QBTC) is a post-quantum fork of Bitcoin. It replaces ECDSA secp256k1 with <span class="text-qubit-400 font-mono text-xs">ML-DSA-65</span> (Dilithium) — a NIST-standardized lattice-based digital signature algorithm that resists both classical and quantum attacks.')}
-${docP('Bitcoin holders can claim their QBTC by proving ECDSA ownership of a BTC address. The claimed balance is bound to a new ML-DSA-65 public key, creating quantum-safe UTXOs. No trust or intermediaries required.')}
+${docP('Bitcoin holders can claim their QBTC by proving ownership of a BTC address through its native proof path: ECDSA for legacy and SegWit-v0 claims, Schnorr for Taproot, and ordered script signatures for multisig. The claimed balance is bound to a new ML-DSA-65 public key, creating quantum-safe UTXOs. No trust or intermediaries required.')}
 
 ${docH2('The Quantum Threat')}
 ${docP('Every Bitcoin transaction today is secured by ECDSA on the secp256k1 curve. The security of this scheme relies on the discrete logarithm problem, which Shor\'s algorithm can solve in polynomial time on a sufficiently large quantum computer. When that day comes, every exposed public key — including every address that has ever sent a transaction — becomes vulnerable.')}
@@ -19,7 +19,7 @@ ${docH2('Key Properties')}
   <li><span class="text-text-primary font-medium">Bitcoin UTXO model</span> — same unspent transaction output design. Transactions consume UTXOs as inputs and create new UTXOs as outputs.</li>
   <li><span class="text-text-primary font-medium">SHA-256 proof-of-work</span> — quantum computers can only achieve a quadratic speedup via Grover\'s algorithm, reducing SHA-256 to 128-bit quantum security — still practically unbreakable.</li>
   <li><span class="text-text-primary font-medium">Real BTC snapshot</span> — genesis commits to a merkle root of 58,001,652 aggregated address balances from BTC block 935,941.</li>
-  <li><span class="text-text-primary font-medium">One-time ECDSA claims</span> — prove BTC ownership with a secp256k1 signature, receive your full address balance as quantum-safe QBTC. 1:1 ratio.</li>
+  <li><span class="text-text-primary font-medium">One-time BTC claims</span> — prove BTC ownership with the address type\'s native proof, receive your full address balance as quantum-safe QBTC. 1:1 ratio.</li>
   <li><span class="text-text-primary font-medium">Open source</span> — TypeScript / Node.js. Run a node, mine blocks, and verify the chain yourself.</li>
 </ul>
 
@@ -64,7 +64,7 @@ cd qubitcoin
 pnpm install`)}
 
 ${docH2('Quick Start — Join the Network')}
-${docP('The fastest way to get started. The <span class="font-mono text-xs text-qubit-400">--full</span> flag auto-downloads the BTC snapshot (~3.6 GB) from the default snapshot URL and starts mining immediately:')}
+${docP('The fastest way to get started. The <span class="font-mono text-xs text-qubit-400">--full</span> flag auto-downloads the BTC snapshot (~3.6 GB) from the default snapshot URL, syncs to the network, and then starts mining:')}
 ${docCode(`pnpm run qbtcd -- --mine --full`)}
 ${docP('This will:')}
 <ol class="text-text-secondary text-sm leading-relaxed mb-3 list-decimal list-inside space-y-1">

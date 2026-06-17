@@ -82,7 +82,7 @@ ${docP('Every block goes through strict validation before being accepted into th
   <li><span class="text-text-primary font-medium">Block size</span> — &le; 1,000,000 bytes (1 MB)</li>
   <li><span class="text-text-primary font-medium">Coinbase</span> — first tx must be coinbase, no duplicates</li>
   <li><span class="text-text-primary font-medium">Transactions</span> — each validated for signatures, UTXO existence, no double-spends</li>
-  <li><span class="text-text-primary font-medium">Claims</span> — ECDSA proof verified, address not already claimed</li>
+  <li><span class="text-text-primary font-medium">Claims</span> — native BTC proof verified, address not already claimed</li>
 </ol>
 
 ${docH2('Fork Genesis')}

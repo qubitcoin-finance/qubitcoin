@@ -34,21 +34,23 @@ ${docH3('Step 1 — Generate a QBTC Wallet')}
 ${docP('Create a new ML-DSA-65 keypair. This gives you a quantum-safe public key (1,952 bytes) and a QBTC address (SHA-256 hash of the public key, 64-char hex).')}
 
 ${docH3('Step 2 — Sign the Claim Message')}
-${docP('Construct a claim message and sign it with your Bitcoin private key (ECDSA secp256k1):')}
+${docP('Construct a claim message and sign it with the native proof scheme for your Bitcoin address type. Legacy and SegWit-v0 key-hash claims use ECDSA secp256k1, Taproot claims use BIP340 Schnorr, and multisig claims collect the required ECDSA signatures for the original script:')}
 ${docCode(`message = "QBTC_CLAIM:{btcAddress}:{qbtcAddress}:{snapshotBlockHash}:{genesisHash}"
 msgHash = doubleSha256(message)
-signature = secp256k1.sign(msgHash, btcPrivateKey)`)}
+ecdsaSignature = secp256k1.sign(msgHash, btcPrivateKey)   // P2PKH/P2PK/P2WPKH/P2SH-P2WPKH
+schnorrSignature = schnorr.sign(msgHash, btcPrivateKey)   // P2TR
+witnessSignatures = multisigSigners.map(key => secp256k1.sign(msgHash, key))`)}
 ${docP('The snapshot block hash and genesis hash act as replay protection — the claim is bound to a specific snapshot and genesis block, preventing cross-fork replay attacks.')}
 
 ${docH3('Step 3 — Broadcast the Claim Transaction')}
-${docP('Submit a claim transaction containing your ECDSA signature, compressed BTC public key (33 bytes), and destination QBTC address. The transaction uses a special sentinel input (<span class="font-mono text-xs text-qubit-400">cccc...cccc</span>) to identify it as a claim.')}
+${docP('Submit a claim transaction containing the proof material required for that BTC script type, plus the destination QBTC address. Single-key claims carry a BTC pubkey and signature, while Taproot and multisig claims carry their native proof fields. The transaction uses a special sentinel input (<span class="font-mono text-xs text-qubit-400">cccc...cccc</span>) to identify it as a claim.')}
 
 ${docH3('Step 4 — Network Verification')}
 ${docP('Every node independently verifies:')}
 <ol class="text-text-secondary text-sm leading-relaxed mb-3 list-decimal list-inside space-y-1">
-  <li><span class="font-mono text-xs text-entropy-cyan">HASH160(ecdsaPublicKey) == btcAddress</span> — proves the public key belongs to the address</li>
+  <li>The submitted proof matches the snapshotted address type: key-hash derivation for P2PKH/P2PK/P2WPKH/P2SH-P2WPKH, Taproot output-key derivation for P2TR, or script-hash derivation for P2SH/P2WSH/bare multisig</li>
   <li>BTC address exists in the snapshot with a non-zero balance</li>
-  <li>ECDSA signature is valid for the claim message</li>
+  <li>The claim message signature is valid: ECDSA for legacy, SegWit-v0, and multisig claims; Schnorr for Taproot claims</li>
   <li>Address has not been previously claimed</li>
   <li>Output amount matches the snapshot balance exactly</li>
   <li>Output address matches the qbtcAddress in the claim data</li>
@@ -215,7 +217,7 @@ ${docP('Grover\'s algorithm gives a quadratic speedup: SHA-256\'s 2<sup>256</sup
 ${docP('Crucially, PoW has no "break once, steal forever" property. Even if a quantum computer could mine faster, it would only gain a proportional hashrate advantage — similar to a more efficient ASIC. It cannot retroactively steal funds or forge signatures.')}
 
 ${docH2('Claim Safety')}
-${docP('The BTC claim process involves a one-time ECDSA signature to prove Bitcoin ownership. This is the only moment classical cryptography is used, and several safeguards protect it:')}
+${docP('The BTC claim process involves a one-time Bitcoin proof to show ownership of the snapshotted address. Legacy, SegWit-v0, and multisig claims use ECDSA; Taproot claims use Schnorr. This is the only moment classical Bitcoin cryptography is used, and several safeguards protect it:')}
 <div class="overflow-x-auto">
 <table class="w-full text-sm mb-4">
   <thead><tr class="text-xs text-text-muted border-b border-border">
@@ -223,7 +225,7 @@ ${docP('The BTC claim process involves a one-time ECDSA signature to prove Bitco
     <th class="text-left font-normal pb-2">How</th>
   </tr></thead>
   <tbody>
-    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-primary font-medium">One-time exposure</td><td class="py-2 text-xs">ECDSA key is used once during the claim. After that, all QBTC operations use ML-DSA-65.</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-primary font-medium">One-time exposure</td><td class="py-2 text-xs">The Bitcoin key is used once during the claim. After that, all QBTC operations use ML-DSA-65.</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-primary font-medium">Snapshot binding</td><td class="py-2 text-xs">The claim message includes the BTC snapshot block hash, binding the signature to a specific chain state. Cannot be replayed on a different fork.</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-primary font-medium">Double-claim prevention</td><td class="py-2 text-xs">Each BTC address can only be claimed once. The chain tracks claimed addresses permanently.</td></tr>
     <tr class="border-b border-border last:border-0"><td class="py-2 pr-4 text-text-primary font-medium">Address-type verification</td><td class="py-2 text-xs">Each address type uses its native verification: ECDSA for P2PKH/P2PK/P2WPKH/P2SH-P2WPKH/P2SH multisig/P2WSH/bare multisig, Schnorr for P2TR.</td></tr>
