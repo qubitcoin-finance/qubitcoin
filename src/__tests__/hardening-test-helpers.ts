@@ -28,7 +28,7 @@ export async function listenOnLoopback(server: Server): Promise<number> {
   if (!server.listening) {
     await new Promise<void>((resolve) => server.once('listening', resolve))
   }
-  const addr = server.address() as AddressInfo | null
+  const addr = server.address()
   if (!addr || typeof addr === 'string') {
     throw new Error('Expected HTTP server to bind to a TCP port')
   }
