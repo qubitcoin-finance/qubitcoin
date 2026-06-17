@@ -91,7 +91,7 @@ ${docJson(`{
 ${docH2('Transactions')}
 <table class="w-full text-sm mb-4">
   <tbody>
-    ${ep('GET', '/tx/:txid', 'Transaction by ID (searches chain then mempool)')}
+    ${ep('GET', '/tx/:txid', 'Transaction by ID (searches mempool then chain)')}
     ${ep('POST', '/tx', 'Broadcast a signed transaction')}
   </tbody>
 </table>

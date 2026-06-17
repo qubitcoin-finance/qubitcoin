@@ -101,7 +101,7 @@ ${docCode(`data/node/
   metadata.json    # { height, difficulty, genesisHash }`)}
 ${docP('On startup, the blockchain replays all stored blocks from genesis to reconstruct the full UTXO set, claim state, and difficulty. This ensures the node state is always derivable from the block data alone.')}
 ${docH3('Reorg Support')}
-${docP('Each applied block produces an undo record capturing spent UTXOs, created UTXO keys, claimed addresses, and the previous difficulty. Reorgs up to 100 blocks deep can be performed efficiently by disconnecting blocks using their undo data, then applying the new chain.')}`;
+${docP('Each applied block produces an undo record capturing spent UTXOs, created UTXO keys, claimed addresses, and the previous difficulty. The node keeps the most recent 100 undo records to bound memory use; when the current journal does not cover the requested rewind, it falls back to replaying from genesis before applying the new chain.')}`;
 }
 
 export function renderDocsConsensus(): string {
