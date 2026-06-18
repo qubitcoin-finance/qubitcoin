@@ -46,7 +46,7 @@ The deployment surface also has stateful boundaries. `/home/qubitcoin/qbtc-data`
 | `scripts/deploy-ui.sh:16` | Manual remote website build path. |
 | `ansible/deploy-miner.yml:2` | Ansible playbook for miner-node deployment. |
 | `ansible/roles/qbtc-miner/defaults/main.yml:2` | Ansible role defaults for user, image, ports, and name. |
-| `ansible/roles/qbtc-miner/tasks/main.yml:43` | Ansible `docker run` command for a standalone miner node. |
+| `ansible/roles/qbtc-miner/tasks/main.yml:53` | Ansible `docker run` command for a standalone miner node. |
 
 ## How It Works
 
