@@ -785,7 +785,7 @@ async function dispatch(): Promise<void> {
 
   const route = parseRoute();
 
-  // Hide search bar on docs/blog routes; widen container for docs (sidebar) and blog (3-col grid).
+  // Hide search bar on docs/blog routes; widen container for docs (sidebar) and blog layouts.
   const searchBar = document.querySelector('#explorer-main > .mb-6') as HTMLElement | null;
   if (searchBar) searchBar.style.display = (route.view === 'docs' || route.view === 'blog') ? 'none' : '';
   if (explorerEl) {
