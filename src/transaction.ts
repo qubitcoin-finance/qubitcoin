@@ -265,7 +265,7 @@ export function validateTransaction(
   }
 
   if (isClaimTransaction(tx)) {
-    // Claim validation is handled at chain/block level (ECDSA proof check)
+    // Claim validation is handled at chain/block level (ownership proof check)
     return { valid: true }
   }
 

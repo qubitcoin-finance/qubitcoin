@@ -30,7 +30,7 @@ import {
 import { type BtcSnapshot, type BtcAddressBalance, getSnapshotIndex } from './snapshot.js'
 
 /**
- * Serialize the claim message that gets ECDSA-signed.
+ * Serialize the claim message that is signed to prove BTC address ownership.
  * Format: "QBTC_CLAIM:<btcAddress>:<qbtcAddress>:<snapshotBlockHash>:<genesisHash>"
  * This ensures replay protection (snapshot hash + genesis hash) and address binding (qbtc address).
  * The genesis hash prevents cross-fork replay attacks.
