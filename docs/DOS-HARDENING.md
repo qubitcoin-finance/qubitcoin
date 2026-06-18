@@ -46,7 +46,7 @@ The hardening strategy is not to make one subsystem "secure" and trust the rest.
 | `src/transaction.ts:256` | `validateTransaction`, transaction-level cheap-to-expensive ordering. |
 | `src/block.ts:70` | `MAX_BLOCK_TRANSACTIONS = 10_000`, block-wide transaction count cap. |
 | `src/block.ts:310` | `validateBlock`, block-level cheap-to-expensive ordering. |
-| `src/mempool.ts:16` | `MAX_MEMPOOL_BYTES = 50 MB`, global pending transaction memory cap. |
+| `src/mempool.ts:17` | `MAX_MEMPOOL_BYTES = 50 MB`, global pending transaction memory cap. |
 | `src/mempool.ts:19` | `MAX_CLAIM_COUNT = 5000`, cap for fee-free BTC claim entries. |
 | `src/mempool.ts:61` | `Mempool.addTransaction`, admission limits, duplicate reservations, and eviction. |
 | `src/snapshot-loader.ts:13` | `loadSnapshot`, streaming NDJSON snapshot loader. |
