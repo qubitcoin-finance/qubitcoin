@@ -39,7 +39,7 @@ The distinction matters operationally. A coin being absent from the snapshot is 
 | `src/claim.ts:339` | P2WSH and bare multisig verification branch. |
 | `src/claim.ts:363` | P2TR Schnorr verification branch. |
 | `src/claim.ts:391` | P2SH branch for P2SH-P2WPKH or P2SH multisig. |
-| `src/snapshot-loader.ts:70` | Header-aware snapshot normalization before deterministic genesis. |
+| `src/snapshot-loader.ts:63` | Header-aware snapshot normalization before deterministic genesis. |
 | `website/src/explorer-docs-claims.ts:107` | User-facing snapshot coverage section and current production counts. |
 
 ## How It Works
