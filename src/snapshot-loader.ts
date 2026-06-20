@@ -10,6 +10,8 @@ import readline from 'node:readline'
 import { type BtcSnapshot, type BtcAddressBalance, computeSnapshotMerkleRoot } from './snapshot.js'
 import { doubleSha256Hex } from './crypto.js'
 
+const SNAPSHOT_ADDRESS_RE = /^[0-9a-f]{40}$|^[0-9a-f]{64}$/
+
 export async function loadSnapshot(filePath: string): Promise<BtcSnapshot> {
   const entries: BtcAddressBalance[] = []
   let merkleRoot = ''
@@ -53,7 +55,7 @@ export async function loadSnapshot(filePath: string): Promise<BtcSnapshot> {
       throw new Error(`Snapshot line ${lineNum}: invalid JSON in entry`)
     }
 
-    if (typeof raw.a !== 'string' || !/^[0-9a-f]{40}$|^[0-9a-f]{64}$/.test(raw.a)) {
+    if (typeof raw.a !== 'string' || !SNAPSHOT_ADDRESS_RE.test(raw.a)) {
       throw new Error(`Snapshot line ${lineNum}: invalid address "${raw.a}" (expected 40 or 64 hex chars)`)
     }
     if (typeof raw.b !== 'number' || !Number.isSafeInteger(raw.b) || raw.b < 0) {
