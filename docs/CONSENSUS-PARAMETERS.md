@@ -17,7 +17,7 @@ These govern proof-of-work targeting, block timing, and block-size limits. All a
 | `INITIAL_TARGET` | `00000fff…ff` | `src/block.ts:51` | Genesis / easy PoW target. Used by `createForkGenesisBlock` and the local-mode difficulty override. |
 | `STARTING_DIFFICULTY` | `0000007f…ff` | `src/block.ts:58` | Live-chain initial difficulty and the maximum target (easiest allowed) the retarget will clamp to. |
 | `DIFFICULTY_ADJUSTMENT_INTERVAL` | `10` | `src/block.ts:62` | Retarget every 10 blocks. |
-| `TARGET_BLOCK_TIME_MS` | `600000` (10 min) | `src/block.ts:65` | Desired spacing per block; the retarget aims for `INTERVAL × TARGET_BLOCK_TIME_MS` per window. |
+| `TARGET_BLOCK_TIME_MS` | `600000` (10 min) | `src/block.ts:65` | Desired spacing per block; the retarget aims for `(INTERVAL - 1) × TARGET_BLOCK_TIME_MS` per window. |
 | `MAX_BLOCK_SIZE` | `1_000_000` (1 MB) | `src/block.ts:68` | Upper bound on serialized block size. |
 | `MAX_BLOCK_TRANSACTIONS` | `10_000` | `src/block.ts:71` | First-line cheap cap checked before merkle/size work. |
 | `MAX_FUTURE_BLOCK_TIME_MS` | `7200000` (2 h) | `src/block.ts:74` | A block timestamp may not exceed `now + 2h`. |
@@ -30,7 +30,7 @@ These two are easy to confuse. `INITIAL_TARGET` is the **genesis** target — in
 
 ### Difficulty retarget mechanics
 
-`adjustDifficulty` runs whenever `height % DIFFICULTY_ADJUSTMENT_INTERVAL === 0` (`src/chain.ts:85`, `src/chain.ts:197`, `src/chain.ts:525`). It compares the actual time spanned by the last `DIFFICULTY_ADJUSTMENT_INTERVAL` blocks against the expected `INTERVAL × TARGET_BLOCK_TIME_MS` and scales the target accordingly, clamped to `STARTING_DIFFICULTY` as the easiest target. See [MINING-LIFECYCLE](./MINING-LIFECYCLE.md) and [BLOCK-VALIDATION](./BLOCK-VALIDATION.md) for the full retarget and MTP rules.
+`adjustDifficulty` runs whenever `height % DIFFICULTY_ADJUSTMENT_INTERVAL === 0` (`src/chain.ts:85`, `src/chain.ts:197`, `src/chain.ts:525`). It compares the actual time spanned by the last `DIFFICULTY_ADJUSTMENT_INTERVAL` blocks against the expected `(INTERVAL - 1) × TARGET_BLOCK_TIME_MS` because N blocks span N-1 inter-block gaps, then scales the target accordingly, clamped to `STARTING_DIFFICULTY` as the easiest target. See [MINING-LIFECYCLE](./MINING-LIFECYCLE.md) and [BLOCK-VALIDATION](./BLOCK-VALIDATION.md) for the full retarget and MTP rules.
 
 ## Transaction-level parameters (`src/transaction.ts`)
 
