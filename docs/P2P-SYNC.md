@@ -19,14 +19,14 @@ A fresh node starts with only a hardcoded set of seed addresses (or a snapshot-d
 | `src/p2p/peer.ts:110` | `Peer.addMisbehavior` | Accumulate score; reject + disconnect at threshold 100 |
 | `src/p2p/peer.ts:189` | `Peer.consumeToken` | Token-bucket rate limit (200 burst, 100/sec refill) |
 | `src/p2p/peer.ts:220` | `Peer.startIBDTimer` | 30s timeout if a `getblocks` gets no `blocks` reply |
-| `src/p2p/server.ts:113` | `class P2PServer` | Owns peers, address book, bans, orphans, handlers |
-| `src/p2p/server.ts:509` | `handleVersion` | Validate + accept peer version, genesis, work |
-| `src/p2p/server.ts:607` | `handleVerack` | Complete handshake; kick off IBD + `getaddr` |
-| `src/p2p/server.ts:696` | `handleBlocks` | Apply downloaded blocks; detect forks/stalls |
-| `src/p2p/server.ts:916` | `initiateForkResolution` | Send `getheaders` with a block locator |
-| `src/p2p/server.ts:1004` | `handleHeaders` | Decide reorg by work, then `resetToHeight` + resync |
-| `src/p2p/server.ts:1342` | `startDiscovery` | Periodic outbound dials with /16 subnet diversity |
-| `src/p2p/server.ts:1384` | `addOrphan` | PoW-validate and cache parentless blocks |
+| `src/p2p/server.ts:66` | `class P2PServer` | Owns peers, address book, bans, orphans, handlers |
+| `src/p2p/server.ts:464` | `handleVersion` | Validate + accept peer version, genesis, work |
+| `src/p2p/server.ts:562` | `handleVerack` | Complete handshake; kick off IBD + `getaddr` |
+| `src/p2p/server.ts:651` | `handleBlocks` | Apply downloaded blocks; detect forks/stalls |
+| `src/p2p/server.ts:871` | `initiateForkResolution` | Send `getheaders` with a block locator |
+| `src/p2p/server.ts:959` | `handleHeaders` | Decide reorg by work, then `resetToHeight` + resync |
+| `src/p2p/server.ts:1224` | `startDiscovery` | Periodic outbound dials with /16 subnet diversity |
+| `src/p2p/server.ts:1266` | `addOrphan` | PoW-validate and cache parentless blocks |
 
 ## The handshake
 
