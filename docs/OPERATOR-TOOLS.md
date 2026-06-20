@@ -168,7 +168,7 @@ The saved transaction is intended for `claim:send`. The tool prints the generate
 
 ## Production Monitor
 
-`scripts/q.ts` is a read-mostly production helper for `qubitcoin@goro`. It knows three container names (`qbtc-node`, `qbtc-q`, `qbtc-devtx`) and two local RPC endpoints on the remote host (`3010` and `3011`).
+`scripts/q.ts` is a read-mostly production helper for `qubitcoin@goro`. Its legacy aliases still target `qbtc-node`, `qbtc-q`, and `qbtc-devtx`, while the compose-owned production miner currently runs as `qbtc-miner` on RPC port `3010`.
 
 The default run prints a status dashboard and short Docker logs. `status` suppresses logs, `logs` suppresses the dashboard, container aliases select one container's logs, `--tail` changes log length, and `-f` follows logs.
 

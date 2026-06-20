@@ -116,9 +116,9 @@ A blog post follows the opposite shape: it owns its metadata in the post file, t
 3. Set `slug` to the same route-safe string used in the filename.
 4. Return the article body from `content()`.
 5. Import the module in `website/src/blog-posts.ts`.
-6. Insert it into `BLOG_POSTS` at the intended archive position.
+6. Insert it into `BLOG_POSTS` so it is registered for archive and permalink lookup.
 
-There is no automatic date sort. The post that appears first in `BLOG_POSTS` becomes the featured card on `#/blog`, even if another post has a newer `date` field.
+The blog archive sorts `BLOG_POSTS` by descending `date` before rendering. The newest dated post becomes the featured card on `#/blog`.
 
 ## Invariants And Edge Cases
 
