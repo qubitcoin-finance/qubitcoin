@@ -1,5 +1,6 @@
 export { type BlogPost, BLOG_TAG_COLORS } from './blog/types.js';
 
+import failingFastWhenTheNodeGoesAway from './blog/failing-fast-when-the-node-goes-away.js';
 import orphanBlocksAndOutOfOrderArrival from './blog/orphan-blocks-and-out-of-order-arrival.js';
 import whyClaimTransactionsMustUseASentinelInput from './blog/why-claim-transactions-must-use-a-sentinel-input.js';
 import oneClaimOneMintWhyQbtcClaimOutputsWaitTenBlocks from './blog/one-claim-one-mint-why-qbtc-claim-outputs-wait-ten-blocks.js';
@@ -21,6 +22,7 @@ import anchorPeersAndSubnetDiversity from './blog/anchor-peers-and-subnet-divers
 import trustingProxiesWithoutBreakingRpcRateLimits from './blog/trusting-proxies-without-breaking-rpc-rate-limits.js';
 
 export const BLOG_POSTS = [
+  failingFastWhenTheNodeGoesAway,
   orphanBlocksAndOutOfOrderArrival,
   whyClaimTransactionsMustUseASentinelInput,
   oneClaimOneMintWhyQbtcClaimOutputsWaitTenBlocks,
