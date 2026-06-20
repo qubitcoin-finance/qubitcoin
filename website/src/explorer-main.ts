@@ -134,11 +134,12 @@ function renderLoading(): void {
 // Dashboard -----------------------------------------------------------------
 
 async function renderDashboard(): Promise<void> {
-  const [status, blocks, mempoolStats, claimStats] = await Promise.all([
+  const [status, blocks, mempoolStats, claimStats, mempoolTxs] = await Promise.all([
     fetchStatus(),
     fetchBlocks(10),
     fetchMempoolStats(),
     fetchClaimStats(),
+    fetchMempoolTxs(8),
   ]);
 
   if (!status) {
@@ -205,7 +206,6 @@ async function renderDashboard(): Promise<void> {
   // Pending transactions
   html += `<div class="bg-surface rounded-lg glow-border p-5">
     <h2 class="text-lg font-semibold mb-4">Pending Transactions</h2>`;
-  const mempoolTxs = await fetchMempoolTxs(8);
   if (mempoolTxs && mempoolTxs.length > 0) {
     html += `<div class="space-y-3">`;
     for (const tx of mempoolTxs) {
