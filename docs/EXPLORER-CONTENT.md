@@ -28,7 +28,7 @@ The tradeoff is that every content module returns HTML strings. The code relies 
 | `website/src/explorer-docs-api.ts:8` | Example docs renderer that composes endpoint tables, prose, JSON examples, and code blocks. |
 | `website/src/blog/types.ts:1` | Defines the `BlogPost` module contract. |
 | `website/src/blog/types.ts:10` | Defines tag color classes used by blog list and post views. |
-| `website/src/blog-posts.ts:22` | Registers blog post modules in `BLOG_POSTS`; the archive sorts them by date when rendering. |
+| `website/src/blog-posts.ts:24` | Registers blog post modules in `BLOG_POSTS`; the archive sorts them by date when rendering. |
 | `website/src/blog/run-a-node.ts:3` | Example blog post module implementing the `BlogPost` contract. |
 
 ## How It Works
