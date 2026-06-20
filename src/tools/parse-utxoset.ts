@@ -60,6 +60,7 @@ class BufferedReader {
   private pos = 0 // position within logical buffer
   private stream: ReturnType<typeof createReadStream>
   private done = false
+  private streamError: Error | null = null
   private pendingRead: { resolve: () => void; reject: (e: Error) => void; needed: number } | null = null
 
   bytesRead = 0
@@ -85,6 +86,8 @@ class BufferedReader {
       }
     })
     this.stream.on('error', (err) => {
+      this.streamError = err
+      this.done = true
       if (this.pendingRead) {
         const pr = this.pendingRead
         this.pendingRead = null
@@ -117,6 +120,7 @@ class BufferedReader {
 
   private async ensureAvailable(n: number): Promise<void> {
     if (this.available() >= n) return
+    if (this.streamError) throw this.streamError
     if (this.done) return // no more data
     this.compact()
     this.stream.resume()
