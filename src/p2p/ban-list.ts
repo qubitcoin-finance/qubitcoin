@@ -57,6 +57,10 @@ export class BanList {
     for (const [ip, expiry] of this.bans) {
       obj[ip] = expiry
     }
-    fs.writeFileSync(this.path, JSON.stringify(obj, null, 2) + '\n')
+    try {
+      fs.writeFileSync(this.path, JSON.stringify(obj, null, 2) + '\n')
+    } catch (err) {
+      log.debug({ component: 'p2p', err }, 'Could not save ban list')
+    }
   }
 }
