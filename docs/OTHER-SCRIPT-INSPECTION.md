@@ -14,7 +14,7 @@ The output is useful for explaining coverage numbers and for deciding whether an
 
 ## Durable References
 
-The inspected script and its raw report were operator-local artifacts under the ignored `scripts/` directory, so they are not reliable repository anchors. Use the committed parser and coverage documents as the durable references:
+The inspected script and its raw report are committed under `scripts/`, but they remain diagnostic artifacts rather than consensus or package-script entrypoints. Use the parser and coverage documents as the durable references:
 
 | Anchor | Role |
 |---|---|
@@ -116,7 +116,7 @@ The inspector uses that raw script for two separate views: `scriptPattern` for g
 
 ## Artifact Status
 
-The diagnostic inspector and captured report are not committed repository files. In the working copy where this note was written, both lived under the ignored `scripts/` directory:
+The diagnostic inspector and captured report are committed diagnostic files under `scripts/`:
 
 - The inspector was an operator-local TypeScript script, not a package script.
 - The captured output was an operator-local text report, not generated during normal builds or deployment.
