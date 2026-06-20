@@ -56,6 +56,9 @@ const KNOWN_BLOCK_HEIGHTS: Record<string, number> = {
 
 // --- Bitcoin Core RPC (for --dump) ---
 
+const BITCOIN_RPC_TIMEOUT_MS = 30_000
+const BITCOIN_DUMP_RPC_TIMEOUT_MS = 30 * 60 * 1000
+
 function findCookiePath(): string {
   const platform = process.platform
   if (platform === 'darwin') {
@@ -80,7 +83,7 @@ async function dumpUtxoSet(outputPath: string): Promise<{ height: number; hash: 
   console.log('Connecting to Bitcoin Core RPC...')
   const infoRes = await fetch(rpcUrl, {
     method: 'POST',
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(BITCOIN_RPC_TIMEOUT_MS),
     headers: {
       'Content-Type': 'text/plain',
       'Authorization': 'Basic ' + Buffer.from(cookie).toString('base64'),
@@ -109,7 +112,7 @@ async function dumpUtxoSet(outputPath: string): Promise<{ height: number; hash: 
 
   const dumpRes = await fetch(rpcUrl, {
     method: 'POST',
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(BITCOIN_DUMP_RPC_TIMEOUT_MS),
     headers: {
       'Content-Type': 'text/plain',
       'Authorization': 'Basic ' + Buffer.from(cookie).toString('base64'),
@@ -133,7 +136,7 @@ async function dumpUtxoSet(outputPath: string): Promise<{ height: number; hash: 
     try {
       const headerRes = await fetch(rpcUrl, {
         method: 'POST',
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(BITCOIN_RPC_TIMEOUT_MS),
         headers: {
           'Content-Type': 'text/plain',
           'Authorization': 'Basic ' + Buffer.from(cookie).toString('base64'),

@@ -2,7 +2,7 @@
 
 This doc covers the explorer's embedded documentation and blog content system; read it when adding `#/docs/*` sections, `#/blog/*` posts, or debugging why static explorer content does not appear in navigation.
 
-The explorer has two content lanes that look similar in the UI but have different contracts. `DOC_SECTIONS` is a table of trusted documentation renderers, each reachable through `#/docs/<section>`. `BLOG_POSTS` is an ordered list of dated article modules, each reachable through `#/blog/<slug>`. Both lanes are compiled into the Vite bundle as TypeScript modules and rendered by `website/src/explorer-main.ts`; neither lane fetches markdown, JSON, or remote CMS content at runtime.
+The explorer has two content lanes that look similar in the UI but have different contracts. `DOC_SECTIONS` is a table of trusted documentation renderers, each reachable through `#/docs/<section>`. `BLOG_POSTS` is a registry of dated article modules, each reachable through `#/blog/<slug>` and sorted by date in the archive. Both lanes are compiled into the Vite bundle as TypeScript modules and rendered by `website/src/explorer-main.ts`; neither lane fetches markdown, JSON, or remote CMS content at runtime.
 
 ## Why It Exists
 
@@ -28,7 +28,7 @@ The tradeoff is that every content module returns HTML strings. The code relies 
 | `website/src/explorer-docs-api.ts:8` | Example docs renderer that composes endpoint tables, prose, JSON examples, and code blocks. |
 | `website/src/blog/types.ts:1` | Defines the `BlogPost` module contract. |
 | `website/src/blog/types.ts:10` | Defines tag color classes used by blog list and post views. |
-| `website/src/blog-posts.ts:22` | Orders the blog archive by importing each post module into `BLOG_POSTS`. |
+| `website/src/blog-posts.ts:22` | Registers blog post modules in `BLOG_POSTS`; the archive sorts them by date when rendering. |
 | `website/src/blog/run-a-node.ts:3` | Example blog post module implementing the `BlogPost` contract. |
 
 ## How It Works
@@ -80,7 +80,7 @@ These helpers do not escape arbitrary input. They are suitable for static mainta
 
 ### Blog Registry
 
-Blog posts use a separate contract from docs sections. A post module exports a default `BlogPost` object with `slug`, `title`, `date`, `tags`, `excerpt`, and `content()`. The central `BLOG_POSTS` array imports each module and controls archive ordering. The archive treats the first array item as the featured/latest card, so ordering is a visible product decision, not just a data detail.
+Blog posts use a separate contract from docs sections. A post module exports a default `BlogPost` object with `slug`, `title`, `date`, `tags`, `excerpt`, and `content()`. The central `BLOG_POSTS` array imports each module, and the archive sorts those posts by descending `date`. The newest dated post becomes the featured/latest card, so dates are a visible product decision, not just metadata.
 
 The blog list view maps `BLOG_POSTS` into one featured card plus a grid of remaining cards. Tag badges use `BLOG_TAG_COLORS`, falling back to muted classes when a tag has no explicit color mapping. The individual post view finds a post by exact slug. Unknown slugs render a static 404 panel with links back to `#/blog` and `#/`.
 
@@ -140,7 +140,7 @@ An unknown docs section falls back to the first docs section. An unknown blog sl
 
 ### Archive Ordering
 
-`BLOG_POSTS` is manually ordered. A post's `date` is displayed but does not sort the archive. Moving an import inside the array changes the featured post and archive order without changing any dates.
+`BLOG_POSTS` is sorted by descending `date` at render time. Moving an import inside the array does not change the featured post or archive order unless two posts share the same date.
 
 ### Search Visibility
 
