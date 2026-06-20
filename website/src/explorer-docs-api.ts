@@ -175,11 +175,11 @@ ${docH2('Claims')}
 ${docH3('GET /claims/stats')}
 ${docJson(`{
   "btcBlockHeight": 935941,
-  "totalEntries": 43235452,
+  "totalEntries": 58001652,
   "claimed": 12,
-  "unclaimed": 43235440,
+  "unclaimed": 58001640,
   "claimedAmount": 15050000000,
-  "unclaimedAmount": 1273682987000000
+  "unclaimedAmount": 1998426088000000
 }`)}
 
 ${docH2('Error Handling')}
