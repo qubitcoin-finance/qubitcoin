@@ -2,7 +2,7 @@
  * File-based persistence for blocks and metadata.
  *
  * Blocks are appended to an NDJSON file (blocks.jsonl).
- * Metadata (difficulty, height) stored in metadata.json.
+ * Metadata (difficulty, height, genesis hash) stored in metadata.json.
  * Uint8Array fields are serialized as hex strings.
  */
 import fs from 'node:fs'
