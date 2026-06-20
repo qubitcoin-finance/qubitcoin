@@ -80,6 +80,7 @@ async function dumpUtxoSet(outputPath: string): Promise<{ height: number; hash: 
   console.log('Connecting to Bitcoin Core RPC...')
   const infoRes = await fetch(rpcUrl, {
     method: 'POST',
+    signal: AbortSignal.timeout(30_000),
     headers: {
       'Content-Type': 'text/plain',
       'Authorization': 'Basic ' + Buffer.from(cookie).toString('base64'),
@@ -108,6 +109,7 @@ async function dumpUtxoSet(outputPath: string): Promise<{ height: number; hash: 
 
   const dumpRes = await fetch(rpcUrl, {
     method: 'POST',
+    signal: AbortSignal.timeout(30_000),
     headers: {
       'Content-Type': 'text/plain',
       'Authorization': 'Basic ' + Buffer.from(cookie).toString('base64'),
@@ -131,6 +133,7 @@ async function dumpUtxoSet(outputPath: string): Promise<{ height: number; hash: 
     try {
       const headerRes = await fetch(rpcUrl, {
         method: 'POST',
+        signal: AbortSignal.timeout(30_000),
         headers: {
           'Content-Type': 'text/plain',
           'Authorization': 'Basic ' + Buffer.from(cookie).toString('base64'),
