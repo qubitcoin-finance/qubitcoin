@@ -279,6 +279,7 @@ export class FileBlockStorage implements BlockStorage {
       return JSON.parse(content) as BlockStorageMetadata
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null
+      if (!(err instanceof SyntaxError)) throw err
       log.error({ component: 'storage', err }, 'Failed to parse metadata.json; treating as missing')
       return null
     }
