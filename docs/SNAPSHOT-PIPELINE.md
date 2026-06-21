@@ -16,8 +16,8 @@ The other constraint is scale. A production snapshot can contain many Bitcoin ad
 
 | Anchor | Role |
 |--------|------|
-| `src/qbtcd.ts:98` | `SNAPSHOT_URL`, the default URL used by `--full` when no local snapshot path is provided |
-| `src/qbtcd.ts:103` | `downloadFile`, redirect-limited downloader that writes to `<dest>.tmp` before rename |
+| `src/qbtcd.ts:99` | `SNAPSHOT_URL`, the default URL used by `--full` when no local snapshot path is provided |
+| `src/qbtcd.ts:104` | `downloadFile`, redirect-limited downloader that writes to `<dest>.tmp` before rename |
 | `src/qbtcd.ts:183` | `--full` snapshot bootstrap: create data dir, reuse existing file, or download default snapshot |
 | `src/qbtcd.ts:198` | Runtime snapshot load path before `Node` and `Blockchain` construction |
 | `src/snapshot-loader.ts:13` | `loadSnapshot`, the NDJSON parser and metadata normalizer |
