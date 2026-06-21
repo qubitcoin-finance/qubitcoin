@@ -240,6 +240,10 @@ async function main() {
   const rpcServer = rpcApp.listen(config.port, config.rpcBind, () => {
     log.info({ component: 'rpc', port: config.port, bind: config.rpcBind, url: `http://${config.rpcBind}:${config.port}` }, 'RPC server listening')
   })
+  rpcServer.on('error', (err) => {
+    log.fatal({ component: 'rpc', err }, 'RPC server error')
+    process.exit(1)
+  })
 
   const simulationTimers: ReturnType<typeof setTimeout>[] = []
   let shuttingDown = false
