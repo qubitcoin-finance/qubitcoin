@@ -39,7 +39,7 @@ ${p('NIST standardized three ML-DSA parameter sets. We use ML-DSA-65:')}
 </div>
 ${p('For comparison, a Bitcoin ECDSA public key is 33 bytes compressed and a DER signature is ~71 bytes. ML-DSA-65 is roughly 50× larger. This is the fundamental tradeoff of post-quantum signatures today — more security margin costs more bytes.')}
 ${h2('Why Level 3, Not Level 2 or 5?')}
-${p('ML-DSA-44 (Level 2) is smaller but targets ~128-bit quantum security. ML-DSA-87 (Level 5) targets ~256-bit quantum security but signatures are 4,595 bytes. Level 3 gives us ~192-bit quantum security — comparable to a 192-bit symmetric key, which is well beyond any foreseeable attack.')}
+${p('ML-DSA-44 (Level 2) is smaller, while ML-DSA-87 (Level 5) targets a higher NIST security category but signatures are 4,595 bytes. Level 3 gives us the ML-DSA middle tier — comparable to AES-192 in the NIST category model, which is well beyond any foreseeable attack.')}
 ${p('We picked Level 3 because it\'s the sweet spot: enough security margin that no realistic quantum computer in the next several decades threatens it, without the extra 40% signature overhead of Level 5.')}
 ${h2('Impact on Block Size')}
 ${p('Larger signatures mean larger transactions. A typical QubitCoin transaction with one input and two outputs is roughly 5–6 KB — versus ~250 bytes for a comparable Bitcoin transaction. This affects block capacity.')}
