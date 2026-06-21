@@ -26,9 +26,10 @@ export function isValidIPAddress(host: string): boolean {
 
 /** Check if an IP address is publicly routable (not private/loopback/link-local) */
 export function isRoutableAddress(host: string): boolean {
-  if (host === '::1' || host === '::') return false
-  if (host.startsWith('fc') || host.startsWith('fd')) return false
-  if (host.startsWith('fe80')) return false
+  const normalized = host.toLowerCase()
+  if (normalized === '::1' || normalized === '::') return false
+  if (normalized.startsWith('fc') || normalized.startsWith('fd')) return false
+  if (normalized.startsWith('fe80')) return false
 
   const ipv4Match = host.match(/(?:::ffff:)?(\d+\.\d+\.\d+\.\d+)$/i)
   if (ipv4Match) {
