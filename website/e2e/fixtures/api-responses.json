@@ -152,11 +152,20 @@
   ],
   "claimStats": {
     "btcBlockHeight": 936708,
+    "btcBlockHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "genesisHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "totalEntries": 58100000,
     "claimed": 42,
     "unclaimed": 58099958,
     "claimedAmount": 2100000000000,
     "unclaimedAmount": 1997900000000000
+  },
+  "snapshotAddress": {
+    "btcAddress": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "amount": 5000000000,
+    "type": "p2pkh",
+    "claimed": false,
+    "claimedBy": null
   },
   "addressBalance": { "balance": 49850000000 },
   "addressUtxos": [

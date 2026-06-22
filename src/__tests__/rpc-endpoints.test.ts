@@ -1,6 +1,9 @@
 import { it, expect, afterEach, beforeEach } from 'vitest'
 import { Node } from '../node.js'
-import { walletA } from './fixtures.js'
+import { createClaimTransaction } from '../claim.js'
+import { createMockSnapshot } from '../snapshot.js'
+import { walletA, walletB } from './fixtures.js'
+import { mineOnChain } from './chain-test-helpers.js'
 import { TEST_TARGET, describeLoopbackTcp, startRpcTestServer } from './rpc-test-helpers.js'
 import type { Server } from 'node:http'
 
@@ -305,5 +308,90 @@ describeLoopbackTcp('RPC endpoints', () => {
     expect(body.length).toBeGreaterThan(0)
     expect(body[0]).toHaveProperty('height')
     expect(body[0]).toHaveProperty('target')
+  })
+})
+
+describeLoopbackTcp('RPC snapshot address lookup', () => {
+  let server: Server
+  let baseUrl: string
+
+  afterEach(() => {
+    server.close()
+  })
+
+  async function startSnapshotNode(): Promise<Node> {
+    const { snapshot } = createMockSnapshot()
+    const node = new Node('rpc-snapshot-test', snapshot)
+    node.chain.difficulty = TEST_TARGET
+    ;({ server, baseUrl } = await startRpcTestServer(node))
+    return node
+  }
+
+  it('GET /snapshot/address/:btcAddress returns an unclaimed snapshot entry', async () => {
+    const node = await startSnapshotNode()
+    const entry = node.chain.btcSnapshot!.entries[0]
+
+    const res = await fetch(`${baseUrl}/api/v1/snapshot/address/${entry.btcAddress}`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toEqual({
+      btcAddress: entry.btcAddress,
+      amount: entry.amount,
+      type: 'p2pkh',
+      claimed: false,
+      claimedBy: null,
+    })
+  })
+
+  it('GET /snapshot/address/:btcAddress normalizes uppercase snapshot address keys', async () => {
+    const node = await startSnapshotNode()
+    const entry = node.chain.btcSnapshot!.entries.find((e) => e.type === 'p2tr')!
+
+    const res = await fetch(`${baseUrl}/api/v1/snapshot/address/${entry.btcAddress.toUpperCase()}`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.btcAddress).toBe(entry.btcAddress)
+    expect(body.type).toBe('p2tr')
+  })
+
+  it('GET /snapshot/address/:btcAddress returns claimed status and claiming QBTC address', async () => {
+    const { snapshot, holders } = createMockSnapshot()
+    const node = new Node('rpc-snapshot-claimed-test', snapshot)
+    const entry = snapshot.entries[0]
+    const claimTx = createClaimTransaction(
+      holders[0].secretKey,
+      holders[0].publicKey,
+      entry,
+      walletB,
+      snapshot.btcBlockHash,
+      node.chain.blocks[0].hash
+    )
+    node.chain.addBlock(mineOnChain(node.chain, walletA.address, [claimTx]))
+    ;({ server, baseUrl } = await startRpcTestServer(node))
+
+    const res = await fetch(`${baseUrl}/api/v1/snapshot/address/${entry.btcAddress}`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.claimed).toBe(true)
+    expect(body.claimedBy).toBe(walletB.address)
+    expect(body.amount).toBe(entry.amount)
+  })
+
+  it('GET /snapshot/address/:btcAddress returns 404 when the address is absent from the snapshot', async () => {
+    await startSnapshotNode()
+
+    const res = await fetch(`${baseUrl}/api/v1/snapshot/address/${'f'.repeat(40)}`)
+    expect(res.status).toBe(404)
+    const body = await res.json()
+    expect(body.error).toContain('not found')
+  })
+
+  it('GET /snapshot/address/:btcAddress rejects invalid address format', async () => {
+    await startSnapshotNode()
+
+    const res = await fetch(`${baseUrl}/api/v1/snapshot/address/not-a-snapshot-key`)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('Invalid BTC snapshot address format')
   })
 })

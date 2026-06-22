@@ -84,6 +84,7 @@ fetchMempoolStats()     → GET /api/v1/mempool/stats
 fetchBalance(addr)      → GET /api/v1/address/:addr/balance
 fetchUtxos(addr)        → GET /api/v1/address/:addr/utxos
 fetchClaimStats()       → GET /api/v1/claims/stats
+fetchSnapshotAddress(a) → GET /api/v1/snapshot/address/:btcAddress
 ```
 
 The Vite dev server proxies `/api` to `API_URL` when set, otherwise `https://qubitcoin.finance`. In production, nginx proxies `/api` → `127.0.0.1:3010`.
@@ -98,8 +99,9 @@ Key shapes:
 - `Transaction` (line 45) — used by both `/api/v1/tx/:txid` and embedded inside `Block`. Carries optional `blockHash`/`blockHeight` for confirmed tx, optional `claimData` for claim transactions.
 - `MempoolTx` (line 72) — lighter shape returned by `/api/v1/mempool/txs`; omits block fields.
 - `Block` (line 65) — `/api/v1/blocks` and `/api/v1/block/:hash`; includes `transactions: Transaction[]`.
-- `ClaimStats` (line 81) — `/api/v1/claims/stats`; aggregate claim totals.
-- `UTXO` (line 90) — element of `/api/v1/address/:addr/utxos`.
+- `ClaimStats` (line 81) — `/api/v1/claims/stats`; aggregate claim totals plus `btcBlockHash` and `genesisHash` for replay-protected claim signing.
+- `SnapshotAddressLookup` (line 90) — `/api/v1/snapshot/address/:btcAddress`; one BTC snapshot key's amount, script type, claim status, and claiming QBTC address when known.
+- `UTXO` (line 99) — element of `/api/v1/address/:addr/utxos`.
 
 ## Render Functions
 
@@ -107,7 +109,7 @@ Each render function is `async`, fetches its own data, and writes to `root.inner
 
 ### `renderDashboard()` (`explorer-main.ts:136`)
 
-Fires four parallel fetches: `fetchStatus()`, `fetchBlocks(10)`, `fetchMempoolStats()`, `fetchClaimStats()`. Renders the stats card grid, the block strip (`renderBlockStrip()`), and up to 8 recent mempool transactions.
+Fires four parallel fetches: `fetchStatus()`, `fetchBlocks(10)`, `fetchMempoolStats()`, `fetchClaimStats()`. Renders the stats card grid, the BTC snapshot eligibility lookup (`fetchSnapshotAddress()` on form submit), the block strip (`renderBlockStrip()`), and up to 8 recent mempool transactions.
 
 ### `renderBlock(hash)` (`explorer-main.ts:234`)
 

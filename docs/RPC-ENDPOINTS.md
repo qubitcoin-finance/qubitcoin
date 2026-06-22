@@ -1,6 +1,6 @@
 # RPC Endpoint Surface
 
-How the implemented `/api/v1` RPC API is wired, validated, sanitized, and exposed to the explorer. Read this when adding or debugging `startRpcServer`, `GET /api/v1/status`, `GET /api/v1/blocks`, `GET /api/v1/block/:hash`, `GET /api/v1/block-by-height/:height`, `GET /api/v1/tx/:txid`, `POST /api/v1/tx`, `GET /api/v1/mempool/txs`, `GET /api/v1/address/:address/*`, `GET /api/v1/claims/stats`, `GET /api/v1/difficulty`, or `GET /api/v1/peers`.
+How the implemented `/api/v1` RPC API is wired, validated, sanitized, and exposed to the explorer. Read this when adding or debugging `startRpcServer`, `GET /api/v1/status`, `GET /api/v1/blocks`, `GET /api/v1/block/:hash`, `GET /api/v1/block-by-height/:height`, `GET /api/v1/tx/:txid`, `POST /api/v1/tx`, `GET /api/v1/mempool/txs`, `GET /api/v1/address/:address/*`, `GET /api/v1/claims/stats`, `GET /api/v1/snapshot/address/:btcAddress`, `GET /api/v1/difficulty`, or `GET /api/v1/peers`.
 
 This page is the endpoint catalog for the live RPC server in `src/rpc.ts`. It covers route ordering, request validation, response shaping, binary sanitization, body-size errors, and the split between confirmed-chain reads and mempool reads. For deployment-specific proxy and rate-limit configuration, see [RPC](./RPC.md); for frontend fetch wiring, see [EXPLORER-DATA-FLOW](./EXPLORER-DATA-FLOW.md).
 
@@ -32,7 +32,8 @@ The fragile part is not business logic, but the boundary behavior. Hashes and ad
 | `src/rpc.ts:198` | `GET /api/v1/address/:address/balance` |
 | `src/rpc.ts:209` | `GET /api/v1/address/:address/utxos` |
 | `src/rpc.ts:220` | `GET /api/v1/claims/stats` |
-| `src/rpc.ts:225` | `GET /api/v1/difficulty` |
+| `src/rpc.ts:225` | `GET /api/v1/snapshot/address/:btcAddress` |
+| `src/rpc.ts:240` | `GET /api/v1/difficulty` |
 | `src/rpc.ts:251` | `GET /api/v1/peers` |
 | `src/rpc.ts:261` | API-scoped JSON 404 handler |
 | `src/rpc.ts:269` | JSON parse, body-size, and fallback error handler |
@@ -123,7 +124,21 @@ Malformed JSON produces `400` with `Malformed JSON request body`. Bodies over 1 
 
 `GET /api/v1/address/:address/utxos` validates and lower-cases the address, then returns sanitized `UTXO[]` from `node.chain.findUTXOs(address)`. Unknown but well-formed addresses return an empty array, not `404`.
 
-`GET /api/v1/claims/stats` returns `node.chain.getClaimStats()`. The RPC layer does not compute claim totals; it only serializes the chain's current aggregate view.
+`GET /api/v1/claims/stats` returns `node.chain.getClaimStats()`. The RPC layer does not compute claim totals; it only serializes the chain's current aggregate view. The response includes `btcBlockHeight`, `btcBlockHash`, `genesisHash`, `totalEntries`, `claimed`, `unclaimed`, `claimedAmount`, and `unclaimedAmount`. Browser and CLI claim builders use the snapshot block hash and genesis hash to sign the same replay-protected claim message that consensus verifies.
+
+`GET /api/v1/snapshot/address/:btcAddress` validates the snapshot key as either 40 hex characters for HASH160 entries or 64 hex characters for witness-script, script-hash, or Taproot-style entries. Uppercase hex is accepted and normalized before lookup. A malformed key returns `400`; a well-formed key absent from the snapshot returns `404`. A hit returns:
+
+```json
+{
+  "btcAddress": "751e76e8199196d454941c45d1b3a323f1433bd6",
+  "amount": 5000000000,
+  "type": "p2pkh",
+  "claimed": false,
+  "claimedBy": null
+}
+```
+
+`claimedBy` is the QBTC destination address recorded from the accepted claim transaction when the entry is already claimed; otherwise it is `null`.
 
 `GET /api/v1/difficulty` returns a compact target history. It always includes genesis at height `0`, includes each `DIFFICULTY_ADJUSTMENT_INTERVAL` boundary, and includes the current tip only when the tip is not already an adjustment boundary. Each entry is `{ height, target, timestamp }`.
 
@@ -175,7 +190,7 @@ When `bindAddress` is `127.0.0.1`, CORS is permissive for local browser clients.
 - [MEMPOOL-LIFECYCLE](./MEMPOOL-LIFECYCLE.md) — why `POST /api/v1/tx` can reject a transaction and why `/api/v1/mempool/txs` is ordered claim-first then by fee density.
 - [UTXO-INDEXING](./UTXO-INDEXING.md) — chain indexes behind `/api/v1/address/*` and confirmed `/api/v1/tx/:txid` lookups.
 - [TRANSACTION-ANATOMY](./TRANSACTION-ANATOMY.md) — transaction shape, signing fields, txid rules, and validation used after RPC deserialization.
-- [CLAIM-FLOW](./CLAIM-FLOW.md) — BTC claim transaction construction and validation behind `POST /api/v1/tx` and `/api/v1/claims/stats`.
+- [CLAIM-FLOW](./CLAIM-FLOW.md) — BTC claim transaction construction and validation behind `POST /api/v1/tx`, `/api/v1/claims/stats`, and `/api/v1/snapshot/address/:btcAddress`.
 - [MINING-LIFECYCLE](./MINING-LIFECYCLE.md) — live mining stats exposed by `/api/v1/status` and transaction ordering shared with block assembly.
 - [P2P-SYNC](./P2P-SYNC.md) — peer objects filtered by `/api/v1/peers` and block/transaction relay outside the RPC surface.
 - [BLOCK-VALIDATION](./BLOCK-VALIDATION.md) — contextual block acceptance rules that make `/api/v1/blocks` and `/api/v1/block/:hash` trustworthy chain views.

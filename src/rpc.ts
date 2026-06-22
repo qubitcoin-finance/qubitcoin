@@ -16,6 +16,7 @@ import { summarizeMempoolTransaction } from './rpc-mempool.js';
 const MAX_BODY_SIZE = '1mb';
 
 const ADDRESS_RE = /^[0-9a-f]{64}$/i;
+const BTC_SNAPSHOT_ADDRESS_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i;
 
 export type RpcRateLimitConfig = {
   get?: number;
@@ -28,6 +29,11 @@ export { sanitize };
 /** Validate that an address is a valid 64-character hex string */
 function isValidAddress(address: string): boolean {
   return typeof address === 'string' && address.length === 64 && ADDRESS_RE.test(address);
+}
+
+/** Validate snapshot BTC address keys: HASH160 hex or 32-byte witness/script hash hex */
+function isValidSnapshotAddress(address: string): boolean {
+  return typeof address === 'string' && BTC_SNAPSHOT_ADDRESS_RE.test(address);
 }
 
 type RequestError = Error & {
@@ -219,6 +225,21 @@ export function startRpcServer(
   // Endpoint to get claim stats
   app.get('/api/v1/claims/stats', (req, res) => {
     res.json(sanitize(node.chain.getClaimStats()));
+  });
+
+  // Endpoint to look up BTC snapshot claim eligibility by snapshot address key
+  app.get('/api/v1/snapshot/address/:btcAddress', (req, res) => {
+    if (!isValidSnapshotAddress(req.params.btcAddress)) {
+      sendError(res, 400, 'Invalid BTC snapshot address format: must be 40- or 64-character hex string');
+      return;
+    }
+    const btcAddress = req.params.btcAddress.toLowerCase();
+    const lookup = node.chain.getSnapshotAddressLookup(btcAddress);
+    if (!lookup) {
+      sendError(res, 404, 'BTC address not found in snapshot');
+      return;
+    }
+    res.json(sanitize(lookup));
   });
 
   // Difficulty history — one entry per adjustment interval

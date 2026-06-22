@@ -27,6 +27,14 @@ import { getSnapshotIndex, type ShardedIndex } from './snapshot.js'
 /** Maximum reorg depth supported by fast undo path. Deeper reorgs use full replay. */
 export const MAX_REORG_DEPTH = 100
 
+export interface SnapshotAddressLookup {
+  btcAddress: string
+  amount: number
+  type: 'p2pkh' | 'p2sh' | 'p2tr' | 'p2wsh' | 'multisig'
+  claimed: boolean
+  claimedBy: string | null
+}
+
 export interface BlockUndo {
   spentUtxos: Array<{ key: string; utxo: UTXO }>  // UTXOs consumed by inputs — restore on disconnect
   createdUtxoKeys: string[]                         // UTXOs created by outputs — remove on disconnect
@@ -48,6 +56,7 @@ export class Blockchain {
   difficulty: string = STARTING_DIFFICULTY
   btcSnapshot: BtcSnapshot | null = null
   claimedBtcAddresses: Set<string> = new Set() // btcAddress hex string
+  private claimedBtcAddressQbtcAddresses: Map<string, string> = new Map()
   private storage: BlockStorage | null = null
   private replayHeight = -1 // height of last block loaded from storage
   private snapshotIndex: ShardedIndex | null = null
@@ -512,6 +521,7 @@ export class Blockchain {
       this.utxoSet.clear()
       this.utxosByAddress.clear()
       this.claimedBtcAddresses.clear()
+      this.claimedBtcAddressQbtcAddresses.clear()
       this.claimedCount = 0
       this.claimedAmount = 0
       this.difficulty = STARTING_DIFFICULTY
@@ -545,6 +555,21 @@ export class Blockchain {
     return this.claimedBtcAddresses.has(btcAddress)
   }
 
+  /** Look up a BTC snapshot entry with current claim status. */
+  getSnapshotAddressLookup(btcAddress: string): SnapshotAddressLookup | null {
+    if (!this.snapshotIndex) return null
+    const entry = this.snapshotIndex.get(btcAddress)
+    if (!entry) return null
+    const claimedBy = this.claimedBtcAddressQbtcAddresses.get(btcAddress) ?? null
+    return {
+      btcAddress: entry.btcAddress,
+      amount: entry.amount,
+      type: entry.type ?? 'p2pkh',
+      claimed: claimedBy !== null,
+      claimedBy,
+    }
+  }
+
   /** Get all claimable (unclaimed) BTC address balances */
   getClaimableEntries(): import('./snapshot.js').BtcAddressBalance[] {
     if (!this.btcSnapshot) return []
@@ -560,12 +585,14 @@ export class Blockchain {
   }
 
   /** Get claim statistics (O(1) — uses incrementally tracked counters) */
-  getClaimStats(): { btcBlockHeight: number; totalEntries: number; claimed: number; unclaimed: number; claimedAmount: number; unclaimedAmount: number } {
+  getClaimStats(): { btcBlockHeight: number; btcBlockHash: string; genesisHash: string; totalEntries: number; claimed: number; unclaimed: number; claimedAmount: number; unclaimedAmount: number } {
     if (!this.btcSnapshot) {
-      return { btcBlockHeight: 0, totalEntries: 0, claimed: 0, unclaimed: 0, claimedAmount: 0, unclaimedAmount: 0 }
+      return { btcBlockHeight: 0, btcBlockHash: '', genesisHash: this.blocks[0]?.hash ?? '', totalEntries: 0, claimed: 0, unclaimed: 0, claimedAmount: 0, unclaimedAmount: 0 }
     }
     return {
       btcBlockHeight: this.btcSnapshot.btcBlockHeight,
+      btcBlockHash: this.btcSnapshot.btcBlockHash,
+      genesisHash: this.blocks[0].hash,
       totalEntries: this.snapshotTotalEntries,
       claimed: this.claimedCount,
       unclaimed: this.snapshotTotalEntries - this.claimedCount,
@@ -623,6 +650,7 @@ export class Blockchain {
       if (isClaimTransaction(tx)) {
         const claim = tx.claimData!
         this.claimedBtcAddresses.add(claim.btcAddress)
+        this.claimedBtcAddressQbtcAddresses.set(claim.btcAddress, claim.qbtcAddress)
         undo.claimedAddresses.push(claim.btcAddress)
         if (this.snapshotIndex) {
           const entry = this.snapshotIndex.get(claim.btcAddress)
@@ -713,6 +741,7 @@ export class Blockchain {
     // Unclaim BTC addresses
     for (const addr of undo.claimedAddresses) {
       this.claimedBtcAddresses.delete(addr)
+      this.claimedBtcAddressQbtcAddresses.delete(addr)
       if (this.snapshotIndex) {
         const entry = this.snapshotIndex.get(addr)
         if (entry) {

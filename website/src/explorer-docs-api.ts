@@ -170,16 +170,29 @@ ${docH2('Claims')}
 <table class="w-full text-sm mb-4">
   <tbody>
     ${ep('GET', '/claims/stats', 'Claim statistics for the BTC snapshot')}
+    ${ep('GET', '/snapshot/address/:btcAddress', 'Snapshot eligibility and claim status for a BTC snapshot key')}
   </tbody>
 </table>
 ${docH3('GET /claims/stats')}
+${docP('Returns aggregate snapshot totals plus the Bitcoin snapshot block hash and QBTC genesis hash used by browser and CLI claim builders to create replay-protected claim signatures.')}
 ${docJson(`{
   "btcBlockHeight": 935941,
+  "btcBlockHash": "0000000000000000000123...",
+  "genesisHash": "0000abc...",
   "totalEntries": 58001652,
   "claimed": 12,
   "unclaimed": 58001640,
   "claimedAmount": 15050000000,
   "unclaimedAmount": 1998426088000000
+}`)}
+${docH3('GET /snapshot/address/:btcAddress')}
+${docP('Looks up one snapshot key. The path parameter must be a 40-character HASH160 hex key or a 64-character witness/script/Taproot hex key. Uppercase hex is accepted and normalized. Missing entries return 404; malformed keys return 400.')}
+${docJson(`{
+  "btcAddress": "751e76e8199196d454941c45d1b3a323f1433bd6",
+  "amount": 5000000000,
+  "type": "p2pkh",
+  "claimed": false,
+  "claimedBy": null
 }`)}
 
 ${docH2('Error Handling')}

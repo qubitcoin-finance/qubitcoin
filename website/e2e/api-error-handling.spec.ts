@@ -25,6 +25,7 @@ async function mockApiSuccess(page: Page): Promise<void> {
     if (path === '/api/v1/mempool/stats') return route.fulfill({ json: fixtures.mempoolStats });
     if (path.startsWith('/api/v1/mempool/txs')) return route.fulfill({ json: fixtures.mempoolTxs });
     if (path === '/api/v1/claims/stats') return route.fulfill({ json: fixtures.claimStats });
+    if (path.startsWith('/api/v1/snapshot/address/')) return route.fulfill({ json: fixtures.snapshotAddress });
     if (path.match(/\/api\/v1\/address\/[^/]+\/balance/)) return route.fulfill({ json: fixtures.addressBalance });
     if (path.match(/\/api\/v1\/address\/[^/]+\/utxos/)) return route.fulfill({ json: fixtures.addressUtxos });
     return route.fulfill({ status: 404, json: { error: 'not found' } });
@@ -42,6 +43,7 @@ async function mockApiTx(page: Page, tx: Record<string, unknown>): Promise<void>
     if (path === '/api/v1/mempool/stats') return route.fulfill({ json: fixtures.mempoolStats });
     if (path.startsWith('/api/v1/mempool/txs')) return route.fulfill({ json: fixtures.mempoolTxs });
     if (path === '/api/v1/claims/stats') return route.fulfill({ json: fixtures.claimStats });
+    if (path.startsWith('/api/v1/snapshot/address/')) return route.fulfill({ json: fixtures.snapshotAddress });
     if (path.match(/\/api\/v1\/address\/[^/]+\/balance/)) return route.fulfill({ json: fixtures.addressBalance });
     if (path.match(/\/api\/v1\/address\/[^/]+\/utxos/)) return route.fulfill({ json: fixtures.addressUtxos });
     return route.fulfill({ status: 404, json: { error: 'not found' } });
@@ -141,6 +143,33 @@ test.describe('Address view — API error handling', () => {
     // Balance should show fine, UTXOs should show error
     await expect(page.locator('#explorer-content')).toContainText('QBTC');
     await expect(page.locator('#explorer-content')).toContainText('Unable to load UTXOs');
+  });
+});
+
+test.describe('Snapshot eligibility lookup', () => {
+  test('renders eligible snapshot address result on dashboard', async ({ page }) => {
+    await mockApiSuccess(page);
+    await page.goto('/#/mempool', { waitUntil: 'networkidle' });
+
+    await page.locator('#snapshot-lookup-input').fill(fixtures.snapshotAddress.btcAddress);
+    await page.locator('#snapshot-lookup-form button').click();
+
+    await expect(page.locator('#snapshot-lookup-result')).toContainText('Eligible');
+    await expect(page.locator('#snapshot-lookup-result')).toContainText('50 QBTC');
+    await expect(page.locator('#snapshot-lookup-result')).toContainText('p2pkh');
+  });
+
+  test('renders not-in-snapshot response on dashboard', async ({ page }) => {
+    await mockApiSuccess(page);
+    await page.route('**/api/v1/snapshot/address/**', (route) => {
+      return route.fulfill({ status: 404, json: { error: 'not found' } });
+    });
+    await page.goto('/#/mempool', { waitUntil: 'networkidle' });
+
+    await page.locator('#snapshot-lookup-input').fill('b'.repeat(40));
+    await page.locator('#snapshot-lookup-form button').click();
+
+    await expect(page.locator('#snapshot-lookup-result')).toContainText('Address is not in the BTC snapshot');
   });
 });
 

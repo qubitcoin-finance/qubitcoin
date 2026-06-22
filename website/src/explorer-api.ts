@@ -34,6 +34,10 @@ export interface ClaimData {
   ecdsaPublicKey: string;
   ecdsaSignature: string;
   qbtcAddress: string;
+  schnorrPublicKey?: string;
+  schnorrSignature?: string;
+  witnessScript?: string;
+  witnessSignatures?: string;
 }
 
 export interface Transaction {
@@ -74,11 +78,21 @@ export interface MempoolTx {
 
 export interface ClaimStats {
   btcBlockHeight: number;
+  btcBlockHash: string;
+  genesisHash: string;
   totalEntries: number;
   claimed: number;
   unclaimed: number;
   claimedAmount: number;
   unclaimedAmount: number;
+}
+
+export interface SnapshotAddressLookup {
+  btcAddress: string;
+  amount: number;
+  type: 'p2pkh' | 'p2sh' | 'p2tr' | 'p2wsh' | 'multisig';
+  claimed: boolean;
+  claimedBy: string | null;
 }
 
 export interface UTXO {
@@ -132,3 +146,25 @@ export const fetchMempoolStats = () => api<{ size: number }>('/mempool/stats');
 export const fetchBalance = (addr: string) => api<{ balance: number }>(`/address/${addr}/balance`);
 export const fetchUtxos = (addr: string) => api<UTXO[]>(`/address/${addr}/utxos`);
 export const fetchClaimStats = () => api<ClaimStats>('/claims/stats');
+export const fetchSnapshotAddress = (btcAddress: string) =>
+  apiFull<SnapshotAddressLookup>(`/snapshot/address/${encodeURIComponent(btcAddress)}`);
+
+export async function broadcastTransaction(tx: unknown): Promise<ApiResult<{ txid: string }>> {
+  try {
+    const res = await fetch(`${API}/tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(tx),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) {
+      logApiError('/tx', `HTTP ${res.status}: ${res.statusText}`, res.status);
+      return { ok: false, status: res.status, networkError: false };
+    }
+    return { ok: true, data: (await res.json()) as { txid: string } };
+  } catch (e) {
+    const error = e instanceof Error ? e : new Error(String(e));
+    logApiError('/tx', error);
+    return { ok: false, status: 0, networkError: true };
+  }
+}

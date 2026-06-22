@@ -10,10 +10,11 @@ import {
   fetchClaimStats,
   fetchMempoolStats,
   fetchMempoolTxs,
+  fetchSnapshotAddress,
   fetchTx,
   fetchStatus,
 } from './explorer-api';
-import type { Block, Transaction, UTXO } from './explorer-api';
+import type { Block, SnapshotAddressLookup, Transaction, UTXO } from './explorer-api';
 import {
   COINBASE_TXID,
   formatQBTC,
@@ -40,6 +41,7 @@ import {
   card,
 } from './explorer-format';
 import { DOC_SECTIONS, docIcon } from './explorer-docs';
+import { renderClaim } from './explorer-claim';
 
 // --- Router ----------------------------------------------------------------
 
@@ -49,6 +51,7 @@ type Route =
   | { view: 'tx'; txid: string }
   | { view: 'address'; addr: string }
   | { view: 'mempool' }
+  | { view: 'claim' }
   | { view: 'docs'; section?: string }
   | { view: 'blog'; slug?: string };
 
@@ -60,6 +63,7 @@ function parseRoute(): Route {
   if (parts[0] === 'tx' && parts[1]) return { view: 'tx', txid: parts[1] };
   if (parts[0] === 'address' && parts[1]) return { view: 'address', addr: parts[1] };
   if (parts[0] === 'mempool') return { view: 'mempool' };
+  if (parts[0] === 'claim') return { view: 'claim' };
   if (parts[0] === 'docs') return { view: 'docs', section: parts[1] };
   if (parts[0] === 'blog') return { view: 'blog', slug: parts[1] };
   return { view: 'dashboard' };
@@ -70,6 +74,20 @@ function parseRoute(): Route {
 const root = document.getElementById('explorer-content')!;
 const landingEl = document.getElementById('landing-content');
 const explorerEl = document.getElementById('explorer-main');
+
+type SnapshotLookupState = {
+  btcAddress: string;
+  loading: boolean;
+  result: SnapshotAddressLookup | null;
+  error: string | null;
+};
+
+const snapshotLookupState: SnapshotLookupState = {
+  btcAddress: '',
+  loading: false,
+  result: null,
+  error: null,
+};
 
 function isExplorerRoute(): boolean {
   const hash = location.hash;
@@ -131,6 +149,81 @@ function renderLoading(): void {
     </div>`;
 }
 
+function renderSnapshotLookupResult(): string {
+  if (snapshotLookupState.loading) {
+    return `<p class="text-text-muted text-sm">Checking snapshot...</p>`;
+  }
+  if (snapshotLookupState.error) {
+    return `<p class="text-red-400 text-sm">${escapeHtml(snapshotLookupState.error)}</p>`;
+  }
+  const result = snapshotLookupState.result;
+  if (!result) {
+    return `<p class="text-text-muted text-sm">Enter a 40- or 64-character BTC snapshot key.</p>`;
+  }
+  const status = result.claimed
+    ? badge('Claimed', 'qubit')
+    : badge('Eligible', 'cyan');
+  return `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+    <div>
+      <p class="text-text-muted mb-1">Snapshot Address</p>
+      <p class="font-mono text-xs break-all">${escapeHtml(result.btcAddress)}</p>
+    </div>
+    <div>
+      <p class="text-text-muted mb-1">Amount</p>
+      <p class="font-mono text-qubit-300">${formatQBTC(result.amount)} QBTC</p>
+    </div>
+    <div>
+      <p class="text-text-muted mb-1">Type</p>
+      <p class="font-mono uppercase">${escapeHtml(result.type)}</p>
+    </div>
+    <div>
+      <p class="text-text-muted mb-1">Status</p>
+      <p>${status}</p>
+    </div>
+    ${result.claimedBy ? `<div class="sm:col-span-2 lg:col-span-4">
+      <p class="text-text-muted mb-1">Claimed By</p>
+      <p>${hashLink(result.claimedBy, 'address', result.claimedBy)}</p>
+    </div>` : ''}
+  </div>`;
+}
+
+function bindSnapshotLookupForm(): void {
+  const form = document.getElementById('snapshot-lookup-form') as HTMLFormElement | null;
+  const input = document.getElementById('snapshot-lookup-input') as HTMLInputElement | null;
+  const output = document.getElementById('snapshot-lookup-result');
+  if (!form || !input || !output) return;
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const btcAddress = input.value.trim().toLowerCase();
+    snapshotLookupState.btcAddress = btcAddress;
+    snapshotLookupState.result = null;
+    snapshotLookupState.error = null;
+
+    if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(btcAddress)) {
+      snapshotLookupState.loading = false;
+      snapshotLookupState.error = 'Enter a valid 40- or 64-character hex snapshot address.';
+      output.innerHTML = renderSnapshotLookupResult();
+      return;
+    }
+
+    snapshotLookupState.loading = true;
+    output.innerHTML = renderSnapshotLookupResult();
+    const result = await fetchSnapshotAddress(btcAddress);
+    snapshotLookupState.loading = false;
+    if (result.ok) {
+      snapshotLookupState.result = result.data;
+    } else if (result.networkError) {
+      snapshotLookupState.error = 'Unable to reach the node. Try again shortly.';
+    } else if (result.status === 404) {
+      snapshotLookupState.error = 'Address is not in the BTC snapshot.';
+    } else {
+      snapshotLookupState.error = 'Snapshot lookup failed. Check the address and try again.';
+    }
+    output.innerHTML = renderSnapshotLookupResult();
+  });
+}
+
 // Dashboard -----------------------------------------------------------------
 
 async function renderDashboard(): Promise<void> {
@@ -170,6 +263,22 @@ async function renderDashboard(): Promise<void> {
   if (blocks && blocks.length > 0) {
     html += renderBlockStrip(blocks, mempoolStats?.size ?? status.mempoolSize);
   }
+
+  html += `<div class="bg-surface rounded-lg glow-border p-5 mb-6">
+    <div class="flex flex-col md:flex-row md:items-end gap-3">
+      <div class="flex-1 min-w-0">
+        <label for="snapshot-lookup-input" class="block text-lg font-semibold mb-2">Check BTC address eligibility</label>
+        <input id="snapshot-lookup-input" form="snapshot-lookup-form" type="text" spellcheck="false"
+          value="${escapeHtml(snapshotLookupState.btcAddress)}"
+          class="w-full bg-background border border-border rounded-lg px-3 py-2 font-mono text-sm focus:outline-none focus:border-qubit-500"
+          placeholder="40- or 64-character snapshot address">
+      </div>
+      <form id="snapshot-lookup-form">
+        <button type="submit" class="w-full md:w-auto px-4 py-2 rounded-lg bg-qubit-600/20 border border-qubit-600/40 text-qubit-300 hover:bg-qubit-600/30 transition-all text-sm">Check</button>
+      </form>
+    </div>
+    <div id="snapshot-lookup-result" class="mt-4">${renderSnapshotLookupResult()}</div>
+  </div>`;
 
   // Two-column: recent blocks + mempool
   html += `<div class="grid md:grid-cols-2 gap-6">`;
@@ -227,6 +336,7 @@ async function renderDashboard(): Promise<void> {
   html += `</div>`; // close grid
 
   root.innerHTML = html;
+  bindSnapshotLookupForm();
 }
 
 // Block detail --------------------------------------------------------------
@@ -785,11 +895,11 @@ async function dispatch(): Promise<void> {
 
   const route = parseRoute();
 
-  // Hide search bar on docs/blog routes; widen container for docs (sidebar) and blog layouts.
+  // Hide search bar on docs/blog/claim routes; widen container for docs (sidebar) and blog layouts.
   const searchBar = document.querySelector('#explorer-main > .mb-6') as HTMLElement | null;
-  if (searchBar) searchBar.style.display = (route.view === 'docs' || route.view === 'blog') ? 'none' : '';
+  if (searchBar) searchBar.style.display = (route.view === 'docs' || route.view === 'blog' || route.view === 'claim') ? 'none' : '';
   if (explorerEl) {
-    if (route.view === 'docs' || route.view === 'blog') {
+    if (route.view === 'docs' || route.view === 'blog' || route.view === 'claim') {
       explorerEl.classList.remove('max-w-6xl');
       explorerEl.classList.add('max-w-[90rem]');
     } else {
@@ -798,7 +908,7 @@ async function dispatch(): Promise<void> {
     }
   }
 
-  if (route.view !== 'docs' && route.view !== 'blog') renderLoading();
+  if (route.view !== 'docs' && route.view !== 'blog' && route.view !== 'claim') renderLoading();
 
   switch (route.view) {
     case 'mempool':
@@ -817,6 +927,9 @@ async function dispatch(): Promise<void> {
       break;
     case 'address':
       await renderAddress(route.addr);
+      break;
+    case 'claim':
+      renderClaim();
       break;
     case 'docs':
       renderDocs(route.section);

@@ -40,6 +40,9 @@ async function mockApi(page: Page): Promise<void> {
     if (path === '/api/v1/claims/stats') {
       return route.fulfill({ json: fixtures.claimStats });
     }
+    if (path.startsWith('/api/v1/snapshot/address/')) {
+      return route.fulfill({ json: fixtures.snapshotAddress });
+    }
     if (path.match(/\/api\/v1\/address\/[^/]+\/balance/)) {
       return route.fulfill({ json: fixtures.addressBalance });
     }
@@ -73,6 +76,7 @@ const routes = [
   { name: 'block-detail', hash: `#/block/${SAMPLE_BLOCK_HASH}` },
   { name: 'tx-detail', hash: `#/tx/${SAMPLE_TX_ID}` },
   { name: 'address', hash: `#/address/${SAMPLE_ADDRESS}` },
+  { name: 'claim', hash: '#/claim' },
   { name: 'docs', hash: '#/docs' },
   { name: 'docs-api', hash: '#/docs/api' },
 ];

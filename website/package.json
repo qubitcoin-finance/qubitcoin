@@ -10,6 +10,13 @@
     "test:visual": "playwright test",
     "screenshots": "playwright test && echo 'Screenshots saved to tmp/screenshots/'"
   },
+  "dependencies": {
+    "@noble/curves": "2.0.1",
+    "@noble/hashes": "2.0.1",
+    "@noble/post-quantum": "0.5.4",
+    "@scure/bip32": "2.0.1",
+    "@scure/bip39": "2.0.1"
+  },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "@tailwindcss/vite": "^4.2.1",
