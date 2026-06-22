@@ -217,7 +217,7 @@ ${docH2('Message Types')}
     <tr class="border-b border-border"><td class="py-2 pr-4 font-mono text-xs text-qubit-300">verack</td><td class="py-2 pr-4 text-text-muted">both</td><td class="py-2 text-xs">none — handshake acknowledgement</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 font-mono text-xs text-qubit-300">reject</td><td class="py-2 pr-4 text-text-muted">both</td><td class="py-2 text-xs">{ reason } — sent before disconnect</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 font-mono text-xs text-qubit-300">getblocks</td><td class="py-2 pr-4 text-text-muted">request</td><td class="py-2 text-xs">{ fromHeight } — request blocks starting at height</td></tr>
-    <tr class="border-b border-border"><td class="py-2 pr-4 font-mono text-xs text-qubit-300">blocks</td><td class="py-2 pr-4 text-text-muted">response</td><td class="py-2 text-xs">{ blocks[] } — up to 50 full blocks per message</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 font-mono text-xs text-qubit-300">blocks</td><td class="py-2 pr-4 text-text-muted">response</td><td class="py-2 text-xs">{ blocks[] } — up to 200 full blocks per message</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 font-mono text-xs text-qubit-300">inv</td><td class="py-2 pr-4 text-text-muted">broadcast</td><td class="py-2 text-xs">{ type: 'block'|'tx', hash } — announce new data</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 font-mono text-xs text-qubit-300">getdata</td><td class="py-2 pr-4 text-text-muted">request</td><td class="py-2 text-xs">{ type: 'block'|'tx', hash } — request full data</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 font-mono text-xs text-qubit-300">tx</td><td class="py-2 pr-4 text-text-muted">response</td><td class="py-2 text-xs">{ tx } — full transaction</td></tr>
@@ -251,9 +251,9 @@ ${docP('After handshake, if the peer has a higher chain than us, we begin IBD to
 ${docSteps([
   '<span class="text-text-primary font-medium">Compare heights</span> — peer\'s chain is taller: <span class="font-mono text-xs text-qubit-400">peer.height &gt; ourHeight</span>',
   '<span class="text-text-primary font-medium">Request blocks</span> — send <span class="font-mono text-xs text-entropy-cyan">getblocks({ fromHeight: ourHeight + 1 })</span>',
-  '<span class="text-text-primary font-medium">Receive batch</span> — peer responds with up to 50 full blocks',
+  '<span class="text-text-primary font-medium">Receive batch</span> — peer responds with up to 200 full blocks',
   '<span class="text-text-primary font-medium">Validate &amp; apply</span> — each block is validated and added to the chain sequentially',
-  '<span class="text-text-primary font-medium">Continue or finish</span> — if batch was full (50 blocks), request the next batch. If partial, IBD is complete',
+  '<span class="text-text-primary font-medium">Continue or finish</span> — if batch was full (200 blocks), request the next batch. If partial, IBD is complete',
 ])}
 ${docP('Mining is paused during IBD and automatically resumes once the node is fully synced. This ensures miners always work on the latest chain tip.')}
 
