@@ -47,7 +47,7 @@ ${docJson(`{
   "blockReward": 312500000,
   "totalTxs": 9876,
   "lastBlockTime": 1707000000000,
-  "targetBlockTime": 1800000
+  "targetBlockTime": 600000
 }`)}
 ${docH3('GET /peers')}
 ${docJson(`[
