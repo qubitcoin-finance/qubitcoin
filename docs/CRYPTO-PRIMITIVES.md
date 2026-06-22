@@ -103,7 +103,7 @@ It throws on truncated pubkeys, trailing data, missing `OP_CHECKMULTISIG`, a pub
 
 - **One module, one source of randomness.** All keypairs come from `generateWallet` / `generateBtcKeypair`. Do not call `ml_dsa65.keygen()` or `secp256k1.utils.randomSecretKey()` elsewhere.
 - **ECDSA expects a pre-hashed 32-byte message; ML-DSA does not.** Passing raw data to `ecdsaSign` (or a pre-hash to `signData`) silently produces signatures that won't verify against the intended payload.
-- **`verifySchnorrSignature` never throws.** Callers must treat its `false` as covering both "wrong signature" and "garbage bytes." The ECDSA verifier does *not* have this guard — `verifyEcdsaSignature` can throw on malformed input, so claim code wraps it where needed.
+- **`verifySchnorrSignature` never throws.** Callers must treat its `false` as covering both "wrong signature" and "garbage bytes." The ECDSA verifier does *not* have this guard — `verifyEcdsaSignature` can throw on malformed input, so callers must validate or catch malformed claim material before verification.
 - **Address strings are bare hashes, not encoded addresses.** Every `derive*` function returns hex of a raw hash. Matching against the snapshot relies on the snapshot storing the same raw-hash form (see SNAPSHOT-PIPELINE).
 - **`buildMultisigScript` and `parseWitnessScript` must round-trip.** Any change to opcode encoding (the `0x50 + m`, `0x21`, `0xae` bytes) breaks every previously derived P2WSH/P2SH-multisig address and silently invalidates claims. Treat the byte layout as frozen.
 - **Compressed keys only for Bitcoin scripts.** Multisig and witness-script helpers assume 33-byte compressed pubkeys; uncompressed (65-byte) keys are rejected by `buildMultisigScript` and won't parse.

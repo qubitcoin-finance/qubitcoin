@@ -3,7 +3,7 @@
  *
  * Streams the file line-by-line (constant memory overhead for I/O).
  * First line is the header with metadata (merkleRoot, blockHash, count).
- * Remaining lines: {"a":"<hex hash160>","b":<satoshis>}
+ * Remaining lines: {"a":"<40- or 64-char hex address hash>","b":<satoshis>}
  */
 import fs from 'node:fs'
 import readline from 'node:readline'

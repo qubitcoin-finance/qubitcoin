@@ -14,14 +14,14 @@ The tradeoff is that every content module returns HTML strings. The code relies 
 
 | Path | Role |
 | --- | --- |
-| `website/src/explorer-main.ts:46` | Defines the explorer `Route` union, including `docs` and `blog` route shapes. |
-| `website/src/explorer-main.ts:55` | Parses `location.hash` into explorer routes, including `#/docs/<section>` and `#/blog/<slug>`. |
-| `website/src/explorer-main.ts:613` | Renders one blog post by looking up `BLOG_POSTS` by slug. |
-| `website/src/explorer-main.ts:650` | Renders one docs section by looking up `DOC_SECTIONS` by section id. |
-| `website/src/explorer-main.ts:654` | Builds the docs sidebar from `DOC_SECTIONS`. |
-| `website/src/explorer-main.ts:673` | Documents the static-content XSS assumption for embedded docs. |
-| `website/src/explorer-main.ts:788` | Hides search and widens the explorer container for docs/blog routes. |
-| `website/src/explorer-main.ts:803` | Dispatches parsed routes to live views, docs, or blog renderers. |
+| `website/src/explorer-main.ts:48` | Defines the explorer `Route` union, including `docs` and `blog` route shapes. |
+| `website/src/explorer-main.ts:58` | Parses `location.hash` into explorer routes, including `#/docs/<section>` and `#/blog/<slug>`. |
+| `website/src/explorer-main.ts:723` | Renders one blog post by looking up `BLOG_POSTS` by slug. |
+| `website/src/explorer-main.ts:760` | Renders one docs section by looking up `DOC_SECTIONS` by section id. |
+| `website/src/explorer-main.ts:764` | Builds the docs sidebar from `DOC_SECTIONS`. |
+| `website/src/explorer-main.ts:783` | Documents the static-content XSS assumption for embedded docs. |
+| `website/src/explorer-main.ts:898` | Hides search and widens the explorer container for docs/blog routes. |
+| `website/src/explorer-main.ts:913` | Dispatches parsed routes to live views, docs, or blog renderers. |
 | `website/src/explorer-docs.ts:16` | Registers all docs sections and their sidebar child anchors. |
 | `website/src/explorer-docs-helpers.ts:5` | Defines `DocSection`, the registry shape used by `DOC_SECTIONS`. |
 | `website/src/explorer-docs-helpers.ts:13` | Provides shared docs HTML helpers such as `docCode`, `docJson`, `docSteps`, `docH2`, `docH3`, and `docP`. |

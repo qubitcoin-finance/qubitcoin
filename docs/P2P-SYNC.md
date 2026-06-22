@@ -30,7 +30,7 @@ A fresh node starts with only a hardcoded set of seed addresses (or a snapshot-d
 
 ## The handshake
 
-When a TCP connection opens, `createPeer` (`server.ts:380`) constructs a `Peer` and starts a 10s `HANDSHAKE_TIMEOUT_MS` timer. The outbound side calls `sendVersion` (`server.ts:497`) immediately; the inbound side replies with its own version inside `handleVersion`.
+When a TCP connection opens, `createPeer` (`server.ts:335`) constructs a `Peer` and starts a 10s `HANDSHAKE_TIMEOUT_MS` timer. The outbound side calls `sendVersion` (`server.ts:452`) immediately; the inbound side replies with its own version inside `handleVersion`.
 
 `handleVersion` (`server.ts:509`) is the gate. It rejects, with escalating misbehavior penalties, any peer whose payload fails validation: non-integer/negative `height` (+25), malformed `genesisHash` (+25, must pass `isValidHash`), bad `version` (+25), oversized `userAgent` (+10), out-of-range `listenPort` (+10), or non-hex `cumulativeWork` (+10).
 
