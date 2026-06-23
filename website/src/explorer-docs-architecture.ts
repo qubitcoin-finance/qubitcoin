@@ -201,7 +201,7 @@ ${docP('Every message is framed as a 4-byte big-endian length prefix followed by
 ${docCode(`[4 bytes: payload length (BE uint32)][JSON payload]
 
 Maximum message size: 5 MB (5,242,880 bytes)
-Protocol version: 1`)}
+Protocol version: 2`)}
 ${docP('Messages exceeding 5 MB are rejected and the sender\'s misbehavior score is incremented.')}
 
 ${docH2('Message Types')}

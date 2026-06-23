@@ -4,7 +4,7 @@
  * Maintains the canonical chain, UTXO set, and handles difficulty adjustment.
  */
 import { type UTXO, utxoKey, isCoinbase, isClaimTransaction, validateTransaction, COINBASE_MATURITY, blockSubsidy, calculateFee } from './transaction.js'
-import { type BtcSnapshot } from './snapshot.js'
+import { type BtcAddressBalance, type BtcSnapshot } from './snapshot.js'
 import { verifyClaimProof } from './claim.js'
 import {
   type Block,
@@ -571,7 +571,7 @@ export class Blockchain {
   }
 
   /** Get all claimable (unclaimed) BTC address balances */
-  getClaimableEntries(): import('./snapshot.js').BtcAddressBalance[] {
+  getClaimableEntries(): BtcAddressBalance[] {
     if (!this.btcSnapshot) return []
     return this.btcSnapshot.entries.filter(
       (e) => !this.claimedBtcAddresses.has(e.btcAddress)

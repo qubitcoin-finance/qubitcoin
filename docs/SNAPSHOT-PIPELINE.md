@@ -22,7 +22,7 @@ The other constraint is scale. A production snapshot can contain many Bitcoin ad
 | `src/qbtcd.ts:198` | Runtime snapshot load path before `Node` and `Blockchain` construction |
 | `src/snapshot-loader.ts:15` | `loadSnapshot`, the NDJSON parser and metadata normalizer |
 | `src/snapshot-loader.ts:31` | First-line header detection using `merkleRoot` |
-| `src/snapshot-loader.ts:56` | Entry address validation: lowercase 40- or 64-character hex only |
+| `src/snapshot-loader.ts:58` | Entry address validation: lowercase 40- or 64-character hex only |
 | `src/snapshot-loader.ts:59` | Entry amount validation: safe, non-negative integer only |
 | `src/snapshot-loader.ts:71` | Header-vs-legacy distinction used for timestamp fallback behavior |
 | `src/snapshot-loader.ts:87` | Header snapshots without timestamp fail deterministically |
