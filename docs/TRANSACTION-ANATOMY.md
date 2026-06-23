@@ -66,7 +66,7 @@ inputs(outpoints) + outputs + timestamp [+ claim] [+ height]
 
 ## Invariants and edge cases
 
-- **Maturity needs height context.** Coinbase/claim maturity is only enforced when `currentHeight` is supplied. The mempool passes `currentHeight` (`src/mempool.ts:119`), and block validation passes `block.height` (`src/block.ts:437`); `chain.ts:408` omits it only during full-chain revalidation — do not assume an undefined `currentHeight` means "mature."
+- **Maturity needs height context.** Coinbase/claim maturity is only enforced when `currentHeight` is supplied. The mempool passes `currentHeight` (`src/mempool.ts:119`), and block validation passes `block.height` (`src/block.ts:437`); `src/chain.ts:417` omits it only during full-chain revalidation — do not assume an undefined `currentHeight` means "mature."
 - **Signature covers outputs, not the public key.** Since the pubkey is excluded from the sighash, the address-match check (`deriveAddress(input.publicKey) === utxo.address`) is what binds the signing key to the spent coin; without it a valid signature from any key would pass step 4. Both checks are required.
 - **Dust folding changes the fee.** Because `createTransaction` drops sub-dust change into the fee, the actual fee paid can exceed the `fee` argument. Fee-density ordering in the mempool reflects the real on-chain difference, not the requested value.
 - **`uint64LE` tops out at `Number.MAX_SAFE_INTEGER`.** Amounts are plain JS numbers; `MAX_MONEY` (2.1e15) stays well inside safe-integer range, which is why every output amount is range-checked against it.

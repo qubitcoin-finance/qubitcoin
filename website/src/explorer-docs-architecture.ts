@@ -51,7 +51,7 @@ ${docP('All ongoing transaction signatures use <span class="text-qubit-400 font-
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Public key</td><td class="py-2 font-mono text-qubit-300">1,952 bytes</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Secret key</td><td class="py-2 font-mono text-qubit-300">4,032 bytes</td></tr>
     <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Signature</td><td class="py-2 font-mono text-qubit-300">3,309 bytes</td></tr>
-    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Security level</td><td class="py-2 font-mono text-entropy-cyan">NIST Level 3 (128-bit quantum)</td></tr>
+    <tr class="border-b border-border"><td class="py-2 pr-4 text-text-muted">Security level</td><td class="py-2 font-mono text-entropy-cyan">NIST Level 3 (≈ AES-192 category)</td></tr>
     <tr class="border-b border-border last:border-0"><td class="py-2 pr-4 text-text-muted">Address derivation</td><td class="py-2 font-mono text-qubit-300">SHA-256(publicKey) → 64-char hex</td></tr>
   </tbody>
 </table>
