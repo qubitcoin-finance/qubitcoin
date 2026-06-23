@@ -16,7 +16,7 @@ The fragile part is not business logic, but the boundary behavior. Hashes and ad
 
 | Anchor | Role |
 |---|---|
-| `src/rpc.ts:43` | `startRpcServer`, the single Express app factory for all RPC routes |
+| `src/rpc.ts:49` | `startRpcServer`, the single Express app factory for all RPC routes |
 | `src/rpc.ts:52` | `app.set('trust proxy', trustProxy)` applies parsed proxy trust before rate limiting |
 | `src/rpc.ts:68` | CORS policy: permissive only when bound to `127.0.0.1` |
 | `src/rpc.ts:69` | Per-method rate limiter middleware, POST bucket separated from all other methods |
