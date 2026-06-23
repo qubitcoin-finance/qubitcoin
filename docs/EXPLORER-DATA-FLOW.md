@@ -11,9 +11,9 @@ The explorer is a vanilla TypeScript app. `website/src/explorer-main.ts` drives 
 | `website/src/explorer-api.ts` | — | TypeScript interfaces for every API response shape |
 | `website/src/explorer-api.ts` | — | `API = '/api/v1'`, `ApiResult<T>`, `apiFull<T>`, `api<T>` — fetch helpers |
 | `website/src/explorer-api.ts` | — | Named fetch shortcuts (`fetchStatus`, `fetchBlocks`, …) |
-| `website/src/explorer-main.ts` | 46–66 | `Route` union type + `parseRoute()` — hash router |
-| `website/src/explorer-main.ts` | 74–88 | `isExplorerRoute()`, `showExplorer()`, `showLanding()` |
-| `website/src/explorer-main.ts` | 90–132 | `renderError()`, `renderLoading()` — UI chrome |
+| `website/src/explorer-main.ts` | 48–69 | `Route` union type + `parseRoute()` — hash router |
+| `website/src/explorer-main.ts` | 92–106 | `isExplorerRoute()`, `showExplorer()`, `showLanding()` |
+| `website/src/explorer-main.ts` | 108–150 | `renderError()`, `renderLoading()` — UI chrome |
 | `website/src/explorer-main.ts` | 136–230 | `renderDashboard()` — main overview page |
 | `website/src/explorer-main.ts` | 234–337 | `renderBlock()` — block detail view |
 | `website/src/explorer-main.ts` | 341–481 | `renderTx()` — transaction detail view |

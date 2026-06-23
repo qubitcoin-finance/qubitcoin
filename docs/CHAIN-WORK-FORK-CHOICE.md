@@ -14,9 +14,9 @@ Cumulative work is also a cheap abuse signal during sync. A peer advertises its 
 |--------|------|
 | `src/block.ts:159` | `blockWork(target)` — converts a difficulty target into a work quantity |
 | `src/block.ts:154` | `hashMeetsTarget(hash, target)` — the PoW predicate (`hash < target`) |
-| `src/chain.ts:58` | `Blockchain.cumulativeWork: bigint` — running total of accepted work |
-| `src/chain.ts:142` | `addBlock` — appends a block to the active chain |
-| `src/chain.ts:189` | adds `blockWork(block.header.target)` on a successful append |
+| `src/chain.ts:67` | `Blockchain.cumulativeWork: bigint` — running total of accepted work |
+| `src/chain.ts:151` | `addBlock` — appends a block to the active chain |
+| `src/chain.ts:198` | adds `blockWork(block.header.target)` on a successful append |
 | `src/chain.ts:611` | `BlockUndo.blockWork` — per-block work captured for undo |
 | `src/chain.ts:727` | subtracts `undo.blockWork` when a block is disconnected |
 | `src/chain.ts:78` | recomputes `cumulativeWork` while replaying persisted blocks at startup |

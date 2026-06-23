@@ -42,9 +42,9 @@ The page is narrower than the CLI. It derives and signs compressed single-key ke
 | `website/src/explorer-claim.ts:349` | Download button writes a `qbtc-claim-<prefix>.json` file. |
 | `website/src/explorer-claim.ts:369` | `extractImportedTransaction` unwraps `{ transaction, qbtcWallet }` exports before broadcast. |
 | `website/src/claim-browser.ts:54` | `detectCredentialFormat` classifies hex private keys, WIF keys, and BIP39 seed phrases. |
-| `website/src/claim-browser.ts:62` | `generateQbtcWallet` creates an ML-DSA-65 destination wallet in the browser. |
-| `website/src/claim-browser.ts:79` | `makeAddressOnlyWallet` validates an existing 64-character QBTC destination address. |
-| `website/src/claim-browser.ts:90` | `deriveClaimCandidates` expands the BTC credential into possible snapshot address keys. |
+| `website/src/claim-browser.ts:65` | `generateQbtcWallet` creates an ML-DSA-65 destination wallet in the browser. |
+| `website/src/claim-browser.ts:82` | `makeAddressOnlyWallet` validates an existing 64-character QBTC destination address. |
+| `website/src/claim-browser.ts:93` | `deriveClaimCandidates` expands the BTC credential into possible snapshot address keys. |
 | `website/src/claim-browser.ts:97` | `selectMatchingCandidate` rejects credentials that do not derive the looked-up snapshot key. |
 | `website/src/claim-browser.ts:105` | `createBrowserClaimTransaction` builds the claim transaction sent to `/api/v1/tx`. |
 | `website/src/claim-browser.ts:160` | `deriveSeedCandidates` checks BIP39 and derives fixed BIP44/BIP49/BIP84/BIP86 paths. |
