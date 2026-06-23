@@ -20,7 +20,7 @@ The tradeoff is that every content module returns HTML strings. The code relies 
 | `website/src/explorer-main.ts:760` | Renders one docs section by looking up `DOC_SECTIONS` by section id. |
 | `website/src/explorer-main.ts:764` | Builds the docs sidebar from `DOC_SECTIONS`. |
 | `website/src/explorer-main.ts:783` | Documents the static-content XSS assumption for embedded docs. |
-| `website/src/explorer-main.ts:898` | Hides search and widens the explorer container for docs/blog routes. |
+| `website/src/explorer-main.ts:898` | Hides search and widens the explorer container for docs/blog/claim routes. |
 | `website/src/explorer-main.ts:913` | Dispatches parsed routes to live views, docs, or blog renderers. |
 | `website/src/explorer-docs.ts:16` | Registers all docs sections and their sidebar child anchors. |
 | `website/src/explorer-docs-helpers.ts:5` | Defines `DocSection`, the registry shape used by `DOC_SECTIONS`. |
@@ -144,7 +144,7 @@ An unknown docs section falls back to the first docs section. An unknown blog sl
 
 ### Search Visibility
 
-Docs and blog routes hide the explorer search bar. Search remains focused on chain objects: blocks, transactions, and addresses. Static docs/blog content is navigated through the docs sidebar, blog archive, direct hash links, and normal in-page anchors.
+Docs, blog, and claim routes hide the explorer search bar. Search remains focused on chain objects: blocks, transactions, and addresses. Static docs/blog content is navigated through the docs sidebar, blog archive, direct hash links, and normal in-page anchors.
 
 ### Build-Time Content
 

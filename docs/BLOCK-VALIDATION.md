@@ -11,7 +11,7 @@ A block arriving from a peer, the miner, or chain replay on startup is untrusted
 | Symbol | Location | Role |
 |--------|----------|------|
 | `validateBlock` | `src/block.ts:310` | Structural + per-tx consensus checks, ordered cheap→expensive |
-| `Blockchain.addBlock` | `src/chain.ts:142` | Contextual gate: target match, calls `validateBlock`, claim proofs, apply, retarget |
+| `Blockchain.addBlock` | `src/chain.ts:151` | Contextual gate: target match, calls `validateBlock`, claim proofs, apply, retarget |
 | `hashMeetsTarget` | `src/block.ts:154` | `BigInt(hash) < BigInt(target)` PoW predicate |
 | `computeBlockHash` | `src/block.ts:149` | `doubleSha256` of the 112-byte serialized header |
 | `computeMerkleRoot` | `src/block.ts:115` | Bitcoin-style merkle, duplicates last leaf if odd |
@@ -28,14 +28,14 @@ A block arriving from a peer, the miner, or chain replay on startup is untrusted
 
 ```text
 addBlock(block)
-  ├─ target == this.difficulty ?            (chain.ts:146)  ── "Block target mismatch"
-  ├─ validateBlock(...)                      (chain.ts:154)  ── ordered checks below
-  ├─ for each claim tx: verifyClaimProof     (chain.ts:159)  ── ECDSA + snapshot + double-claim
-  ├─ applyBlock(block) → push undo journal   (chain.ts:180)
-  ├─ cumulativeWork += blockWork(target)     (chain.ts:189)
-  ├─ blocks.push / blocksByHash.set          (chain.ts:192)
-  ├─ every Nth block: difficulty = adjust()  (chain.ts:196)
-  └─ persist block + metadata                (chain.ts:201)
+  ├─ target == this.difficulty ?            (chain.ts:154)  ── "Block target mismatch"
+  ├─ validateBlock(...)                      (chain.ts:163)  ── ordered checks below
+  ├─ for each claim tx: verifyClaimProof     (chain.ts:168)  ── ECDSA + snapshot + double-claim
+  ├─ applyBlock(block) → push undo journal   (chain.ts:188)
+  ├─ cumulativeWork += blockWork(target)     (chain.ts:197)
+  ├─ blocks.push / blocksByHash.set          (chain.ts:200)
+  ├─ every Nth block: difficulty = adjust()  (chain.ts:204)
+  └─ persist block + metadata                (chain.ts:209)
 ```
 
 ## Ordering inside validateBlock

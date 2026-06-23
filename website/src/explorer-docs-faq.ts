@@ -81,7 +81,7 @@ ${docFaqItem('My claim was rejected',
 ${docFaqItem('Snapshot download fails or is slow',
   'The snapshot is ~3.6 GB. Download it manually with <span class="font-mono text-xs text-qubit-400">curl -L -o ~/qbtc-snapshot.jsonl https://qubitcoin.finance/snapshot/qbtc-snapshot.jsonl</span> and pass it with <span class="font-mono text-xs text-qubit-400">--snapshot ~/qbtc-snapshot.jsonl</span>.')}
 ${docFaqItem('Node uses too much memory',
-  'The snapshot loads into memory (~4-6 GB for 54M entries). Use <span class="font-mono text-xs text-qubit-400">--max-old-space-size=12288</span> with Node.js if you have enough RAM. Without a snapshot (local dev mode), memory usage is minimal.')}
+  'The snapshot loads into memory (~4-6 GB for 58M entries). Use <span class="font-mono text-xs text-qubit-400">--max-old-space-size=12288</span> with Node.js if you have enough RAM. Without a snapshot (local dev mode), memory usage is minimal.')}
 ${docFaqItem('"Blocks failed replay" on startup',
   'This means stored blocks don\'t validate against current consensus rules. Usually caused by changing consensus parameters (<span class="font-mono text-xs text-qubit-400">STARTING_DIFFICULTY</span>, <span class="font-mono text-xs text-qubit-400">TARGET_BLOCK_TIME_MS</span>, <span class="font-mono text-xs text-qubit-400">DIFFICULTY_ADJUSTMENT_INTERVAL</span>) or using a different snapshot. Delete <span class="font-mono text-xs text-qubit-400">{datadir}/blocks.jsonl</span> and <span class="font-mono text-xs text-qubit-400">metadata.json</span> to start fresh.')}
 </div>`;
