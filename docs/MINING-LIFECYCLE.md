@@ -22,7 +22,7 @@ A naive miner runs a tight `while` loop incrementing a nonce until the block has
 | `Node.startMining` | `src/node.ts:108` | Continuous async mining loop |
 | `Node.receiveBlock` | `src/node.ts:89` | Aborts current round on a peer block |
 | `Node.stopMining` | `src/node.ts:153` | Clears `mining`, aborts, drops stats |
-| `Blockchain.adjustDifficulty` | `src/chain.ts:270` | Retarget every interval, clamped 4× |
+| `Blockchain.adjustDifficulty` | `src/chain.ts:279` | Retarget every interval, clamped 4× |
 | `computeBlockHash` / `hashMeetsTarget` | `src/block.ts:149` / `:154` | Double-SHA256 header hash, `hash < target` test |
 | `blockSubsidy` | `src/transaction.ts:91` | Halving subsidy schedule |
 

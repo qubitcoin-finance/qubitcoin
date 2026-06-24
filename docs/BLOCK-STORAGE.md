@@ -61,7 +61,7 @@ Every hex→bytes conversion on the inbound path goes through `safeHexToBytes` (
 
 ### Metadata vs. authoritative state
 
-`metadata.json` holds `{ height, difficulty, genesisHash }` and is written via `saveMetadata` whenever the tip changes. It is a convenience header, **not** authoritative. On startup `Blockchain` replays every block from `blocks.jsonl`, recomputing cumulative work and re-deriving difficulty from block timestamps (`src/chain.ts:79-92`) rather than trusting the stored `difficulty`. The comment at `src/chain.ts:90` is explicit: difficulty is always recomputed so all nodes converge deterministically. A corrupt or stale `metadata.json` therefore cannot fork the chain; `loadMetadata` returns `null` on parse failure and the node proceeds.
+`metadata.json` holds `{ height, difficulty, genesisHash }` and is written via `saveMetadata` whenever the tip changes. It is a convenience header, **not** authoritative. On startup `Blockchain` replays every block from `blocks.jsonl`, recomputing cumulative work and re-deriving difficulty from block timestamps (`src/chain.ts:79-94`) rather than trusting the stored `difficulty`, so all nodes converge deterministically. A corrupt or stale `metadata.json` therefore cannot fork the chain; `loadMetadata` returns `null` on parse failure and the node proceeds.
 
 ## Invariants and edge cases
 

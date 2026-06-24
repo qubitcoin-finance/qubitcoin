@@ -25,7 +25,7 @@ The tricky part is not that `Node` has a lot of code; it is short. The tricky pa
 | `Node.resetToHeight` | `src/node.ts:145` | Reorg bridge: chain rollback, mempool revalidation, mining abort |
 | `Node.stopMining` | `src/node.ts:153` | Daemon shutdown hook for miner cancellation |
 | `Node.getState` | `src/node.ts:161` | Aggregated status surface used by RPC |
-| `Blockchain.constructor` | `src/chain.ts:60` | Restores persisted blocks or initializes from snapshot/genesis |
+| `Blockchain.constructor` | `src/chain.ts:69` | Restores persisted blocks or initializes from snapshot/genesis |
 | `Mempool.addTransaction` | `src/mempool.ts:62` | Admission policy invoked by `Node.receiveTransaction` |
 | `Mempool.revalidate` | `src/mempool.ts:218` | Reorg cleanup invoked by `Node.resetToHeight` |
 | `P2PServer.constructor` | `src/p2p/server.ts:99` | Installs `node.onNewBlock` and `node.onNewTransaction` broadcast hooks |

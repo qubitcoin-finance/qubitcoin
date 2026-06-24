@@ -14,7 +14,7 @@ The journal is bounded: only the last `MAX_REORG_DEPTH` (100) records are retain
 
 | Anchor | Symbol | Role |
 |--------|--------|------|
-| `src/chain.ts:30` | `BlockUndo` interface | One record per applied block — the inverse-mutation journal |
+| `src/chain.ts:38` | `BlockUndo` interface | One record per applied block — the inverse-mutation journal |
 | `src/chain.ts:28` | `MAX_REORG_DEPTH = 100` | Bound on retained undo records / fast-path depth |
 | `src/chain.ts:42` | `Blockchain.undoData` | `BlockUndo[]`; `undoData[i]` corresponds to the block at height `i+1` |
 | `src/chain.ts:58` | `Blockchain.cumulativeWork` | `bigint` total work; the reorg tiebreaker |

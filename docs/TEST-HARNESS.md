@@ -30,7 +30,7 @@ The result is not a separate test framework. It is a small set of reusable helpe
 | `src/__tests__/rpc-test-helpers.ts:13` | `listenOnLoopback` | Waits for an HTTP server and returns its bound address. |
 | `src/__tests__/rpc-test-helpers.ts:24` | `startRpcTestServer` | Starts `startRpcServer` on `127.0.0.1` with an ephemeral port. |
 | `src/__tests__/hardening-test-helpers.ts:11` | `waitFor` | Polling helper for async P2P and hardening assertions. |
-| `src/__tests__/hardening-test-helpers.ts:38` | `makeUtxoSet` | Small hardening UTXO map with configurable amount. |
+| `src/__tests__/hardening-test-helpers.ts:35` | `makeUtxoSet` | Small hardening UTXO map with configurable amount. |
 
 ## How It Works
 

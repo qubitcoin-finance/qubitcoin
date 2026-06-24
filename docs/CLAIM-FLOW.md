@@ -25,7 +25,7 @@ Two problems shape the design:
 | `getSnapshotIndex` | `src/snapshot.ts:91` | WeakMap-cached `Map<btcAddress, entry>` for O(1) lookup |
 | `CLAIM_TXID` | `src/transaction.ts:81` | 64×`'c'` sentinel input (mirrors `COINBASE_TXID`) |
 | `CLAIM_MATURITY` | `src/transaction.ts:66` | Claim outputs locked for 10 blocks |
-| `claimedBtcAddresses` | `src/chain.ts:50` | In-memory `Set` of spent BTC addresses |
+| `claimedBtcAddresses` | `src/chain.ts:58` | In-memory `Set` of spent BTC addresses |
 
 ## How it works
 

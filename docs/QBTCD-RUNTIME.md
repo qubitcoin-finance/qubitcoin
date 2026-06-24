@@ -16,7 +16,7 @@ The runtime also owns a small amount of local operator state. `dataDir` contains
 
 | Anchor | Role |
 |---|---|
-| `src/qbtcd.ts:36` | `parseArgs`, the CLI parser for flags and key/value options |
+| `src/qbtcd.ts:37` | `parseArgs`, the CLI parser for flags and key/value options |
 | `src/qbtcd.ts:83` | Parsed runtime config shape: ports, snapshot path, data dir, seeds, mining, local mode, RPC trust |
 | `src/qbtcd.ts:99` | `SNAPSHOT_URL`, the default `--full` snapshot source |
 | `src/qbtcd.ts:104` | `downloadFile`, redirect-limited snapshot downloader writing through `<dest>.tmp` |

@@ -16,7 +16,7 @@ Mining reads the same pool through `getTransactionsForBlock`, where claim transa
 
 | Anchor | Role |
 |--------|------|
-| `src/mempool.ts:16` | `MAX_MEMPOOL_BYTES`, the 50 MB byte cap for pending transactions |
+| `src/mempool.ts:17` | `MAX_MEMPOOL_BYTES`, the 50 MB byte cap for pending transactions |
 | `src/mempool.ts:20` | `MAX_CLAIM_COUNT`, the count cap for fee-free pending BTC claims |
 | `src/mempool.ts:27` | `MIN_RELAY_FEE_PER_KB`, the regular transaction relay-fee floor |
 | `src/mempool.ts:29` | `Mempool`, the in-memory transaction pool and reservation indexes |
