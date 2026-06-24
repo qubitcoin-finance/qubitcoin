@@ -17,10 +17,10 @@ Cumulative work is also a cheap abuse signal during sync. A peer advertises its 
 | `src/chain.ts:67` | `Blockchain.cumulativeWork: bigint` — running total of accepted work |
 | `src/chain.ts:151` | `addBlock` — appends a block to the active chain |
 | `src/chain.ts:198` | adds `blockWork(block.header.target)` on a successful append |
-| `src/chain.ts:611` | `BlockUndo.blockWork` — per-block work captured for undo |
-| `src/chain.ts:727` | subtracts `undo.blockWork` when a block is disconnected |
-| `src/chain.ts:78` | recomputes `cumulativeWork` while replaying persisted blocks at startup |
-| `src/chain.ts:519` | recomputes `cumulativeWork` on the slow-path full replay in `resetToHeight` |
+| `src/chain.ts:638` | `BlockUndo.blockWork` — per-block work captured for undo |
+| `src/chain.ts:756` | subtracts `undo.blockWork` when a block is disconnected |
+| `src/chain.ts:87` | recomputes `cumulativeWork` while replaying persisted blocks at startup |
+| `src/chain.ts:529` | recomputes `cumulativeWork` on the slow-path full replay in `resetToHeight` |
 | `src/chain.ts:487` | `resetToHeight(targetHeight)` — rewinds the active chain to a fork point |
 | `src/p2p/protocol.ts:58` | `cumulativeWork?` field in the `version` handshake payload |
 | `src/p2p/server.ts:459` | advertises local `cumulativeWork` in the outgoing `version` message |
@@ -38,10 +38,10 @@ The target for each block lives in `block.header.target`. Difficulty is retarget
 
 `Blockchain.cumulativeWork` is the single source of truth for the active chain's total work. It is mutated only in tandem with the block set, so it always reflects the current tip:
 
-- **Append** — `addBlock` validates the block, applies its UTXO changes, then does `cumulativeWork += blockWork(block.header.target)` (`src/chain.ts:189`).
-- **Disconnect** — when a block is rolled back during a reorg, `disconnectBlock` restores difficulty and does `cumulativeWork -= undo.blockWork` (`src/chain.ts:727`). The work value is captured in the `BlockUndo` record at apply time (`src/chain.ts:611`) so undo never has to recompute it.
-- **Startup replay** — restoring from `BlockStorage`, the genesis work is seeded and each replayed block's work is added (`src/chain.ts:78`).
-- **Full replay** — the slow path in `resetToHeight` rebuilds all in-memory indexes from genesis and re-sums work block by block (`src/chain.ts:519`).
+- **Append** — `addBlock` validates the block, applies its UTXO changes, then does `cumulativeWork += blockWork(block.header.target)` (`src/chain.ts:198`).
+- **Disconnect** — when a block is rolled back during a reorg, `disconnectBlock` restores difficulty and does `cumulativeWork -= undo.blockWork` (`src/chain.ts:756`). The work value is captured in the `BlockUndo` record at apply time (`src/chain.ts:638`) so undo never has to recompute it.
+- **Startup replay** — restoring from `BlockStorage`, the genesis work is seeded and each replayed block's work is added (`src/chain.ts:87`).
+- **Full replay** — the slow path in `resetToHeight` rebuilds all in-memory indexes from genesis and re-sums work block by block (`src/chain.ts:529`).
 
 This pairing is the core invariant: every mutation of `this.blocks` has a matching mutation of `cumulativeWork`. See [REORG-UNDO.md](./REORG-UNDO.md) for the undo journal and the fast-vs-slow reset paths that perform these adjustments.
 

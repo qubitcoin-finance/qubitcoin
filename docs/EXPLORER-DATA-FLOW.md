@@ -14,12 +14,12 @@ The explorer is a vanilla TypeScript app. `website/src/explorer-main.ts` drives 
 | `website/src/explorer-main.ts` | 48–69 | `Route` union type + `parseRoute()` — hash router |
 | `website/src/explorer-main.ts` | 92–106 | `isExplorerRoute()`, `showExplorer()`, `showLanding()` |
 | `website/src/explorer-main.ts` | 108–150 | `renderError()`, `renderLoading()` — UI chrome |
-| `website/src/explorer-main.ts` | 136–230 | `renderDashboard()` — main overview page |
-| `website/src/explorer-main.ts` | 234–337 | `renderBlock()` — block detail view |
-| `website/src/explorer-main.ts` | 341–481 | `renderTx()` — transaction detail view |
-| `website/src/explorer-main.ts` | 485–548 | `renderAddress()` — address balance + UTXOs |
-| `website/src/explorer-main.ts` | 734–765 | `setupSearch()` — search-bar disambiguation |
-| `website/src/explorer-main.ts` | 771–833 | `dispatch()` — central router; `hashchange` + init |
+| `website/src/explorer-main.ts` | 229–340 | `renderDashboard()` — main overview page |
+| `website/src/explorer-main.ts` | 344–447 | `renderBlock()` — block detail view |
+| `website/src/explorer-main.ts` | 451–591 | `renderTx()` — transaction detail view |
+| `website/src/explorer-main.ts` | 595–659 | `renderAddress()` — address balance + UTXOs |
+| `website/src/explorer-main.ts` | 847–875 | `setupSearch()` — search-bar disambiguation |
+| `website/src/explorer-main.ts` | 881–945 | `dispatch()` — central router; `hashchange` + init |
 | `website/index.html` | — | Landing page and explorer shell (id=`landing-content`, id=`explorer-main`, id=`explorer-content`) |
 | `website/vite.config.ts` | — | Single-page build for `index.html` |
 
@@ -41,9 +41,9 @@ URL hash              parseRoute() result
 #/blog/<slug>         { view: 'blog', slug }
 ```
 
-`parseRoute()` at `explorer-main.ts:55` slices `location.hash` after `#/`, splits on `/`, and matches the first segment. Unknown segments fall through to `{ view: 'dashboard' }`.
+`parseRoute()` at `explorer-main.ts:58` slices `location.hash` after `#/`, splits on `/`, and matches the first segment. Unknown segments fall through to `{ view: 'dashboard' }`.
 
-`dispatch()` at `explorer-main.ts:771` is called on page load and on every `hashchange` event. It:
+`dispatch()` at `explorer-main.ts:881` is called on page load and on every `hashchange` event. It:
 
 1. Clears any running `refreshTimer` (dashboard auto-refresh).
 2. Calls `isExplorerRoute()` — returns `false` only for `#/` or an empty hash. When false, `showLanding()` is called and dispatch returns immediately.
@@ -107,23 +107,23 @@ Key shapes:
 
 Each render function is `async`, fetches its own data, and writes to `root.innerHTML` (the `#explorer-content` div inside `index.html`).
 
-### `renderDashboard()` (`explorer-main.ts:136`)
+### `renderDashboard()` (`explorer-main.ts:229`)
 
-Fires four parallel fetches: `fetchStatus()`, `fetchBlocks(10)`, `fetchMempoolStats()`, `fetchClaimStats()`. Renders the stats card grid, the BTC snapshot eligibility lookup (`fetchSnapshotAddress()` on form submit), the block strip (`renderBlockStrip()`), and up to 8 recent mempool transactions.
+Fires five parallel fetches: `fetchStatus()`, `fetchBlocks(10)`, `fetchMempoolStats()`, `fetchClaimStats()`, and `fetchMempoolTxs(8)`. Renders the stats card grid, the BTC snapshot eligibility lookup (`fetchSnapshotAddress()` on form submit), the block strip (`renderBlockStrip()`), and up to 8 recent mempool transactions.
 
-### `renderBlock(hash)` (`explorer-main.ts:234`)
+### `renderBlock(hash)` (`explorer-main.ts:344`)
 
 Fetches `/api/v1/block/:hash`. If the hash is 64-hex but the block API returns null, attempts `/api/v1/tx/:hash` and redirects to the tx view. Renders block header fields, then a transaction list with type badges.
 
-### `renderTx(txid)` (`explorer-main.ts:341`)
+### `renderTx(txid)` (`explorer-main.ts:451`)
 
 Fetches `/api/v1/tx/:txid`. For each non-coinbase, non-claim input, it then batches secondary `fetchTx(inp.txId)` calls with `Promise.all` to resolve source output amounts. Renders inputs, outputs, claim data if present, and confirmation status.
 
-### `renderAddress(addr)` (`explorer-main.ts:485`)
+### `renderAddress(addr)` (`explorer-main.ts:595`)
 
 Fires `fetchBalance(addr)` and `fetchUtxos(addr)` in parallel. Renders the balance summary and a UTXO list. Empty UTXO list with non-zero balance is possible while UTXOs are still being indexed on a fresh node.
 
-## Search Disambiguation (`setupSearch`, `explorer-main.ts:734`)
+## Search Disambiguation (`setupSearch`, `explorer-main.ts:844`)
 
 On Enter keypress, the search bar applies this heuristic:
 
@@ -155,8 +155,8 @@ A set of pure functions formats display values without touching the DOM:
 
 The docs and blog views are self-contained within the module:
 
-- `renderDocs(section?)` (`explorer-main.ts:650`) — renders one of ten doc sections defined in `DOC_SECTIONS` by matching `section` against their `id` field. Falls back to the overview when `section` is undefined.
-- `renderBlogList()` / `renderBlogPost(slug)` (`explorer-main.ts:553`, `613`) — renders the blog index or a single post. Blog posts are imported as TypeScript modules from `website/src/blog/`.
+- `renderDocs(section?)` (`explorer-main.ts:760`) — renders one of ten doc sections defined in `DOC_SECTIONS` by matching `section` against their `id` field. Falls back to the overview when `section` is undefined.
+- `renderBlogList()` / `renderBlogPost(slug)` (`explorer-main.ts:663`, `723`) — renders the blog index or a single post. Blog posts are imported as TypeScript modules from `website/src/blog/`.
 
 Neither view makes network requests; all content is bundled at build time.
 

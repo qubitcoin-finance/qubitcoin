@@ -17,26 +17,26 @@ The fragile part is not business logic, but the boundary behavior. Hashes and ad
 | Anchor | Role |
 |---|---|
 | `src/rpc.ts:49` | `startRpcServer`, the single Express app factory for all RPC routes |
-| `src/rpc.ts:52` | `app.set('trust proxy', trustProxy)` applies parsed proxy trust before rate limiting |
-| `src/rpc.ts:68` | CORS policy: permissive only when bound to `127.0.0.1` |
-| `src/rpc.ts:69` | Per-method rate limiter middleware, POST bucket separated from all other methods |
-| `src/rpc.ts:73` | JSON body parser with `MAX_BODY_SIZE = '1mb'` |
-| `src/rpc.ts:76` | `GET /api/v1/status` |
-| `src/rpc.ts:83` | `GET /api/v1/block/:hash` |
-| `src/rpc.ts:98` | `GET /api/v1/block-by-height/:height` |
-| `src/rpc.ts:116` | `GET /api/v1/blocks` |
-| `src/rpc.ts:130` | `GET /api/v1/tx/:txid` |
-| `src/rpc.ts:161` | `POST /api/v1/tx` |
-| `src/rpc.ts:178` | `GET /api/v1/mempool/txs` |
-| `src/rpc.ts:191` | `GET /api/v1/mempool/stats` |
-| `src/rpc.ts:198` | `GET /api/v1/address/:address/balance` |
-| `src/rpc.ts:209` | `GET /api/v1/address/:address/utxos` |
-| `src/rpc.ts:220` | `GET /api/v1/claims/stats` |
-| `src/rpc.ts:225` | `GET /api/v1/snapshot/address/:btcAddress` |
-| `src/rpc.ts:240` | `GET /api/v1/difficulty` |
-| `src/rpc.ts:251` | `GET /api/v1/peers` |
-| `src/rpc.ts:261` | API-scoped JSON 404 handler |
-| `src/rpc.ts:269` | JSON parse, body-size, and fallback error handler |
+| `src/rpc.ts:58` | `app.set('trust proxy', trustProxy)` applies parsed proxy trust before rate limiting |
+| `src/rpc.ts:74` | CORS policy: permissive only when bound to `127.0.0.1` |
+| `src/rpc.ts:72` | Per-method rate limiter middleware, POST bucket separated from all other methods |
+| `src/rpc.ts:79` | JSON body parser with `MAX_BODY_SIZE = '1mb'` |
+| `src/rpc.ts:82` | `GET /api/v1/status` |
+| `src/rpc.ts:89` | `GET /api/v1/block/:hash` |
+| `src/rpc.ts:104` | `GET /api/v1/block-by-height/:height` |
+| `src/rpc.ts:122` | `GET /api/v1/blocks` |
+| `src/rpc.ts:136` | `GET /api/v1/tx/:txid` |
+| `src/rpc.ts:167` | `POST /api/v1/tx` |
+| `src/rpc.ts:184` | `GET /api/v1/mempool/txs` |
+| `src/rpc.ts:197` | `GET /api/v1/mempool/stats` |
+| `src/rpc.ts:204` | `GET /api/v1/address/:address/balance` |
+| `src/rpc.ts:215` | `GET /api/v1/address/:address/utxos` |
+| `src/rpc.ts:226` | `GET /api/v1/claims/stats` |
+| `src/rpc.ts:231` | `GET /api/v1/snapshot/address/:btcAddress` |
+| `src/rpc.ts:246` | `GET /api/v1/difficulty` |
+| `src/rpc.ts:272` | `GET /api/v1/peers` |
+| `src/rpc.ts:282` | API-scoped JSON 404 handler |
+| `src/rpc.ts:290` | JSON parse, body-size, and fallback error handler |
 | `src/rpc-mempool.ts:14` | `summarizeMempoolTransaction`, lightweight mempool response mapper |
 | `src/rpc-rate-limit.ts:18` | `createRateLimiter`, in-memory sliding-window limiter |
 | `src/rpc-trust-proxy.ts:5` | `parseRpcTrustProxy`, CLI value parser used before server startup |
