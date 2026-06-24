@@ -47,7 +47,7 @@ A maintainer changing any one of those paths needs to preserve the contract betw
 | `website/src/style.css:98` | `.reveal` transition state consumed by `main.ts`. |
 | `website/vite.config.ts:5` | Vite config with Tailwind plugin and single HTML input. |
 | `website/playwright.config.ts:3` | Visual viewport matrix for website screenshots. |
-| `website/e2e/visual.spec.ts:70` | Screenshot route list, including `landing`. |
+| `website/e2e/visual.spec.ts:73` | Screenshot route list, including `landing`. |
 
 ## How It Works
 

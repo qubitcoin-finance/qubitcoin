@@ -14,9 +14,9 @@ QubitCoin keeps three derived indexes in memory so all of these are O(1) (or O(U
 
 | Symbol | Location | Role |
 |---|---|---|
-| `utxoSet` | `src/chain.ts:43` | `Map<utxoKey, UTXO>` — the live unspent-output set |
-| `utxosByAddress` | `src/chain.ts:45` | `Map<address, Set<utxoKey>>` — reverse index for balance/coin-selection |
-| `transactionIndex` | `src/chain.ts:47` | `Map<txId, Block>` — txid → containing block |
+| `utxoSet` | `src/chain.ts:51` | `Map<utxoKey, UTXO>` — the live unspent-output set |
+| `utxosByAddress` | `src/chain.ts:53` | `Map<address, Set<utxoKey>>` — reverse index for balance/coin-selection |
+| `transactionIndex` | `src/chain.ts:55` | `Map<txId, Block>` — txid → containing block |
 | `utxoKey(txId, i)` | `src/transaction.ts:99` | builds the `"${txId}:${i}"` map key |
 | `getBalance(address)` | `src/chain.ts:214` | sums amounts of an address's UTXOs |
 | `findUTXOs(address, amount?)` | `src/chain.ts:226` | returns UTXOs, optionally stopping once `amount` is covered |

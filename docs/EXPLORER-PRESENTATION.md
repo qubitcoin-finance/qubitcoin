@@ -37,9 +37,9 @@ Third, every route parameter and many RPC fields are eventually interpolated int
 | `website/src/explorer-format.ts:179` | `hashLink`, escaped hash/address link builder for hash routes. |
 | `website/src/explorer-format.ts:184` | `renderBlockStrip`, dashboard block-strip renderer. |
 | `website/src/explorer-format.ts:219` | `card`, shared dashboard stat card renderer. |
-| `website/src/explorer-main.ts:136` | `renderDashboard`, primary consumer of cards, ETA, difficulty, block strip, and mempool amount labels. |
-| `website/src/explorer-main.ts:234` | `renderBlock`, block detail view that applies transaction type and amount helpers. |
-| `website/src/explorer-main.ts:341` | `renderTx`, transaction detail view that applies sender, amount, fee, status, and claim display helpers. |
+| `website/src/explorer-main.ts:229` | `renderDashboard`, primary consumer of cards, ETA, difficulty, block strip, and mempool amount labels. |
+| `website/src/explorer-main.ts:344` | `renderBlock`, block detail view that applies transaction type and amount helpers. |
+| `website/src/explorer-main.ts:451` | `renderTx`, transaction detail view that applies sender, amount, fee, status, and claim display helpers. |
 | `website/src/explorer-main.ts:485` | `renderAddress`, address detail view that applies amount and link helpers to UTXOs. |
 | `website/src/explorer-docs-api.ts:5` | API docs import of `methodBadge`, showing presentation helpers are shared by static docs too. |
 | `website/e2e/xss-prevention.spec.ts:118` | Browser test coverage for escaped route-derived address rendering. |

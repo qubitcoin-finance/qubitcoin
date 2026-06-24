@@ -31,9 +31,9 @@ The suite also makes visual review reproducible. `website/playwright.config.ts` 
 | `website/vite.config.ts:14` | Dev-server `/api` proxy to `API_URL` or `https://qubitcoin.finance`. |
 | `website/e2e/fixtures/api-responses.json:1` | Shared deterministic API fixture payloads for status, blocks, txs, mempool, claims, and address views. |
 | `website/e2e/visual.spec.ts:16` | `mockApi`, the route interceptor used by screenshot tests. |
-| `website/e2e/visual.spec.ts:53` | `stabilize`, which disables animations and reveal transforms before screenshots. |
-| `website/e2e/visual.spec.ts:70` | Screenshot route matrix: landing, dashboard, block, tx, address, docs, and API docs. |
-| `website/e2e/visual.spec.ts:91` | Screenshot path convention: `tmp/screenshots/<viewport>/<route>.png`. |
+| `website/e2e/visual.spec.ts:56` | `stabilize`, which disables animations and reveal transforms before screenshots. |
+| `website/e2e/visual.spec.ts:73` | Screenshot route matrix: landing, dashboard, block, tx, address, docs, and API docs. |
+| `website/e2e/visual.spec.ts:97` | Screenshot path convention: `tmp/screenshots/<viewport>/<route>.png`. |
 | `website/e2e/api-error-handling.spec.ts:16` | Success fixture interceptor for baseline browser tests. |
 | `website/e2e/api-error-handling.spec.ts:51` | Network-error interceptor using `route.abort('connectionrefused')`. |
 | `website/e2e/api-error-handling.spec.ts:89` | Address-view API error coverage. |

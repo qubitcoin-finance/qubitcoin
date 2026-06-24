@@ -17,7 +17,7 @@ A block arriving from a peer, the miner, or chain replay on startup is untrusted
 | `computeMerkleRoot` | `src/block.ts:115` | Bitcoin-style merkle, duplicates last leaf if odd |
 | `medianTimestamp` | `src/block.ts:302` | Median of last 11 block timestamps (MTP) |
 | `blockSize` / `transactionSize` | `src/block.ts:103` / `:83` | Byte-size estimate gating `MAX_BLOCK_SIZE` |
-| `adjustDifficulty` | `src/chain.ts:270` | Retarget every `DIFFICULTY_ADJUSTMENT_INTERVAL` blocks |
+| `adjustDifficulty` | `src/chain.ts:279` | Retarget every `DIFFICULTY_ADJUSTMENT_INTERVAL` blocks |
 | `blockWork` | `src/block.ts:159` | `2^256 / (target + 1)`, summed into `cumulativeWork` |
 
 ## The two layers
@@ -102,7 +102,7 @@ newTarget    = currentTarget × ratio        (clamped to ≤ STARTING_DIFFICULTY
 
 The `N − 1` gap count matters: 10 blocks span 9 inter-block intervals, so dividing by `N` instead of `N−1` would bias difficulty permanently. A larger ratio means blocks came slowly, so the target grows (easier); a smaller ratio shrinks it (harder). The 0.25–4.0 clamp mirrors Bitcoin and bounds how fast difficulty can swing in one retarget. `STARTING_DIFFICULTY` is the easiest the live chain will ever go.
 
-The same retarget is re-derived during chain replay on startup and after a `resetToHeight` rebuild (`chain.ts:85`, `:197`, `:525`), so persisted chains converge to the identical `difficulty` value without storing every historical target.
+The same retarget is re-derived during chain replay on startup and after a `resetToHeight` rebuild (`chain.ts:94`, `:206`, `:535`), so persisted chains converge to the identical `difficulty` value without storing every historical target.
 
 ## Invariants and edge cases
 

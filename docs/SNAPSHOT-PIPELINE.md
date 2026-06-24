@@ -33,10 +33,10 @@ The other constraint is scale. A production snapshot can contain many Bitcoin ad
 | `src/snapshot.ts:91` | `getSnapshotIndex`, the WeakMap-cached snapshot index builder |
 | `src/block.ts:229` | `createForkGenesisBlock`, the deterministic genesis constructor for snapshot-backed nodes |
 | `src/block.ts:242` | Fork-genesis commitment string embedded into the genesis coinbase input |
-| `src/chain.ts:60` | `Blockchain` constructor stores snapshot totals and builds the lookup index |
+| `src/chain.ts:69` | `Blockchain` constructor stores snapshot totals and builds the lookup index |
 | `src/claim.ts:312` | `verifyClaimProof`, the claim validator that uses the cached snapshot index |
-| `src/chain.ts:549` | `getClaimableEntries`, the remaining-unclaimed listing path |
-| `src/chain.ts:563` | `getClaimStats`, O(1) aggregate claim counters for RPC status |
+| `src/chain.ts:574` | `getClaimableEntries`, the remaining-unclaimed listing path |
+| `src/chain.ts:588` | `getClaimStats`, O(1) aggregate claim counters for RPC status |
 
 ## Snapshot File Shape
 
