@@ -21,7 +21,7 @@ Cumulative work is also a cheap abuse signal during sync. A peer advertises its 
 | `src/chain.ts:756` | subtracts `undo.blockWork` when a block is disconnected |
 | `src/chain.ts:87` | recomputes `cumulativeWork` while replaying persisted blocks at startup |
 | `src/chain.ts:529` | recomputes `cumulativeWork` on the slow-path full replay in `resetToHeight` |
-| `src/chain.ts:487` | `resetToHeight(targetHeight)` — rewinds the active chain to a fork point |
+| `src/chain.ts:496` | `resetToHeight(targetHeight)` — rewinds the active chain to a fork point |
 | `src/p2p/protocol.ts:58` | `cumulativeWork?` field in the `version` handshake payload |
 | `src/p2p/server.ts:459` | advertises local `cumulativeWork` in the outgoing `version` message |
 | `src/p2p/server.ts:540` | parses and stores `peer.remoteCumulativeWork` from a peer's `version` |
@@ -61,7 +61,7 @@ peer advertised remoteCumulativeWork in version handshake?
                        effectivePeerHeight <= chain.getHeight() ? stop : reorg
 ```
 
-When a reorg is warranted, the node calls `resetToHeight(forkPoint)` (`src/p2p/server.ts:1063` → `src/node.ts:145` → `src/chain.ts:487`), clears and rebuilds the seen-blocks cache, then requests blocks from `forkPoint + 1` to build the heavier chain forward. The comparison is strict (`<=` means "do nothing"), so an equal-work peer never triggers a reorg — ties keep the chain already in hand, which avoids reorg churn between two equally heavy tips.
+When a reorg is warranted, the node calls `resetToHeight(forkPoint)` (`src/p2p/server.ts:1063` → `src/node.ts:145` → `src/chain.ts:496`), clears and rebuilds the seen-blocks cache, then requests blocks from `forkPoint + 1` to build the heavier chain forward. The comparison is strict (`<=` means "do nothing"), so an equal-work peer never triggers a reorg — ties keep the chain already in hand, which avoids reorg churn between two equally heavy tips.
 
 ## The work-based DoS guard
 

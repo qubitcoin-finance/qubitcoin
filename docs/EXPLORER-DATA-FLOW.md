@@ -18,7 +18,7 @@ The explorer is a vanilla TypeScript app. `website/src/explorer-main.ts` drives 
 | `website/src/explorer-main.ts` | 344–447 | `renderBlock()` — block detail view |
 | `website/src/explorer-main.ts` | 451–591 | `renderTx()` — transaction detail view |
 | `website/src/explorer-main.ts` | 595–659 | `renderAddress()` — address balance + UTXOs |
-| `website/src/explorer-main.ts` | 847–875 | `setupSearch()` — search-bar disambiguation |
+| `website/src/explorer-main.ts` | 844–875 | `setupSearch()` — search-bar disambiguation |
 | `website/src/explorer-main.ts` | 881–945 | `dispatch()` — central router; `hashchange` + init |
 | `website/index.html` | — | Landing page and explorer shell (id=`landing-content`, id=`explorer-main`, id=`explorer-content`) |
 | `website/vite.config.ts` | — | Single-page build for `index.html` |
